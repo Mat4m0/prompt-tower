@@ -18,19 +18,13 @@ export class FileDiscoveryService {
     workspaces: Workspace[],
     preserveCheckedPaths?: Set<string>
   ): Promise<FileNode[]> {
-    const rootNodes: FileNode[] = [];
+    const rootNodes = await Promise.all(
+      workspaces.map((workspace) =>
+        this.discoverWorkspaceFiles(workspace, preserveCheckedPaths)
+      )
+    );
 
-    for (const workspace of workspaces) {
-      const workspaceRoot = await this.discoverWorkspaceFiles(
-        workspace,
-        preserveCheckedPaths
-      );
-      if (workspaceRoot) {
-        rootNodes.push(workspaceRoot);
-      }
-    }
-
-    return rootNodes;
+    return rootNodes.filter((node): node is FileNode => node !== null);
   }
 
   /**
@@ -40,8 +34,6 @@ export class FileDiscoveryService {
     workspace: Workspace,
     preserveCheckedPaths?: Set<string>
   ): Promise<FileNode | null> {
-    console.log(`Discovering files for workspace: ${workspace.name}`);
-
     try {
       // Get exclude patterns for this workspace
       const excludePatterns =
@@ -56,10 +48,6 @@ export class FileDiscoveryService {
         undefined
       );
 
-      console.log(
-        `Found ${fileUris.length} files in workspace ${workspace.name}`
-      );
-
       // Create workspace root node
       const workspaceRoot = FileNodeFactory.createWorkspaceRoot(workspace);
 
@@ -67,24 +55,13 @@ export class FileDiscoveryService {
       const fileNodeMap = new Map<string, FileNode>();
       fileNodeMap.set(workspace.rootPath, workspaceRoot);
 
-      // Process each discovered file
       for (const uri of fileUris) {
-        const absolutePath = uri.fsPath;
-
-        try {
-          const stats = await fs.promises.stat(absolutePath);
-
-          if (stats.isFile()) {
-            this.addFileToTree(
-              absolutePath,
-              workspace,
-              fileNodeMap,
-              preserveCheckedPaths
-            );
-          }
-        } catch (error) {
-          console.warn(`Error processing file ${absolutePath}:`, error);
-        }
+        this.addFileToTree(
+          uri.fsPath,
+          workspace,
+          fileNodeMap,
+          preserveCheckedPaths
+        );
       }
 
       // Build the tree structure from the flat map
@@ -139,10 +116,6 @@ export class FileDiscoveryService {
     );
     fileNode.isChecked = isChecked;
 
-    if (isChecked) {
-      console.log(`  Restored selection: ${filePath}`);
-    }
-
     fileNodeMap.set(filePath, fileNode);
 
     // Ensure all parent directories exist
@@ -185,11 +158,6 @@ export class FileDiscoveryService {
           continue;
         }
 
-        // Check if directory actually exists
-        if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
-          continue;
-        }
-
         const relativePath = path.relative(workspace.rootPath, dirPath);
         // Use original path for consistent matching across platforms
         const isChecked = preserveCheckedPaths?.has(dirPath) ?? false;
@@ -200,10 +168,6 @@ export class FileDiscoveryService {
           workspace
         );
         dirNode.isChecked = isChecked;
-
-        if (isChecked) {
-          console.log(`  Restored directory selection: ${dirPath}`);
-        }
 
         fileNodeMap.set(dirPath, dirNode);
       }

@@ -81,28 +81,8 @@ export class FileNodeFactory {
     workspace: Workspace,
     parent?: FileNode
   ): FileNode {
-    // Debug logging to see what we're getting on Windows
-    console.log(
-      `FileNodeFactory.createFileNode - absolutePath: "${absolutePath}"`
-    );
-
-    const labelSplit =
-      absolutePath.split("/").pop() ||
-      absolutePath.split("\\").pop() ||
-      absolutePath;
-
     const labelBasename = path.basename(absolutePath);
-
-    console.log(
-      `FileNodeFactory.createFileNode - split method label: "${labelSplit}"`
-    );
-    console.log(
-      `FileNodeFactory.createFileNode - path.basename label: "${labelBasename}"`
-    );
-
-    // Use path.basename for now to test
     const label = labelBasename;
-
     const extension = label.includes(".") ? label.split(".").pop() : undefined;
 
     return {
@@ -130,26 +110,7 @@ export class FileNodeFactory {
     workspace: Workspace,
     parent?: FileNode
   ): FileNode {
-    // Debug logging to see what we're getting on Windows
-    console.log(
-      `FileNodeFactory.createDirectoryNode - absolutePath: "${absolutePath}"`
-    );
-
-    const labelSplit =
-      absolutePath.split("/").pop() ||
-      absolutePath.split("\\").pop() ||
-      absolutePath;
-
     const labelBasename = path.basename(absolutePath);
-
-    console.log(
-      `FileNodeFactory.createDirectoryNode - split method label: "${labelSplit}"`
-    );
-    console.log(
-      `FileNodeFactory.createDirectoryNode - path.basename label: "${labelBasename}"`
-    );
-
-    // Use path.basename for now to test
     const label = labelBasename;
 
     return {
@@ -178,14 +139,19 @@ export class FileNodeUtils {
    */
   static getDescendantFiles(node: FileNode): FileNode[] {
     const files: FileNode[] = [];
+    const stack: FileNode[] = [node];
 
-    if (node.type === "file") {
-      files.push(node);
-    }
+    while (stack.length > 0) {
+      const currentNode = stack.pop()!;
 
-    if (node.children) {
-      for (const child of node.children) {
-        files.push(...this.getDescendantFiles(child));
+      if (currentNode.type === "file") {
+        files.push(currentNode);
+      }
+
+      if (currentNode.children) {
+        for (let index = currentNode.children.length - 1; index >= 0; index--) {
+          stack.push(currentNode.children[index]);
+        }
       }
     }
 
@@ -197,13 +163,19 @@ export class FileNodeUtils {
    */
   static getCheckedFiles(nodes: FileNode[]): FileNode[] {
     const checkedFiles: FileNode[] = [];
+    const stack = [...nodes];
 
-    for (const node of nodes) {
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+
       if (node.type === "file" && node.isChecked) {
         checkedFiles.push(node);
       }
+
       if (node.children) {
-        checkedFiles.push(...this.getCheckedFiles(node.children));
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
       }
     }
 

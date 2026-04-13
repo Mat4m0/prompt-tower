@@ -10,16 +10,22 @@ import { TokenUpdatePayload } from "../models/Events";
 export class TokenCountingService {
   private _onDidChangeTokens = new vscode.EventEmitter<TokenUpdatePayload>();
   readonly onDidChangeTokens = this._onDidChangeTokens.event;
-  
+
+  private static readonly TOKEN_COUNT_BATCH_SIZE = 32;
+
   private totalFileTokens: number = 0;
   private githubIssueTokens: number = 0;
   private isCountingTokens: boolean = false;
   private isCountingGitHubIssues: boolean = false;
   private currentCalculationVersion = 0;
   private debounceTimeout: NodeJS.Timeout | null = null;
-  
+  private tokenCache = new Map<
+    string,
+    { mtimeMs: number; size: number; tokenCount: number }
+  >();
+
   constructor() {}
-  
+
   /**
    * Get current token count
    */
@@ -80,11 +86,8 @@ export class TokenCountingService {
    */
   async updateTokenCount(fileNodes: FileNode[]): Promise<void> {
     const calculationVersion = this.currentCalculationVersion;
-    
-    // Get checked files from all workspaces
     const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
-    
-    // Handle no files selected
+
     if (checkedFiles.length === 0) {
       if (calculationVersion !== this.currentCalculationVersion) {
         return;
@@ -103,44 +106,32 @@ export class TokenCountingService {
     this.notifyTokenUpdate();
     
     let runningTokenCount = 0;
-    let filesProcessed = 0;
-    
+
     try {
-      for (const fileNode of checkedFiles) {
-        // Cancellation check
+      this.pruneTokenCache(new Set(checkedFiles.map((fileNode) => fileNode.absolutePath)));
+
+      for (
+        let offset = 0;
+        offset < checkedFiles.length;
+        offset += TokenCountingService.TOKEN_COUNT_BATCH_SIZE
+      ) {
         if (calculationVersion !== this.currentCalculationVersion) {
           console.log(`Token counting cancelled (Version ${calculationVersion}). Newer version exists.`);
           return;
         }
-        
-        try {
-          // Double-check file existence
-          if (!fs.existsSync(fileNode.absolutePath)) {
-            console.warn(`Skipping token count for non-existent file: ${fileNode.absolutePath}`);
-            continue;
-          }
-          
-          const content = await fs.promises.readFile(fileNode.absolutePath, "utf-8");
-          const tokens = encode(content);
-          runningTokenCount += tokens.length;
-          filesProcessed++;
-          
-          // Yield for responsiveness every 50 files
-          if (filesProcessed % 50 === 0) {
-            await new Promise((resolve) => setImmediate(resolve));
-            
-            // Check for cancellation after yielding
-            if (calculationVersion !== this.currentCalculationVersion) {
-              console.log(`Token counting cancelled during yield (Version ${calculationVersion}).`);
-              return;
-            }
-          }
-        } catch (err: any) {
-          this.handleTokenCountingError(err, fileNode.absolutePath);
-        }
+
+        const batch = checkedFiles.slice(
+          offset,
+          offset + TokenCountingService.TOKEN_COUNT_BATCH_SIZE
+        );
+        const tokenCounts = await Promise.all(
+          batch.map((fileNode) => this.getTokenCountForFile(fileNode.absolutePath))
+        );
+
+        runningTokenCount += tokenCounts.reduce((sum, tokenCount) => sum + tokenCount, 0);
+        await new Promise((resolve) => setImmediate(resolve));
       }
-      
-      // Final cancellation check
+
       if (calculationVersion !== this.currentCalculationVersion) {
         console.log(`Token counting cancelled before final update (Version ${calculationVersion}).`);
         return;
@@ -172,16 +163,10 @@ export class TokenCountingService {
    */
   async countTokensForFiles(filePaths: string[]): Promise<number> {
     let totalTokens = 0;
-    
+
     for (const filePath of filePaths) {
       try {
-        if (!fs.existsSync(filePath)) {
-          continue;
-        }
-        
-        const content = await fs.promises.readFile(filePath, "utf-8");
-        const tokens = encode(content);
-        totalTokens += tokens.length;
+        totalTokens += await this.getTokenCountForFile(filePath);
       } catch (error) {
         console.warn(`Error counting tokens for file ${filePath}:`, error);
       }
@@ -214,6 +199,45 @@ export class TokenCountingService {
     this.isCountingGitHubIssues = false;
     this.notifyTokenUpdate();
     console.log("Token count reset to 0.");
+  }
+
+  private async getTokenCountForFile(filePath: string): Promise<number> {
+    try {
+      const fileStat = await fs.promises.stat(filePath);
+      if (!fileStat.isFile()) {
+        return 0;
+      }
+
+      const cachedValue = this.tokenCache.get(filePath);
+      if (
+        cachedValue &&
+        cachedValue.mtimeMs === fileStat.mtimeMs &&
+        cachedValue.size === fileStat.size
+      ) {
+        return cachedValue.tokenCount;
+      }
+
+      const content = await fs.promises.readFile(filePath, "utf-8");
+      const tokenCount = encode(content).length;
+      this.tokenCache.set(filePath, {
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+        tokenCount,
+      });
+      return tokenCount;
+    } catch (error) {
+      this.tokenCache.delete(filePath);
+      this.handleTokenCountingError(error, filePath);
+      return 0;
+    }
+  }
+
+  private pruneTokenCache(selectedPaths: Set<string>): void {
+    for (const cachedPath of this.tokenCache.keys()) {
+      if (!selectedPaths.has(cachedPath)) {
+        this.tokenCache.delete(cachedPath);
+      }
+    }
   }
   
   /**
@@ -253,6 +277,7 @@ export class TokenCountingService {
     }
     
     this.currentCalculationVersion++;
+    this.tokenCache.clear();
     this._onDidChangeTokens.dispose();
   }
 }

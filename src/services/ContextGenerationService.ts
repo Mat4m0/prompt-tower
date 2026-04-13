@@ -1,46 +1,45 @@
-import * as vscode from "vscode";
-import * as path from "path";
 import * as fs from "fs";
+import * as vscode from "vscode";
 import { FileNode, FileNodeUtils } from "../models/FileNode";
 import { ContextConfig } from "../models/Workspace";
 import { generateFileStructureTree } from "../utils/fileTree";
+import {
+  applyContextWrapperTemplate,
+  formatContextFileContent,
+} from "./contextGenerationCore";
 
-/**
- * Result of context generation
- */
 export interface ContextGenerationResult {
   contextString: string;
   fileCount: number;
   tokenCount?: number;
 }
 
-/**
- * Structured file path for tree generation
- */
 interface StructuredFilePath {
   origin: string;
   tree: string;
 }
 
-/**
- * Service for generating context strings from selected files
- */
 export class ContextGenerationService {
-  private config!: ContextConfig; // Use definite assignment assertion
+  private config!: ContextConfig;
   private gitHubIssuesProvider?: any;
   private gitHubPRsProvider?: any;
+  private fileBlockCache = new Map<
+    string,
+    {
+      mtimeMs: number;
+      size: number;
+      configSignature: string;
+      block: string;
+    }
+  >();
 
   constructor() {
     this.loadConfiguration();
     this.setupConfigurationWatcher();
   }
 
-  /**
-   * Load configuration from VS Code settings
-   */
   private loadConfiguration(): void {
     const config = vscode.workspace.getConfiguration("promptTower");
-
     const outputFormat = config.get<any>("outputFormat") || {};
     const projectTreeFormat =
       config.get<any>("outputFormat.projectTreeFormat") || {};
@@ -69,20 +68,15 @@ export class ContextGenerationService {
     };
   }
 
-  /**
-   * Setup configuration change watcher
-   */
   private setupConfigurationWatcher(): void {
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("promptTower.outputFormat")) {
         this.loadConfiguration();
+        this.fileBlockCache.clear();
       }
     });
   }
 
-  /**
-   * Generate context string from file nodes
-   */
   async generateContext(
     fileNodes: FileNode[],
     options?: {
@@ -94,129 +88,68 @@ export class ContextGenerationService {
   ): Promise<ContextGenerationResult> {
     const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
     const fileCount = checkedFiles.length;
-    
-    // Use provided treeType or fall back to config default
     const effectiveTreeType = options?.treeType || this.config.projectTree.type;
 
-    // Check if we have GitHub issues selected
-    let hasSelectedIssues = false;
-    if (this.gitHubIssuesProvider) {
-      try {
-        const selectedIssues =
-          await this.gitHubIssuesProvider.getSelectedIssueDetails();
-        hasSelectedIssues = selectedIssues && selectedIssues.size > 0;
-      } catch (error) {
-        console.error("Error checking GitHub issues:", error);
-      }
-    }
-
-    // Check if we have GitHub PRs selected
-    let hasSelectedPRs = false;
-    if (this.gitHubPRsProvider) {
-      try {
-        const selectedPRs =
-          await this.gitHubPRsProvider.getSelectedPRDetails();
-        hasSelectedPRs = selectedPRs && selectedPRs.size > 0;
-      } catch (error) {
-        console.error("Error checking GitHub PRs:", error);
-      }
-    }
-
-    if (fileCount === 0 && !hasSelectedIssues && !hasSelectedPRs) {
-      // If project tree is enabled and configured to show all files, generate tree-only context
-      if (
-        this.config.projectTree.enabled &&
-        (effectiveTreeType === "fullFilesAndDirectories" ||
-          effectiveTreeType === "fullDirectoriesOnly")
-      ) {
-        const fileTree = await this.generateProjectTree(
-          fileNodes,
-          options?.primaryWorkspaceRoot,
-          effectiveTreeType
-        );
-        let treeOnlyContext = this.config.projectTree.template.replace(
-          "{projectTree}",
-          fileTree
-        );
-
-        if (options?.prefix) {
-          treeOnlyContext = options.prefix + "\n" + treeOnlyContext;
-        }
-        if (options?.suffix) {
-          treeOnlyContext = treeOnlyContext + "\n" + options.suffix;
-        }
-
-        return { contextString: treeOnlyContext, fileCount: 0 };
-      }
-
-      return { contextString: "", fileCount: 0 };
-    }
-
     try {
-      // Generate file blocks concurrently
-      const fileBlockPromises =
+      const githubIssuesPromise = this.generateGitHubIssuesBlocks();
+      const githubPRsPromise = this.generateGitHubPRsBlocks();
+      const fileBlocksPromise =
         fileCount > 0
-          ? checkedFiles.map((node) => this.generateFileBlock(node))
-          : [];
+          ? Promise.all(checkedFiles.map((node) => this.generateFileBlock(node)))
+          : Promise.resolve([]);
 
-      // Generate project tree
-      const projectTreePromise = this.generateProjectTree(
+      const [githubIssuesBlocks, githubPRsBlocks, fileBlocks] = await Promise.all([
+        githubIssuesPromise,
+        githubPRsPromise,
+        fileBlocksPromise,
+      ]);
+
+      const hasGitHubBlocks =
+        githubIssuesBlocks.length > 0 || githubPRsBlocks.length > 0;
+
+      if (fileCount === 0 && !hasGitHubBlocks) {
+        if (
+          this.config.projectTree.enabled &&
+          (effectiveTreeType === "fullFilesAndDirectories" ||
+            effectiveTreeType === "fullDirectoriesOnly")
+        ) {
+          const fileTree = await this.generateProjectTree(
+            fileNodes,
+            options?.primaryWorkspaceRoot,
+            effectiveTreeType
+          );
+          return {
+            contextString: this.addPrefixAndSuffix(
+              this.config.projectTree.template.replace("{projectTree}", fileTree),
+              options
+            ),
+            fileCount: 0,
+          };
+        }
+
+        return { contextString: "", fileCount: 0 };
+      }
+
+      const fileTree = await this.generateProjectTree(
         fileNodes,
         options?.primaryWorkspaceRoot,
         effectiveTreeType
       );
-
-      // Generate GitHub issues if provider is available
-      const githubIssuesPromise = this.generateGitHubIssuesBlocks();
-
-      // Generate GitHub PRs if provider is available
-      const githubPRsPromise = this.generateGitHubPRsBlocks();
-
-      // Wait for all processing to complete
-      const [fileTree, githubIssuesBlocks, githubPRsBlocks, ...fileBlocks] = await Promise.all([
-        projectTreePromise,
-        githubIssuesPromise,
-        githubPRsPromise,
-        ...fileBlockPromises,
-      ]);
-
-      // Join file blocks
       const joinedFileBlocks = fileBlocks.join(this.config.blockSeparator);
-
-      // Join GitHub issues
-      const joinedGithubIssues =
-        githubIssuesBlocks.length > 0
-          ? githubIssuesBlocks.join(this.config.blockSeparator)
-          : "";
-
-      // Join GitHub PRs
-      const joinedGithubPRs =
-        githubPRsBlocks.length > 0
-          ? githubPRsBlocks.join(this.config.blockSeparator)
-          : "";
-
-      // Apply wrapper template
-      let finalContext = this.applyWrapperTemplate(
-        joinedFileBlocks,
-        joinedGithubIssues,
-        joinedGithubPRs,
-        fileTree,
-        fileCount
-      );
-
-      // Add prefix and suffix
-      if (options?.prefix) {
-        finalContext = options.prefix + "\n" + finalContext;
-      }
-      if (options?.suffix) {
-        if (finalContext.length > 0 && !finalContext.endsWith("\n")) {
-          finalContext += "\n";
-        }
-        finalContext += options.suffix;
-      }
+      const joinedGithubIssues = githubIssuesBlocks.join(this.config.blockSeparator);
+      const joinedGithubPRs = githubPRsBlocks.join(this.config.blockSeparator);
 
       return {
-        contextString: finalContext,
+        contextString: this.addPrefixAndSuffix(
+          this.applyWrapperTemplate(
+            joinedFileBlocks,
+            joinedGithubIssues,
+            joinedGithubPRs,
+            fileTree,
+            fileCount
+          ),
+          options
+        ),
         fileCount,
       };
     } catch (error) {
@@ -226,70 +159,51 @@ export class ContextGenerationService {
     }
   }
 
-  /**
-   * Generate a formatted block for a single file
-   */
   private async generateFileBlock(fileNode: FileNode): Promise<string> {
     try {
-      // Read file content
-      const fileContent = await fs.promises.readFile(
-        fileNode.absolutePath,
-        "utf8"
-      );
-
-      // Calculate paths and names
-      const fileNameWithExtension = path.basename(fileNode.absolutePath);
-      const fileExtension = path.extname(fileNode.absolutePath);
-      const fileName = path.basename(fileNode.absolutePath, fileExtension);
-
-      // Create source path (relative to workspace with leading slash)
-      const sourcePath = "/" + fileNode.relativePath.replace(/\\/g, "/");
-
-      // Apply block template
-      let formattedBlock = this.config.blockTemplate;
-
-      // Replace placeholders
-      formattedBlock = formattedBlock.replace(
-        /{fileNameWithExtension}/g,
-        fileNameWithExtension
-      );
-      formattedBlock = formattedBlock.replace(/{rawFilePath}/g, sourcePath);
-      formattedBlock = formattedBlock.replace(/{fileName}/g, fileName);
-      formattedBlock = formattedBlock.replace(
-        /{fileExtension}/g,
-        fileExtension
-      );
-      formattedBlock = formattedBlock.replace(
-        /{fullPath}/g,
-        fileNode.absolutePath
-      );
-
-      // Trim file content if configured
-      let trimmedFileContent = fileContent;
-      if (this.config.blockTrimLines) {
-        trimmedFileContent = trimmedFileContent.replace(/^(\s*\r?\n)+/, ""); // Remove leading blank lines
-        trimmedFileContent = trimmedFileContent.replace(/(\r?\n\s*)+$/, ""); // Remove trailing blank lines
+      const fileStat = await fs.promises.stat(fileNode.absolutePath);
+      if (!fileStat.isFile()) {
+        this.fileBlockCache.delete(fileNode.absolutePath);
+        return `<!-- Error reading file: ${fileNode.relativePath} -->`;
       }
 
-      // Replace file content last to avoid issues with content containing placeholders
-      formattedBlock = formattedBlock.replace(
-        /{fileContent}/g,
-        trimmedFileContent
-      );
+      const configSignature = this.getFileBlockConfigSignature();
+      const cachedBlock = this.fileBlockCache.get(fileNode.absolutePath);
+      if (
+        cachedBlock &&
+        cachedBlock.mtimeMs === fileStat.mtimeMs &&
+        cachedBlock.size === fileStat.size &&
+        cachedBlock.configSignature === configSignature
+      ) {
+        return cachedBlock.block;
+      }
 
-      return formattedBlock;
+      const fileContent = await fs.promises.readFile(fileNode.absolutePath, "utf8");
+      const block = formatContextFileContent(
+        {
+          absolutePath: fileNode.absolutePath,
+          relativePath: fileNode.relativePath,
+        },
+        fileContent,
+        this.config
+      );
+      this.fileBlockCache.set(fileNode.absolutePath, {
+        mtimeMs: fileStat.mtimeMs,
+        size: fileStat.size,
+        configSignature,
+        block,
+      });
+      return block;
     } catch (error) {
       console.error(
         `Error generating block for file ${fileNode.absolutePath}:`,
         error
       );
+      this.fileBlockCache.delete(fileNode.absolutePath);
       return `<!-- Error reading file: ${fileNode.relativePath} -->`;
     }
   }
 
-  /**
-   * Generate project tree structure
-   */
   private async generateProjectTree(
     fileNodes: FileNode[],
     primaryWorkspaceRoot?: string,
@@ -299,100 +213,68 @@ export class ContextGenerationService {
       return "";
     }
 
-    // Use provided treeType or fall back to config default
     const effectiveTreeType = treeType || this.config.projectTree.type;
+    const filesToInclude =
+      effectiveTreeType === "selectedFilesOnly"
+        ? FileNodeUtils.getCheckedFiles(fileNodes).map((node) => ({
+            origin: node.absolutePath,
+            tree: node.relativePath,
+          }))
+        : this.getAllWorkspaceFiles(fileNodes, effectiveTreeType);
 
-    let filesToInclude: StructuredFilePath[];
-
-    if (effectiveTreeType === "selectedFilesOnly") {
-      // Use only selected files
-      const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
-      filesToInclude = checkedFiles.map((node) => ({
-        origin: node.absolutePath,
-        tree: node.relativePath,
-      }));
-    } else {
-      // Use all files from all workspaces
-      filesToInclude = await this.getAllWorkspaceFiles(fileNodes, effectiveTreeType);
-    }
-
-    // Determine workspace root for tree generation
     const workspaceRoot =
       primaryWorkspaceRoot || this.determinePrimaryWorkspaceRoot(fileNodes);
 
-    return generateFileStructureTree(
-      workspaceRoot,
-      filesToInclude,
-      undefined, // Use default print lines limit
-      {
-        showFileSize:
-          effectiveTreeType === "fullDirectoriesOnly"
-            ? false
-            : this.config.projectTree.showFileSize,
-      }
-    );
+    return generateFileStructureTree(workspaceRoot, filesToInclude, undefined, {
+      showFileSize:
+        effectiveTreeType === "fullDirectoriesOnly"
+          ? false
+          : this.config.projectTree.showFileSize,
+    });
   }
 
-  /**
-   * Get all files from all workspaces
-   */
-  private async getAllWorkspaceFiles(
+  private getAllWorkspaceFiles(
     fileNodes: FileNode[],
     treeType: string
-  ): Promise<StructuredFilePath[]> {
+  ): StructuredFilePath[] {
     const allFiles: StructuredFilePath[] = [];
+    const stack = [...fileNodes];
 
-    for (const rootNode of fileNodes) {
-      if (rootNode.type === "workspace-root") {
-        this.collectFilesFromNode(rootNode, allFiles, treeType);
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+
+      if (node.type === "file" && treeType !== "fullDirectoriesOnly") {
+        allFiles.push({
+          origin: node.absolutePath,
+          tree: node.relativePath,
+        });
+      } else if (node.type === "directory") {
+        allFiles.push({
+          origin: `${node.absolutePath}/`,
+          tree: `${node.relativePath}/`,
+        });
+      }
+
+      if (node.children) {
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
       }
     }
 
     return allFiles;
   }
 
-  /**
-   * Recursively collect files from a node
-   */
-  private collectFilesFromNode(
-    node: FileNode,
-    files: StructuredFilePath[],
-    treeType: string
-  ): void {
-    if (node.type === "file" && treeType !== "fullDirectoriesOnly") {
-      files.push({
-        origin: node.absolutePath,
-        tree: node.relativePath,
-      });
-    } else if (node.type === "directory") {
-      files.push({
-        origin: node.absolutePath + "/",
-        tree: node.relativePath + "/",
-      });
-    }
-
-    if (node.children) {
-      for (const child of node.children) {
-        this.collectFilesFromNode(child, files, treeType);
-      }
-    }
-  }
-
-  /**
-   * Determine the primary workspace root from file nodes
-   */
   private determinePrimaryWorkspaceRoot(fileNodes: FileNode[]): string {
     for (const node of fileNodes) {
       if (node.type === "workspace-root") {
         return node.workspace.rootPath;
       }
     }
-    return process.cwd(); // Fallback
+
+    return process.cwd();
   }
 
-  /**
-   * Apply wrapper template with all substitutions
-   */
   private applyWrapperTemplate(
     fileBlocks: string,
     githubIssues: string,
@@ -400,40 +282,16 @@ export class ContextGenerationService {
     projectTree: string,
     fileCount: number
   ): string {
-    if (!this.config.wrapperTemplate) {
-      // No wrapper - combine directly
-      const parts = [githubIssues, githubPRs, fileBlocks].filter(p => p);
-      return parts.join(this.config.blockSeparator);
-    }
-
-    let wrapped = this.config.wrapperTemplate;
-
-    // Create tree block
-    const treeBlock = this.config.projectTree.enabled
-      ? this.config.projectTree.template.replace("{projectTree}", projectTree)
-      : "";
-
-    // Create GitHub issues section
-    const githubIssuesSection = githubIssues ? `${githubIssues}\n` : "";
-
-    // Create GitHub PRs section
-    const githubPRsSection = githubPRs ? `${githubPRs}\n` : "";
-
-    // Replace all placeholders
-    wrapped = wrapped.replace(/{treeBlock}/g, treeBlock);
-    wrapped = wrapped.replace(/{githubIssues}/g, githubIssuesSection);
-    wrapped = wrapped.replace(/{githubPRs}/g, githubPRsSection);
-    wrapped = wrapped.replace(/{blocks}/g, fileBlocks);
-    wrapped = wrapped.replace(/{timestamp}/g, new Date().toISOString());
-    wrapped = wrapped.replace(/{fileCount}/g, String(fileCount));
-    wrapped = wrapped.replace(/{outputFileName}/g, "clipboard-content");
-
-    return wrapped;
+    return applyContextWrapperTemplate({
+      config: this.config,
+      fileBlocks,
+      githubIssues,
+      githubPRs,
+      projectTree,
+      fileCount,
+    });
   }
 
-  /**
-   * Copy context to clipboard
-   */
   async copyToClipboard(
     fileNodes: FileNode[],
     options?: {
@@ -453,7 +311,6 @@ export class ContextGenerationService {
       }
 
       await vscode.env.clipboard.writeText(result.contextString);
-
       vscode.window.showInformationMessage(
         `Success: Copied context for ${result.fileCount} files to clipboard.`
       );
@@ -469,37 +326,23 @@ export class ContextGenerationService {
     }
   }
 
-  /**
-   * Update configuration (for external updates)
-   */
   updateConfig(updates: Partial<ContextConfig>): void {
     this.config = { ...this.config, ...updates };
+    this.fileBlockCache.clear();
   }
 
-  /**
-   * Get current configuration
-   */
   getConfig(): ContextConfig {
     return { ...this.config };
   }
 
-  /**
-   * Set the GitHub issues provider for integration
-   */
   setGitHubIssuesProvider(provider: any): void {
     this.gitHubIssuesProvider = provider;
   }
 
-  /**
-   * Set the GitHub PRs provider for integration
-   */
   setGitHubPRsProvider(provider: any): void {
     this.gitHubPRsProvider = provider;
   }
 
-  /**
-   * Generate formatted blocks for selected GitHub issues
-   */
   private async generateGitHubIssuesBlocks(): Promise<string[]> {
     if (!this.gitHubIssuesProvider) {
       return [];
@@ -515,7 +358,7 @@ export class ContextGenerationService {
 
       const blocks: string[] = [];
 
-      for (const [issueNumber, details] of selectedIssues) {
+      for (const [, details] of selectedIssues) {
         const { issue, comments } = details;
 
         let issueBlock = `<github_issue number="${issue.number}" state="${issue.state}">
@@ -525,7 +368,7 @@ export class ContextGenerationService {
 <author>${issue.user.login}</author>`;
 
         if (issue.labels.length > 0) {
-          const labelNames = issue.labels.map((l: any) => l.name).join(", ");
+          const labelNames = issue.labels.map((label: any) => label.name).join(", ");
           issueBlock += `\n<labels>${labelNames}</labels>`;
         }
 
@@ -534,16 +377,16 @@ export class ContextGenerationService {
         }
 
         if (comments.length > 0) {
-          issueBlock += `\n<comments>`;
+          issueBlock += "\n<comments>";
           for (const comment of comments) {
             issueBlock += `\n<comment author="${comment.user.login}" created_at="${comment.created_at}">
 ${comment.body}
 </comment>`;
           }
-          issueBlock += `\n</comments>`;
+          issueBlock += "\n</comments>";
         }
 
-        issueBlock += `\n</github_issue>`;
+        issueBlock += "\n</github_issue>";
         blocks.push(issueBlock);
       }
 
@@ -554,9 +397,6 @@ ${comment.body}
     }
   }
 
-  /**
-   * Generate formatted blocks for selected GitHub PRs
-   */
   private async generateGitHubPRsBlocks(): Promise<string[]> {
     if (!this.gitHubPRsProvider) {
       return [];
@@ -570,17 +410,39 @@ ${comment.body}
       }
 
       const blocks: string[] = [];
-
       for (const [prNumber, details] of selectedPRs) {
-        const { diff } = details;
-        const prBlock = `<github_pr number="${prNumber}">\n${diff}\n</github_pr>`;
-        blocks.push(prBlock);
+        blocks.push(`<github_pr number="${prNumber}">\n${details.diff}\n</github_pr>`);
       }
-
       return blocks;
     } catch (error) {
       console.error("Error generating GitHub PRs blocks:", error);
       return [];
     }
+  }
+
+  private addPrefixAndSuffix(
+    content: string,
+    options?: {
+      prefix?: string;
+      suffix?: string;
+    }
+  ): string {
+    let result = content;
+
+    if (options?.prefix) {
+      result = `${options.prefix}\n${result}`;
+    }
+    if (options?.suffix) {
+      if (result.length > 0 && !result.endsWith("\n")) {
+        result += "\n";
+      }
+      result += options.suffix;
+    }
+
+    return result;
+  }
+
+  private getFileBlockConfigSignature(): string {
+    return `${this.config.blockTrimLines}:${this.config.blockTemplate}`;
   }
 }

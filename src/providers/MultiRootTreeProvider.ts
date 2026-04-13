@@ -99,19 +99,11 @@ export class MultiRootTreeProvider
    * Refresh all workspaces
    */
   async refreshWorkspaces(): Promise<void> {
-    console.log("MultiRootTreeProvider: Refreshing workspaces...");
-
     // Preserve currently checked paths (both files and directories)
     const preserveCheckedPaths = new Set<string>();
     const checkedNodes = this.getAllCheckedNodes(this.rootNodes);
-
-    console.log(`Found ${checkedNodes.length} checked nodes to preserve:`);
     for (const checkedNode of checkedNodes) {
-      // Use the original absolute path without normalization to avoid path format issues
       preserveCheckedPaths.add(checkedNode.absolutePath);
-      console.log(
-        `  Preserving: ${checkedNode.type} ${checkedNode.absolutePath}`
-      );
     }
 
     // Get current workspaces
@@ -133,33 +125,6 @@ export class MultiRootTreeProvider
       workspaces,
       preserveCheckedPaths
     );
-
-    // Log results to help debug selection preservation
-    const newCheckedFiles = FileNodeUtils.getCheckedFiles(this.rootNodes);
-    const newCheckedNodes = this.getAllCheckedNodes(this.rootNodes);
-    console.log(
-      `After refresh: ${newCheckedFiles.length} files are checked, ${newCheckedNodes.length} total nodes checked`
-    );
-
-    // Explain any differences in selection count
-    if (newCheckedNodes.length !== checkedNodes.length) {
-      const difference = newCheckedNodes.length - checkedNodes.length;
-      if (difference > 0) {
-        console.log(
-          `✅ Selection preservation: ${difference} new files/directories were auto-selected (likely new files in selected directories)`
-        );
-      } else {
-        console.warn(
-          `⚠️  Selection preservation issue: ${Math.abs(
-            difference
-          )} nodes were lost (files/directories may have been deleted)`
-        );
-      }
-    } else {
-      console.log(
-        `✅ Selection preservation: All ${checkedNodes.length} selections restored perfectly`
-      );
-    }
 
     // Update token count
     this.tokenCountingService.debouncedUpdateTokenCount(this.rootNodes, 100);
@@ -252,8 +217,6 @@ export class MultiRootTreeProvider
    * Toggle the checked state of a file node
    */
   async toggleNodeSelection(node: FileNode): Promise<void> {
-    console.log(`Toggling selection for: ${node.label} (${node.type}) ${node.isChecked ? 'checked' : 'unchecked'} -> ${!node.isChecked ? 'checked' : 'unchecked'}`);
-
     const originalState = node.isChecked;
     let newState = !originalState;
     let userCancelled = false;
@@ -336,8 +299,6 @@ export class MultiRootTreeProvider
    * Clear all selections
    */
   clearAllSelections(): void {
-    console.log("MultiRootTreeProvider: Clearing all selections");
-
     let hasFileChanges = false;
     for (const rootNode of this.rootNodes) {
       const checkedFiles = FileNodeUtils.getCheckedFiles([rootNode]);
@@ -370,8 +331,6 @@ export class MultiRootTreeProvider
    * Toggle all files in all workspaces
    */
   async toggleAllFiles(): Promise<void> {
-    console.log("MultiRootTreeProvider: Toggling all files");
-
     // Check if all files are currently selected
     const allFiles = FileNodeUtils.getCheckedFiles(this.rootNodes);
     const totalFiles = this.getAllFileCount();
