@@ -79,7 +79,6 @@ export class IgnorePatternService {
     
     // Common handler for all ignore file changes
     const handleIgnoreFileChange = (fileName: string) => {
-      console.log(`Ignore file changed in workspace ${workspace.name}: ${fileName}`);
       this.invalidateCache(workspace);
     };
     
@@ -188,7 +187,6 @@ export class IgnorePatternService {
         // Clear all caches when configuration changes
         this.patternCache.clear();
         this.ignoreInstanceCache.clear();
-        console.log("Ignore pattern configuration changed, clearing cache");
       }
     });
   }

@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import * as path from "path";
-import * as fs from "fs";
 import { Workspace } from "../models/Workspace";
 import { FileNode, FileNodeFactory, FileNodeUtils } from "../models/FileNode";
 import { IgnorePatternService } from "./IgnorePatternService";
@@ -72,9 +71,6 @@ export class FileDiscoveryService {
         this.restoreParentChildCheckboxStates(workspaceRoot);
       }
 
-      console.log(
-        `Built file tree for workspace ${workspace.name} with ${fileNodeMap.size} nodes`
-      );
       return workspaceRoot;
     } catch (error) {
       console.error(
@@ -227,7 +223,6 @@ export class FileDiscoveryService {
     workspace: Workspace,
     preserveCheckedPaths?: Set<string>
   ): Promise<FileNode | null> {
-    console.log(`Refreshing workspace: ${workspace.name}`);
     return this.discoverWorkspaceFiles(workspace, preserveCheckedPaths);
   }
 
@@ -262,15 +257,17 @@ export class FileDiscoveryService {
     node: FileNode,
     absolutePath: string
   ): FileNode | undefined {
-    if (node.absolutePath === absolutePath) {
-      return node;
-    }
+    const stack: FileNode[] = [node];
 
-    if (node.children) {
-      for (const child of node.children) {
-        const found = this.findNodeInTree(child, absolutePath);
-        if (found) {
-          return found;
+    while (stack.length > 0) {
+      const currentNode = stack.pop()!;
+      if (currentNode.absolutePath === absolutePath) {
+        return currentNode;
+      }
+
+      if (currentNode.children) {
+        for (let index = currentNode.children.length - 1; index >= 0; index--) {
+          stack.push(currentNode.children[index]);
         }
       }
     }
@@ -287,7 +284,9 @@ export class FileDiscoveryService {
     for (const node of fileNodes) {
       if (node.type === "file") {
         try {
-          const stats = await fs.promises.stat(node.absolutePath);
+          const stats = await vscode.workspace.fs.stat(
+            vscode.Uri.file(node.absolutePath)
+          );
           node.sizeBytes = stats.size;
         } catch (error) {
           console.warn(
@@ -304,15 +303,17 @@ export class FileDiscoveryService {
    */
   private getAllFileNodes(rootNodes: FileNode[]): FileNode[] {
     const allNodes: FileNode[] = [];
+    const stack = [...rootNodes];
 
-    const collectNodes = (node: FileNode) => {
+    while (stack.length > 0) {
+      const node = stack.pop()!;
       allNodes.push(node);
       if (node.children) {
-        node.children.forEach(collectNodes);
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
       }
-    };
-
-    rootNodes.forEach(collectNodes);
+    }
     return allNodes;
   }
 
@@ -345,7 +346,6 @@ export class FileDiscoveryService {
       for (const child of node.children) {
         if (!child.isChecked) {
           child.isChecked = true;
-          console.log(`  Auto-checked child: ${child.absolutePath}`);
         }
         this.propagateCheckedStateToChildren(child);
       }

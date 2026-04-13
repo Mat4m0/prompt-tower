@@ -223,26 +223,22 @@ export class EditorAutomationService {
       switch (command.type) {
         case "command":
           if (command.command) {
-            console.log(`Executing VS Code command: ${command.command}`);
             await vscode.commands.executeCommand(command.command);
           }
           break;
 
         case "delay":
           if (command.delay) {
-            console.log(`Waiting ${command.delay}ms...`);
             await new Promise((resolve) => setTimeout(resolve, command.delay));
           }
           break;
 
         case "paste":
-          console.log("Executing paste command...");
           await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
           break;
 
         case "submit":
           if (command.keystroke) {
-            console.log(`Sending keystroke: ${command.keystroke}`);
             await this.sendKeystroke(command.keystroke);
           }
           break;

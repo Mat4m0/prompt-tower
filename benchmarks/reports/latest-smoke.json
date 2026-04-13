@@ -1,0 +1,143 @@
+{
+  "generatedAt": "2026-04-13T20:02:07.094Z",
+  "scale": "smoke",
+  "fixture": {
+    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-Ek2gDH",
+    "totalFiles": 120,
+    "selectedFiles": 40
+  },
+  "results": [
+    {
+      "name": "file-blocks:selected",
+      "description": "Read and format selected file blocks",
+      "iterations": 4,
+      "meanMs": 1.2332394999999963,
+      "minMs": 1.0564159999999845,
+      "maxMs": 1.6604169999999954,
+      "p95Ms": 1.6604169999999954
+    },
+    {
+      "name": "tree:selected",
+      "description": "Generate project tree for selected files only",
+      "iterations": 4,
+      "meanMs": 0.07205199999999934,
+      "minMs": 0.05187499999999545,
+      "maxMs": 0.12233299999999758,
+      "p95Ms": 0.12233299999999758
+    },
+    {
+      "name": "tree:full",
+      "description": "Generate project tree for the full repository view",
+      "iterations": 4,
+      "meanMs": 0.14286499999999336,
+      "minMs": 0.1319170000000156,
+      "maxMs": 0.15520899999998505,
+      "p95Ms": 0.15520899999998505
+    },
+    {
+      "name": "tokens:legacy-full",
+      "description": "Read and tokenize the full fixture with encode(...).length",
+      "iterations": 4,
+      "meanMs": 11.054676999999998,
+      "minMs": 8.531583000000012,
+      "maxMs": 13.770582999999988,
+      "p95Ms": 13.770582999999988
+    },
+    {
+      "name": "tokens:selected",
+      "description": "Read and tokenize selected files",
+      "iterations": 4,
+      "meanMs": 3.0137082500000005,
+      "minMs": 2.7908330000000205,
+      "maxMs": 3.3290839999999946,
+      "p95Ms": 3.3290839999999946
+    },
+    {
+      "name": "tokens:full",
+      "description": "Read and tokenize the full repository fixture",
+      "iterations": 4,
+      "meanMs": 9.003354000000002,
+      "minMs": 8.464832999999999,
+      "maxMs": 10.249040999999977,
+      "p95Ms": 10.249040999999977
+    },
+    {
+      "name": "tokens:warm-full",
+      "description": "Tokenize the full fixture after warming tokenizer merge cache",
+      "iterations": 4,
+      "meanMs": 14.444999999999993,
+      "minMs": 14.069291999999962,
+      "maxMs": 15.144417000000033,
+      "p95Ms": 15.144417000000033
+    },
+    {
+      "name": "context:selected-tree",
+      "description": "End-to-end context generation with selected-files tree",
+      "iterations": 4,
+      "meanMs": 1.5760417499999733,
+      "minMs": 1.2484169999999608,
+      "maxMs": 2.0962499999999977,
+      "p95Ms": 2.0962499999999977
+    },
+    {
+      "name": "context:full-tree",
+      "description": "End-to-end context generation with full repository tree",
+      "iterations": 4,
+      "meanMs": 1.5308962499999836,
+      "minMs": 1.4280839999999557,
+      "maxMs": 1.5904169999999453,
+      "p95Ms": 1.5904169999999453
+    }
+  ],
+  "comparison": [
+    {
+      "name": "file-blocks:selected",
+      "meanDeltaMs": 0.029874999999989882,
+      "meanDeltaPercent": 2.482622679993445,
+      "p95DeltaMs": 0.011874999999974989,
+      "p95DeltaPercent": 0.7203334825545751
+    },
+    {
+      "name": "tree:selected",
+      "meanDeltaMs": 0.0017500000000012506,
+      "meanDeltaPercent": 2.4892606184764277,
+      "p95DeltaMs": 0.03491600000003814,
+      "p95DeltaPercent": 39.941887733569374
+    },
+    {
+      "name": "tree:full",
+      "meanDeltaMs": -0.014676500000014414,
+      "meanDeltaPercent": -9.315958017419975,
+      "p95DeltaMs": -0.06416600000002859,
+      "p95DeltaPercent": -29.249458689469904
+    },
+    {
+      "name": "tokens:selected",
+      "meanDeltaMs": -0.12022925000000129,
+      "meanDeltaPercent": -3.836363998963005,
+      "p95DeltaMs": -0.01941600000000676,
+      "p95DeltaPercent": -0.5798417201734135
+    },
+    {
+      "name": "tokens:full",
+      "meanDeltaMs": -1.711322999999993,
+      "meanDeltaPercent": -15.97176471115269,
+      "p95DeltaMs": -2.925625000000025,
+      "p95DeltaPercent": -22.206445309505565
+    },
+    {
+      "name": "context:selected-tree",
+      "meanDeltaMs": 0.1789269999999874,
+      "meanDeltaPercent": 12.806893635615058,
+      "p95DeltaMs": 0.5324580000000196,
+      "p95DeltaPercent": 34.04915743270378
+    },
+    {
+      "name": "context:full-tree",
+      "meanDeltaMs": 0.10729224999998621,
+      "meanDeltaPercent": 7.536663988018185,
+      "p95DeltaMs": 0.022916999999949894,
+      "p95DeltaPercent": 1.462009569374798
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import { FileNode, FileNodeUtils } from "../models/FileNode";
-import { Workspace, ContextConfig } from "../models/Workspace";
+import { GitHubSelectionProvider } from "../models/GitHubContext";
 import { FileSelectionChangeEvent } from "../models/Events";
 import { WorkspaceManager } from "../services/WorkspaceManager";
 import { FileDiscoveryService } from "../services/FileDiscoveryService";
@@ -32,8 +32,7 @@ export class MultiRootTreeProvider
   private promptSuffix: string = "";
   private maxFileSizeWarningKB: number = 500;
 
-  // GitHub integration
-  private gitHubIssuesProvider?: any;
+  private gitHubIssuesProvider?: GitHubSelectionProvider;
 
   constructor(
     private workspaceManager: WorkspaceManager,
@@ -51,12 +50,9 @@ export class MultiRootTreeProvider
    * Initialize the provider
    */
   private async initialize(): Promise<void> {
-    console.log("MultiRootTreeProvider: Initializing...");
-
     try {
       await this.refreshWorkspaces();
       this.isInitialized = true;
-      console.log("MultiRootTreeProvider: Initialization complete.");
     } catch (error) {
       console.error(
         "MultiRootTreeProvider: Error during initialization:",
@@ -74,7 +70,6 @@ export class MultiRootTreeProvider
   private setupEventListeners(): void {
     // Listen for workspace changes
     this.workspaceManager.onDidChangeWorkspaces(async (event) => {
-      console.log(`Workspace ${event.type}: ${event.workspace.name}`);
       await this.refreshWorkspaces();
     });
 
@@ -132,9 +127,6 @@ export class MultiRootTreeProvider
     // Refresh the tree view
     this._onDidChangeTreeData.fire();
 
-    console.log(
-      `MultiRootTreeProvider: Refreshed ${this.rootNodes.length} workspace(s)`
-    );
   }
 
   /**
@@ -142,13 +134,17 @@ export class MultiRootTreeProvider
    */
   private getAllCheckedNodes(nodes: FileNode[]): FileNode[] {
     const checkedNodes: FileNode[] = [];
+    const stack = [...nodes];
 
-    for (const node of nodes) {
+    while (stack.length > 0) {
+      const node = stack.pop()!;
       if (node.isChecked) {
         checkedNodes.push(node);
       }
       if (node.children) {
-        checkedNodes.push(...this.getAllCheckedNodes(node.children));
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
       }
     }
 
@@ -311,11 +307,9 @@ export class MultiRootTreeProvider
     // Also clear GitHub issues if provider is available
     let hasIssueChanges = false;
     if (
-      this.gitHubIssuesProvider &&
-      this.gitHubIssuesProvider.clearAllSelections
+      this.gitHubIssuesProvider
     ) {
-      const hadIssues =
-        this.gitHubIssuesProvider.getSelectedIssues().length > 0;
+      const hadIssues = this.gitHubIssuesProvider.getSelectedCount() > 0;
       this.gitHubIssuesProvider.clearAllSelections();
       hasIssueChanges = hadIssues;
     }
@@ -359,16 +353,19 @@ export class MultiRootTreeProvider
    */
   private getAllFileCount(): number {
     let count = 0;
-    const countFiles = (node: FileNode) => {
+    const stack = [...this.rootNodes];
+
+    while (stack.length > 0) {
+      const node = stack.pop()!;
       if (node.type === "file") {
         count++;
       }
       if (node.children) {
-        node.children.forEach(countFiles);
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
       }
-    };
-
-    this.rootNodes.forEach(countFiles);
+    }
     return count;
   }
 
@@ -457,25 +454,21 @@ export class MultiRootTreeProvider
   /**
    * Set the GitHub issues provider for integration
    */
-  setGitHubIssuesProvider(provider: any): void {
+  setGitHubIssuesProvider(provider: GitHubSelectionProvider): void {
     this.gitHubIssuesProvider = provider;
 
-    // Listen to token changes from GitHub issues
-    if (provider && provider.onDidChangeTokens) {
-      provider.onDidChangeTokens((update: any) => {
-        // Update token counting service with GitHub tokens
-        this.tokenCountingService.setGitHubIssueTokens(
-          update.totalTokens,
-          update.isCounting
-        );
-      });
-    }
+    provider.onDidChangeTokens((update) => {
+      this.tokenCountingService.setGitHubIssueTokens(
+        update.totalTokens,
+        update.isCounting
+      );
+    });
   }
 
   /**
    * Get GitHub issues provider
    */
-  getGitHubIssuesProvider(): any {
+  getGitHubIssuesProvider(): GitHubSelectionProvider | undefined {
     return this.gitHubIssuesProvider;
   }
 

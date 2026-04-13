@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import { GitHubApiClient, GitHubPullRequest as ApiPullRequest } from "../api/GitHubApiClient";
 import { GitHubConfigManager } from "../utils/githubConfig";
-import { encode } from "gpt-tokenizer";
+import {
+  GitHubPullRequestContextSource,
+  GitHubPullRequestDetails,
+  GitHubSelectionTokenStatus,
+} from "../models/GitHubContext";
+import { buildGitHubPullRequestTokenContent } from "../services/githubContextFormatter";
+import { countTextTokens } from "../services/tokenizer";
 
 export class GitHubPR extends vscode.TreeItem {
   constructor(
@@ -44,13 +50,11 @@ interface CachedPRData {
   fetchedAt: Date;
 }
 
-export interface PRTokenUpdate {
-  totalTokens: number;
-  selectedCount: number;
-  isCounting: boolean;
-}
+export type PRTokenUpdate = GitHubSelectionTokenStatus;
 
-export class GitHubPRsProvider implements vscode.TreeDataProvider<GitHubPR> {
+export class GitHubPRsProvider
+  implements vscode.TreeDataProvider<GitHubPR>, GitHubPullRequestContextSource
+{
   private _onDidChangeTreeData = new vscode.EventEmitter<GitHubPR | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<GitHubPR | undefined | void> = this._onDidChangeTreeData.event;
 
@@ -166,19 +170,20 @@ export class GitHubPRsProvider implements vscode.TreeDataProvider<GitHubPR> {
         );
       }
 
-    } catch (error: any) {
-      if (error.status === 404) {
+    } catch (error: unknown) {
+      const gitHubError = toGitHubError(error);
+      if (gitHubError?.status === 404) {
         const hasToken = await this.hasValidToken();
         if (!hasToken) {
           this.errorMessage = "🔒 Private repository - authentication required";
         } else {
           this.errorMessage = "Repository not found";
         }
-      } else if (error.status === 401) {
+      } else if (gitHubError?.status === 401) {
         this.errorMessage = "🔑 Invalid GitHub token. Please add a valid token.";
-      } else if (error.status === 403) {
+      } else if (gitHubError?.status === 403) {
         this.errorMessage = "🔒 Rate limit exceeded. Add token for higher limits.";
-      } else if (error.message) {
+      } else if (error instanceof Error && error.message) {
         this.errorMessage = error.message;
       } else {
         this.errorMessage = "Failed to load PRs";
@@ -238,8 +243,17 @@ export class GitHubPRsProvider implements vscode.TreeDataProvider<GitHubPR> {
   }
 
   private calculatePRTokens(diff: string): number {
-    const tokens = encode(diff);
-    return tokens.length;
+    return countTextTokens(
+      buildGitHubPullRequestTokenContent({
+        pr: {
+          number: 0,
+          title: "",
+          state: "open",
+          html_url: "",
+        },
+        diff,
+      })
+    );
   }
 
   private updateTokenCount(): void {
@@ -310,8 +324,8 @@ export class GitHubPRsProvider implements vscode.TreeDataProvider<GitHubPR> {
     }
   }
 
-  async getSelectedPRDetails(): Promise<Map<number, { pr: ApiPullRequest; diff: string }>> {
-    const details = new Map<number, { pr: ApiPullRequest; diff: string }>();
+  async getSelectedPRDetails(): Promise<Map<number, GitHubPullRequestDetails>> {
+    const details = new Map<number, GitHubPullRequestDetails>();
 
     for (const prNumber of this.selectedPRs) {
       const cached = this.prCache.get(prNumber);
@@ -342,4 +356,14 @@ export class GitHubPRsProvider implements vscode.TreeDataProvider<GitHubPR> {
       return false;
     }
   }
+
+  getSelectedCount(): number {
+    return this.selectedPRs.size;
+  }
+}
+
+function toGitHubError(
+  error: unknown
+): (Error & { status?: number }) | null {
+  return error instanceof Error ? (error as Error & { status?: number }) : null;
 }

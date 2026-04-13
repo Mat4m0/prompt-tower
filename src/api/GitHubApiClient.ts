@@ -37,7 +37,7 @@ export interface GitHubPullRequest {
 
 interface GitHubApiError extends Error {
   status?: number;
-  response?: any;
+  response?: unknown;
 }
 
 export class GitHubApiClient {
@@ -55,7 +55,6 @@ export class GitHubApiClient {
    */
   async initialize(): Promise<void> {
     this.token = await GitHubConfigManager.getPAT(this.context);
-    console.log("DEBUG: API client initialized with token:", this.token ? "YES" : "NO");
   }
   
   /**

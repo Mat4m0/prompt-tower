@@ -2,13 +2,27 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import { performance } from "perf_hooks";
-import { encode } from "gpt-tokenizer";
+import {
+  BenchmarkReport,
+  BenchmarkStats,
+  createComparison,
+  formatNumber,
+  formatSignedNumber,
+  formatSignedPercent,
+  readLatestReport,
+  writeLatestReportFiles,
+} from "./reporting";
 import {
   applyContextWrapperTemplate,
   ContextCoreConfig,
   ContextFileEntry,
   formatContextFileBlock,
 } from "../services/contextGenerationCore";
+import {
+  configureTokenizerCache,
+  countTextTokens,
+  countTextTokensLegacy,
+} from "../services/tokenizer";
 import { generateFileStructureTree } from "../utils/fileTree";
 
 type ScaleName = "smoke" | "standard" | "large";
@@ -16,39 +30,8 @@ type ScaleName = "smoke" | "standard" | "large";
 interface BenchmarkCase {
   name: string;
   description: string;
+  beforeEachRun?: () => Promise<void>;
   run: () => Promise<void>;
-}
-
-interface BenchmarkStats {
-  name: string;
-  description: string;
-  iterations: number;
-  meanMs: number;
-  minMs: number;
-  maxMs: number;
-  p95Ms: number;
-}
-
-interface BenchmarkComparison {
-  name: string;
-  meanDeltaMs: number;
-  meanDeltaPercent: number;
-  p95DeltaMs: number;
-  p95DeltaPercent: number;
-}
-
-interface BenchmarkFixtureSummary {
-  rootDir: string;
-  totalFiles: number;
-  selectedFiles: number;
-}
-
-interface BenchmarkReport {
-  generatedAt: string;
-  scale: ScaleName;
-  fixture: BenchmarkFixtureSummary;
-  results: BenchmarkStats[];
-  comparison: BenchmarkComparison[];
 }
 
 interface FixtureSet {
@@ -100,6 +83,7 @@ const SCALE_CONFIG: Record<
 };
 
 async function main(): Promise<void> {
+  configureTokenizerCache();
   const args = new Set(process.argv.slice(2));
   const scale = getScale(args);
   const jsonOutput = args.has("--json");
@@ -119,8 +103,9 @@ async function main(): Promise<void> {
       totalFiles: fixtureSet.allFiles.length,
       selectedFiles: fixtureSet.selectedFiles.length,
     };
-    const previousReport = await readLatestReport(scale);
-    const report: BenchmarkReport = {
+    const reportsRoot = path.join(process.cwd(), "benchmarks", "reports");
+    const previousReport = await readLatestReport(reportsRoot, scale);
+    const report: BenchmarkReport<ScaleName> = {
       generatedAt: new Date().toISOString(),
       scale,
       fixture,
@@ -128,7 +113,7 @@ async function main(): Promise<void> {
       comparison: createComparison(results, previousReport?.results ?? []),
     };
 
-    const reportPaths = await writeReportFiles(report);
+    const reportPaths = await writeLatestReportFiles(reportsRoot, report);
 
     if (jsonOutput) {
       process.stdout.write(
@@ -256,6 +241,20 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       },
     },
     {
+      name: "tokens:legacy-full",
+      description: "Read and tokenize the full fixture with encode(...).length",
+      run: async () => {
+        const contents = await Promise.all(
+          fixtureSet.allFiles.map((fileEntry) =>
+            fs.promises.readFile(fileEntry.absolutePath, "utf8")
+          )
+        );
+        for (const content of contents) {
+          countTextTokensLegacy(content);
+        }
+      },
+    },
+    {
       name: "tokens:selected",
       description: "Read and tokenize selected files",
       run: async () => {
@@ -265,7 +264,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
           )
         );
         for (const content of contents) {
-          encode(content);
+          countTextTokens(content);
         }
       },
     },
@@ -279,7 +278,23 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
           )
         );
         for (const content of contents) {
-          encode(content);
+          countTextTokens(content);
+        }
+      },
+    },
+    {
+      name: "tokens:warm-full",
+      description: "Tokenize the full fixture after warming tokenizer merge cache",
+      beforeEachRun: async () => {
+        const contents = await loadFileContents(fixtureSet.allFiles);
+        for (const content of contents) {
+          countTextTokens(content);
+        }
+      },
+      run: async () => {
+        const contents = await loadFileContents(fixtureSet.allFiles);
+        for (const content of contents) {
+          countTextTokens(content);
         }
       },
     },
@@ -343,10 +358,12 @@ async function measureBenchmark(
   benchmarkCase: BenchmarkCase,
   iterations: number
 ): Promise<BenchmarkStats> {
+  await benchmarkCase.beforeEachRun?.();
   await benchmarkCase.run();
 
   const samples: number[] = [];
   for (let iteration = 0; iteration < iterations; iteration++) {
+    await benchmarkCase.beforeEachRun?.();
     const start = performance.now();
     await benchmarkCase.run();
     samples.push(performance.now() - start);
@@ -370,142 +387,25 @@ async function measureBenchmark(
   };
 }
 
+async function loadFileContents(
+  fileEntries: ContextFileEntry[]
+): Promise<string[]> {
+  return Promise.all(
+    fileEntries.map((fileEntry) =>
+      fs.promises.readFile(fileEntry.absolutePath, "utf8")
+    )
+  );
+}
+
 function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-async function readLatestReport(
-  scale: ScaleName
-): Promise<BenchmarkReport | null> {
-  const latestPath = path.join(
-    process.cwd(),
-    "benchmarks",
-    "reports",
-    `latest-${scale}.json`
-  );
-
-  try {
-    const raw = await fs.promises.readFile(latestPath, "utf8");
-    return JSON.parse(raw) as BenchmarkReport;
-  } catch {
-    return null;
-  }
-}
-
-function createComparison(
-  currentResults: BenchmarkStats[],
-  previousResults: BenchmarkStats[]
-): BenchmarkComparison[] {
-  const previousByName = new Map(
-    previousResults.map((result) => [result.name, result])
-  );
-
-  return currentResults
-    .filter((result) => previousByName.has(result.name))
-    .map((result) => {
-      const previous = previousByName.get(result.name)!;
-      return {
-        name: result.name,
-        meanDeltaMs: result.meanMs - previous.meanMs,
-        meanDeltaPercent: percentageDelta(result.meanMs, previous.meanMs),
-        p95DeltaMs: result.p95Ms - previous.p95Ms,
-        p95DeltaPercent: percentageDelta(result.p95Ms, previous.p95Ms),
-      };
-    });
-}
-
-function percentageDelta(currentValue: number, previousValue: number): number {
-  if (previousValue === 0) {
-    return 0;
-  }
-
-  return ((currentValue - previousValue) / previousValue) * 100;
-}
-
-async function writeReportFiles(report: BenchmarkReport): Promise<{
-  latestJson: string;
-  latestMd: string;
-  historyJson: string;
-  historyMd: string;
-}> {
-  const reportsDir = path.join(process.cwd(), "benchmarks", "reports");
-  const historyDir = path.join(reportsDir, "history");
-  await fs.promises.mkdir(historyDir, { recursive: true });
-
-  const safeTimestamp = report.generatedAt.replace(/[:.]/g, "-");
-  const latestJson = path.join(reportsDir, `latest-${report.scale}.json`);
-  const latestMd = path.join(reportsDir, `latest-${report.scale}.md`);
-  const historyJson = path.join(
-    historyDir,
-    `${safeTimestamp}-${report.scale}.json`
-  );
-  const historyMd = path.join(historyDir, `${safeTimestamp}-${report.scale}.md`);
-
-  const jsonPayload = JSON.stringify(report, null, 2);
-  const markdownPayload = renderMarkdownReport(report);
-
-  await Promise.all([
-    fs.promises.writeFile(latestJson, jsonPayload + "\n", "utf8"),
-    fs.promises.writeFile(latestMd, markdownPayload, "utf8"),
-    fs.promises.writeFile(historyJson, jsonPayload + "\n", "utf8"),
-    fs.promises.writeFile(historyMd, markdownPayload, "utf8"),
-  ]);
-
-  return { latestJson, latestMd, historyJson, historyMd };
-}
-
-function renderMarkdownReport(report: BenchmarkReport): string {
-  const lines = [
-    `# Prompt Tower benchmark report (${report.scale})`,
-    "",
-    `Generated: ${report.generatedAt}`,
-    `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`,
-    "",
-    "## Results",
-    "",
-    "| Benchmark | Mean (ms) | P95 (ms) | Min (ms) | Max (ms) | Iterations |",
-    "| --- | ---: | ---: | ---: | ---: | ---: |",
-    ...report.results.map(
-      (result) =>
-        `| ${result.name} | ${formatNumber(result.meanMs)} | ${formatNumber(
-          result.p95Ms
-        )} | ${formatNumber(result.minMs)} | ${formatNumber(
-          result.maxMs
-        )} | ${result.iterations} |`
-    ),
-  ];
-
-  if (report.comparison.length > 0) {
-    lines.push(
-      "",
-      "## Comparison To Previous Latest",
-      "",
-      "| Benchmark | Mean delta (ms) | Mean delta (%) | P95 delta (ms) | P95 delta (%) |",
-      "| --- | ---: | ---: | ---: | ---: |",
-      ...report.comparison.map(
-        (comparison) =>
-          `| ${comparison.name} | ${formatSignedNumber(
-            comparison.meanDeltaMs
-          )} | ${formatSignedPercent(
-            comparison.meanDeltaPercent
-          )} | ${formatSignedNumber(comparison.p95DeltaMs)} | ${formatSignedPercent(
-            comparison.p95DeltaPercent
-          )} |`
-      )
-    );
-  }
-
-  lines.push("");
-  return lines.join("\n");
-}
-
 function printResults(
-  report: BenchmarkReport,
+  report: BenchmarkReport<ScaleName>,
   reportPaths: {
     latestJson: string;
     latestMd: string;
-    historyJson: string;
-    historyMd: string;
   }
 ): void {
   console.log(`Prompt Tower benchmark suite (${report.scale})`);
@@ -545,20 +445,6 @@ function printResults(
   console.log("");
   console.log(`saved latest json: ${reportPaths.latestJson}`);
   console.log(`saved latest md:   ${reportPaths.latestMd}`);
-  console.log(`saved history json:${reportPaths.historyJson}`);
-  console.log(`saved history md:  ${reportPaths.historyMd}`);
-}
-
-function formatNumber(value: number): string {
-  return value.toFixed(2);
-}
-
-function formatSignedNumber(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}`;
-}
-
-function formatSignedPercent(value: number): string {
-  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 main().catch((error) => {

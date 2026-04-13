@@ -14,8 +14,13 @@ import { TokenCountingService } from "./services/TokenCountingService";
 import { IgnorePatternService } from "./services/IgnorePatternService";
 import { ContextGenerationService } from "./services/ContextGenerationService";
 import { PromptPushService, AIProvider } from "./services/PromptPushService";
-import { EditorAutomationService } from "./services/EditorAutomationService";
+import {
+  AutomationTarget,
+  EditorAutomationService,
+} from "./services/EditorAutomationService";
 import { PromptHistoryService, PromptType } from "./services/PromptHistoryService";
+import { configureTokenizerCache } from "./services/tokenizer";
+import { FileSnapshotService } from "./services/FileSnapshotService";
 import { FileNode } from "./models/FileNode";
 import { TokenUpdatePayload } from "./models/Events";
 import { GitHubConfigManager } from "./utils/githubConfig";
@@ -40,6 +45,7 @@ let issuesProviderInstance: GitHubIssuesProvider | undefined;
 let prsProviderInstance: GitHubPRsProvider | undefined;
 let mainTreeView: vscode.TreeView<FileNode>;
 let statusWebview: vscode.WebviewView | undefined;
+let fileSnapshotService: FileSnapshotService;
 
 // --- Preview State ---
 let isPreviewValid = false;
@@ -52,7 +58,6 @@ function updateWebviewVisibilityContext() {
 
 function invalidateWebviewPreview() {
   if (webviewPanel && isPreviewValid) {
-    console.log("Extension: Sending invalidatePreview to webview.");
     webviewPanel.webview.postMessage({ command: "invalidatePreview" });
     isPreviewValid = false;
   }
@@ -624,13 +629,15 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
               }
 
               // Get target from message or default to agent
-              const target = message.target || "agent";
+              const target = isAutomationTarget(message.target)
+                ? message.target
+                : "agent";
 
               // Send to Cursor using the service
               const automationResult =
                 await editorAutomationService.sendToEditor(
                   "cursor",
-                  target as any,
+                  target,
                   result.contextString
                 );
 
@@ -639,7 +646,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                   `✨ Context sent to ${editorAutomationService.getEditorDisplayName(
                     "cursor"
                   )} ${editorAutomationService.getTargetDisplayName(
-                    target as any
+                    target
                   )}!`
                 );
               } else {
@@ -806,14 +813,14 @@ class StatusTreeProvider implements vscode.WebviewViewProvider {
 
 // --- Extension Activation ---
 export function activate(context: vscode.ExtensionContext) {
-  console.log("Prompt Tower: Activating with new clean architecture...");
-
   // Initialize services
   workspaceManager = new WorkspaceManager();
   ignorePatternService = new IgnorePatternService(context);
   fileDiscoveryService = new FileDiscoveryService(ignorePatternService);
-  tokenCountingService = new TokenCountingService();
-  contextGenerationService = new ContextGenerationService();
+  fileSnapshotService = new FileSnapshotService();
+  configureTokenizerCache();
+  tokenCountingService = new TokenCountingService(fileSnapshotService);
+  contextGenerationService = new ContextGenerationService(fileSnapshotService);
   promptPushService = new PromptPushService();
   editorAutomationService = new EditorAutomationService();
   promptHistoryService = new PromptHistoryService(context);
@@ -864,16 +871,9 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle checkbox clicks (checkboxes are separate from row content)
   context.subscriptions.push(
     mainTreeView.onDidChangeCheckboxState(async (evt) => {
-      console.log(`[Prompt Tower] Checkbox event triggered for ${evt.items.length} items`);
       for (const [item, state] of evt.items) {
-        if (
-          item &&
-          typeof item === "object" &&
-          "type" in item &&
-          "absolutePath" in item
-        ) {
-          console.log(`[Prompt Tower] Checkbox toggle: ${(item as any).label} -> ${state === 1 ? 'checked' : 'unchecked'}`);
-          await multiRootProvider.toggleNodeSelection(item as FileNode);
+        if (isFileNode(item)) {
+          await multiRootProvider.toggleNodeSelection(item);
         }
       }
       invalidateWebviewPreview();
@@ -974,7 +974,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Handle tree item clicks (whole row clickable)
     vscode.commands.registerCommand("promptTower.toggleFileSelection", async (fileNode: FileNode) => {
-      console.log(`[Prompt Tower] Row content click: ${fileNode.label} (${fileNode.type})`);
       await multiRootProvider.toggleNodeSelection(fileNode);
       invalidateWebviewPreview();
     }),
@@ -1174,7 +1173,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Right-click file preview
     vscode.commands.registerCommand("promptTower.previewFile", async (fileNode: FileNode) => {
-      console.log(`[Prompt Tower] Right-click preview: ${fileNode.label}`);
       await showFilePreview(fileNode);
     })
   );
@@ -1183,16 +1181,27 @@ export function activate(context: vscode.ExtensionContext) {
 
   // Don't automatically show the panel - let users open it when they want
   // vscode.commands.executeCommand("promptTower.showTowerUI");
-
-  console.log("Prompt Tower: Activation complete with clean architecture!");
 }
 
 export function deactivate() {
-  console.log('Deactivating "prompt-tower" with clean architecture');
-
   if (webviewPanel) {
     webviewPanel.dispose();
   }
 
+  fileSnapshotService?.clear();
+
   // Services will be disposed via context.subscriptions
+}
+
+function isFileNode(value: unknown): value is FileNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    "absolutePath" in value
+  );
+}
+
+function isAutomationTarget(value: unknown): value is AutomationTarget {
+  return value === "agent" || value === "ask" || value === "copilot";
 }

@@ -1,8 +1,8 @@
-import * as fs from "fs";
 import * as vscode from "vscode";
-import { encode } from "gpt-tokenizer";
 import { FileNode, FileNodeUtils } from "../models/FileNode";
 import { TokenUpdatePayload } from "../models/Events";
+import { FileSnapshotService } from "./FileSnapshotService";
+import { countTextTokens } from "./tokenizer";
 
 /**
  * Service for counting tokens in files with async/cancellation support
@@ -24,7 +24,7 @@ export class TokenCountingService {
     { mtimeMs: number; size: number; tokenCount: number }
   >();
 
-  constructor() {}
+  constructor(private fileSnapshotService: FileSnapshotService) {}
 
   /**
    * Get current token count
@@ -96,12 +96,10 @@ export class TokenCountingService {
       this.totalFileTokens = 0;
       this.isCountingTokens = false;
       this.notifyTokenUpdate();
-      console.log(`Token count reset to 0 (Version ${calculationVersion} - no files selected).`);
       return;
     }
     
     // Start counting
-    console.log(`Token counting started (Version ${calculationVersion}) for ${checkedFiles.length} files.`);
     this.isCountingTokens = true;
     this.notifyTokenUpdate();
     
@@ -116,7 +114,6 @@ export class TokenCountingService {
         offset += TokenCountingService.TOKEN_COUNT_BATCH_SIZE
       ) {
         if (calculationVersion !== this.currentCalculationVersion) {
-          console.log(`Token counting cancelled (Version ${calculationVersion}). Newer version exists.`);
           return;
         }
 
@@ -133,14 +130,12 @@ export class TokenCountingService {
       }
 
       if (calculationVersion !== this.currentCalculationVersion) {
-        console.log(`Token counting cancelled before final update (Version ${calculationVersion}).`);
         return;
       }
       
       // Update final state
       this.totalFileTokens = runningTokenCount;
       this.isCountingTokens = false;
-      console.log(`Token counting finished (Version ${calculationVersion}). Total tokens: ${this.totalFileTokens}`);
       
     } catch (error) {
       console.error("Unexpected error during token counting process:", error);
@@ -180,8 +175,7 @@ export class TokenCountingService {
    */
   countTokensForText(text: string): number {
     try {
-      const tokens = encode(text);
-      return tokens.length;
+      return countTextTokens(text);
     } catch (error) {
       console.error("Error counting tokens for text:", error);
       return 0;
@@ -198,30 +192,29 @@ export class TokenCountingService {
     this.isCountingTokens = false;
     this.isCountingGitHubIssues = false;
     this.notifyTokenUpdate();
-    console.log("Token count reset to 0.");
   }
 
   private async getTokenCountForFile(filePath: string): Promise<number> {
     try {
-      const fileStat = await fs.promises.stat(filePath);
-      if (!fileStat.isFile()) {
+      const snapshot = await this.fileSnapshotService.getSnapshot(filePath);
+      if (!snapshot) {
+        this.tokenCache.delete(filePath);
         return 0;
       }
 
       const cachedValue = this.tokenCache.get(filePath);
       if (
         cachedValue &&
-        cachedValue.mtimeMs === fileStat.mtimeMs &&
-        cachedValue.size === fileStat.size
+        cachedValue.mtimeMs === snapshot.mtimeMs &&
+        cachedValue.size === snapshot.size
       ) {
         return cachedValue.tokenCount;
       }
 
-      const content = await fs.promises.readFile(filePath, "utf-8");
-      const tokenCount = encode(content).length;
+      const tokenCount = countTextTokens(snapshot.content);
       this.tokenCache.set(filePath, {
-        mtimeMs: fileStat.mtimeMs,
-        size: fileStat.size,
+        mtimeMs: snapshot.mtimeMs,
+        size: snapshot.size,
         tokenCount,
       });
       return tokenCount;
@@ -243,8 +236,8 @@ export class TokenCountingService {
   /**
    * Handle token counting errors for individual files
    */
-  private handleTokenCountingError(err: any, filePath: string): void {
-    if (err.code === "ENOENT") {
+  private handleTokenCountingError(err: unknown, filePath: string): void {
+    if (isErrnoException(err) && err.code === "ENOENT") {
       console.warn(`File not found during token count: ${filePath}`);
     } else if (err instanceof Error && err.message?.includes("is too large")) {
       console.warn(`Skipping large file during token count: ${filePath}`);
@@ -280,4 +273,8 @@ export class TokenCountingService {
     this.tokenCache.clear();
     this._onDidChangeTokens.dispose();
   }
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error;
 }

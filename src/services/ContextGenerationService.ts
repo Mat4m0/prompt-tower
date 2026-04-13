@@ -1,12 +1,20 @@
-import * as fs from "fs";
 import * as vscode from "vscode";
 import { FileNode, FileNodeUtils } from "../models/FileNode";
 import { ContextConfig } from "../models/Workspace";
+import {
+  GitHubIssueContextSource,
+  GitHubPullRequestContextSource,
+} from "../models/GitHubContext";
 import { generateFileStructureTree } from "../utils/fileTree";
 import {
   applyContextWrapperTemplate,
   formatContextFileContent,
 } from "./contextGenerationCore";
+import { FileSnapshotService } from "./FileSnapshotService";
+import {
+  formatGitHubIssueBlock,
+  formatGitHubPullRequestBlock,
+} from "./githubContextFormatter";
 
 export interface ContextGenerationResult {
   contextString: string;
@@ -19,10 +27,25 @@ interface StructuredFilePath {
   tree: string;
 }
 
+interface OutputFormatSettings {
+  blockTemplate?: string;
+  blockSeparator?: string;
+  blockTrimLines?: boolean;
+  projectTreeFormat?: {
+    enabled?: boolean;
+    type?: ContextConfig["projectTree"]["type"];
+    showFileSize?: boolean;
+    template?: string;
+  };
+  wrapperFormat?: {
+    template?: string;
+  } | null;
+}
+
 export class ContextGenerationService {
   private config!: ContextConfig;
-  private gitHubIssuesProvider?: any;
-  private gitHubPRsProvider?: any;
+  private gitHubIssuesProvider?: GitHubIssueContextSource;
+  private gitHubPRsProvider?: GitHubPullRequestContextSource;
   private fileBlockCache = new Map<
     string,
     {
@@ -33,17 +56,16 @@ export class ContextGenerationService {
     }
   >();
 
-  constructor() {
+  constructor(private fileSnapshotService: FileSnapshotService) {
     this.loadConfiguration();
     this.setupConfigurationWatcher();
   }
 
   private loadConfiguration(): void {
     const config = vscode.workspace.getConfiguration("promptTower");
-    const outputFormat = config.get<any>("outputFormat") || {};
-    const projectTreeFormat =
-      config.get<any>("outputFormat.projectTreeFormat") || {};
-    const wrapperFormat = config.get<any>("outputFormat.wrapperFormat");
+    const outputFormat = config.get<OutputFormatSettings>("outputFormat") ?? {};
+    const projectTreeFormat = outputFormat.projectTreeFormat ?? {};
+    const wrapperFormat = outputFormat.wrapperFormat;
 
     this.config = {
       blockTemplate:
@@ -161,8 +183,10 @@ export class ContextGenerationService {
 
   private async generateFileBlock(fileNode: FileNode): Promise<string> {
     try {
-      const fileStat = await fs.promises.stat(fileNode.absolutePath);
-      if (!fileStat.isFile()) {
+      const snapshot = await this.fileSnapshotService.getSnapshot(
+        fileNode.absolutePath
+      );
+      if (!snapshot) {
         this.fileBlockCache.delete(fileNode.absolutePath);
         return `<!-- Error reading file: ${fileNode.relativePath} -->`;
       }
@@ -171,25 +195,24 @@ export class ContextGenerationService {
       const cachedBlock = this.fileBlockCache.get(fileNode.absolutePath);
       if (
         cachedBlock &&
-        cachedBlock.mtimeMs === fileStat.mtimeMs &&
-        cachedBlock.size === fileStat.size &&
+        cachedBlock.mtimeMs === snapshot.mtimeMs &&
+        cachedBlock.size === snapshot.size &&
         cachedBlock.configSignature === configSignature
       ) {
         return cachedBlock.block;
       }
 
-      const fileContent = await fs.promises.readFile(fileNode.absolutePath, "utf8");
       const block = formatContextFileContent(
         {
           absolutePath: fileNode.absolutePath,
           relativePath: fileNode.relativePath,
         },
-        fileContent,
+        snapshot.content,
         this.config
       );
       this.fileBlockCache.set(fileNode.absolutePath, {
-        mtimeMs: fileStat.mtimeMs,
-        size: fileStat.size,
+        mtimeMs: snapshot.mtimeMs,
+        size: snapshot.size,
         configSignature,
         block,
       });
@@ -335,11 +358,11 @@ export class ContextGenerationService {
     return { ...this.config };
   }
 
-  setGitHubIssuesProvider(provider: any): void {
+  setGitHubIssuesProvider(provider: GitHubIssueContextSource): void {
     this.gitHubIssuesProvider = provider;
   }
 
-  setGitHubPRsProvider(provider: any): void {
+  setGitHubPRsProvider(provider: GitHubPullRequestContextSource): void {
     this.gitHubPRsProvider = provider;
   }
 
@@ -356,41 +379,9 @@ export class ContextGenerationService {
         return [];
       }
 
-      const blocks: string[] = [];
-
-      for (const [, details] of selectedIssues) {
-        const { issue, comments } = details;
-
-        let issueBlock = `<github_issue number="${issue.number}" state="${issue.state}">
-<title>${issue.title}</title>
-<url>${issue.html_url}</url>
-<created_at>${issue.created_at}</created_at>
-<author>${issue.user.login}</author>`;
-
-        if (issue.labels.length > 0) {
-          const labelNames = issue.labels.map((label: any) => label.name).join(", ");
-          issueBlock += `\n<labels>${labelNames}</labels>`;
-        }
-
-        if (issue.body) {
-          issueBlock += `\n<body>\n${issue.body}\n</body>`;
-        }
-
-        if (comments.length > 0) {
-          issueBlock += "\n<comments>";
-          for (const comment of comments) {
-            issueBlock += `\n<comment author="${comment.user.login}" created_at="${comment.created_at}">
-${comment.body}
-</comment>`;
-          }
-          issueBlock += "\n</comments>";
-        }
-
-        issueBlock += "\n</github_issue>";
-        blocks.push(issueBlock);
-      }
-
-      return blocks;
+      return Array.from(selectedIssues.values(), (details) =>
+        formatGitHubIssueBlock(details)
+      );
     } catch (error) {
       console.error("Error generating GitHub issues blocks:", error);
       return [];
@@ -409,11 +400,9 @@ ${comment.body}
         return [];
       }
 
-      const blocks: string[] = [];
-      for (const [prNumber, details] of selectedPRs) {
-        blocks.push(`<github_pr number="${prNumber}">\n${details.diff}\n</github_pr>`);
-      }
-      return blocks;
+      return Array.from(selectedPRs.values(), (details) =>
+        formatGitHubPullRequestBlock(details)
+      );
     } catch (error) {
       console.error("Error generating GitHub PRs blocks:", error);
       return [];

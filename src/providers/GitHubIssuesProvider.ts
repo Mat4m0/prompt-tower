@@ -1,7 +1,13 @@
 import * as vscode from "vscode";
 import { GitHubApiClient, GitHubIssue as ApiIssue, GitHubComment } from "../api/GitHubApiClient";
 import { GitHubConfigManager } from "../utils/githubConfig";
-import { encode } from "gpt-tokenizer";
+import {
+  GitHubIssueContextSource,
+  GitHubIssueDetails,
+  GitHubSelectionTokenStatus,
+} from "../models/GitHubContext";
+import { buildGitHubIssueTokenContent } from "../services/githubContextFormatter";
+import { countTextTokens } from "../services/tokenizer";
 
 export class GitHubIssue extends vscode.TreeItem {
   constructor(
@@ -51,13 +57,11 @@ interface CachedIssueData {
   fetchedAt: Date;
 }
 
-export interface IssueTokenUpdate {
-  totalTokens: number;
-  selectedCount: number;
-  isCounting: boolean;
-}
+export type IssueTokenUpdate = GitHubSelectionTokenStatus;
 
-export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue> {
+export class GitHubIssuesProvider
+  implements vscode.TreeDataProvider<GitHubIssue>, GitHubIssueContextSource
+{
   private _onDidChangeTreeData = new vscode.EventEmitter<GitHubIssue | undefined | void>();
   readonly onDidChangeTreeData: vscode.Event<GitHubIssue | undefined | void> = this._onDidChangeTreeData.event;
   
@@ -141,7 +145,6 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
           return;
         }
         this.repoInfo = { owner: detected.owner, repo: detected.repo };
-        console.log("DEBUG: Detected repo info:", this.repoInfo);
       }
       
       // Initialize API client
@@ -197,8 +200,9 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
         );
       }
       
-    } catch (error: any) {
-      if (error.status === 404) {
+    } catch (error: unknown) {
+      const gitHubError = toGitHubError(error);
+      if (gitHubError?.status === 404) {
         // 404 for a private repo when unauthenticated vs truly not found
         const hasToken = await this.hasValidToken();
         if (!hasToken) {
@@ -206,11 +210,11 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
         } else {
           this.errorMessage = "Repository not found";
         }
-      } else if (error.status === 401) {
+      } else if (gitHubError?.status === 401) {
         this.errorMessage = "🔑 Invalid GitHub token. Please add a valid token.";
-      } else if (error.status === 403) {
+      } else if (gitHubError?.status === 403) {
         this.errorMessage = "🔒 Rate limit exceeded. Add token for higher limits.";
-      } else if (error.message) {
+      } else if (error instanceof Error && error.message) {
         this.errorMessage = error.message;
       } else {
         this.errorMessage = "Failed to load issues";
@@ -290,21 +294,7 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
    * Calculate token count for issue content
    */
   private calculateIssueTokens(issue: ApiIssue, comments: GitHubComment[]): number {
-    let content = `Issue #${issue.number}: ${issue.title}\n`;
-    
-    if (issue.body) {
-      content += `\n${issue.body}\n`;
-    }
-    
-    if (comments.length > 0) {
-      content += '\nComments:\n';
-      for (const comment of comments) {
-        content += `${comment.user.login}: ${comment.body}\n`;
-      }
-    }
-    
-    const tokens = encode(content);
-    return tokens.length;
+    return countTextTokens(buildGitHubIssueTokenContent({ issue, comments }));
   }
   
   /**
@@ -387,8 +377,8 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
   /**
    * Get the full issue details for selected issues (from cache)
    */
-  async getSelectedIssueDetails(): Promise<Map<number, { issue: ApiIssue; comments: any[] }>> {
-    const details = new Map<number, { issue: ApiIssue; comments: any[] }>();
+  async getSelectedIssueDetails(): Promise<Map<number, GitHubIssueDetails>> {
+    const details = new Map<number, GitHubIssueDetails>();
     
     // Get from cache (already fetched during selection)
     for (const issueNumber of this.selectedIssues) {
@@ -426,4 +416,14 @@ export class GitHubIssuesProvider implements vscode.TreeDataProvider<GitHubIssue
       return false;
     }
   }
+
+  getSelectedCount(): number {
+    return this.selectedIssues.size;
+  }
+}
+
+function toGitHubError(
+  error: unknown
+): (Error & { status?: number }) | null {
+  return error instanceof Error ? (error as Error & { status?: number }) : null;
 }
