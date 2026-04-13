@@ -106,6 +106,7 @@ export class MultiRootTreeProvider
 
     if (workspaces.length === 0) {
       this.rootNodes = [];
+      this.tokenCountingService.clearSelection();
       this._onDidChangeTreeData.fire();
       return;
     }
@@ -121,8 +122,9 @@ export class MultiRootTreeProvider
       preserveCheckedPaths
     );
 
-    // Update token count
-    this.tokenCountingService.debouncedUpdateTokenCount(this.rootNodes, 100);
+    this.tokenCountingService.replaceSelection(
+      FileNodeUtils.getCheckedFilePaths(this.rootNodes)
+    );
 
     // Refresh the tree view
     this._onDidChangeTreeData.fire();
@@ -234,6 +236,13 @@ export class MultiRootTreeProvider
 
     // Update the node state
     if (newState !== originalState || userCancelled) {
+      const addedFilePaths = newState
+        ? FileNodeUtils.getUncheckedFilePaths([node])
+        : [];
+      const removedFilePaths = newState
+        ? []
+        : FileNodeUtils.getCheckedFilePaths([node]);
+
       // Toggle this node and its children
       FileNodeUtils.toggleCheckedState(node, newState);
 
@@ -246,14 +255,17 @@ export class MultiRootTreeProvider
       this._onDidChangeSelection.fire({
         node,
         isChecked: newState,
-        propagateToChildren: node.type === "directory",
+        addedFilePaths,
+        removedFilePaths,
       });
+
+      this.tokenCountingService.applySelectionDelta(
+        addedFilePaths,
+        removedFilePaths
+      );
 
       // Refresh the tree to show updated checkboxes
       this._onDidChangeTreeData.fire(node);
-
-      // Update token count
-      this.tokenCountingService.debouncedUpdateTokenCount(this.rootNodes);
     }
   }
 
@@ -295,13 +307,13 @@ export class MultiRootTreeProvider
    * Clear all selections
    */
   clearAllSelections(): void {
+    const removedFilePaths = FileNodeUtils.getCheckedFilePaths(this.rootNodes);
     let hasFileChanges = false;
-    for (const rootNode of this.rootNodes) {
-      const checkedFiles = FileNodeUtils.getCheckedFiles([rootNode]);
-      if (checkedFiles.length > 0) {
+    if (removedFilePaths.length > 0) {
+      for (const rootNode of this.rootNodes) {
         FileNodeUtils.toggleCheckedState(rootNode, false);
-        hasFileChanges = true;
       }
+      hasFileChanges = true;
     }
 
     // Also clear GitHub issues if provider is available
@@ -315,7 +327,9 @@ export class MultiRootTreeProvider
     }
 
     if (hasFileChanges || hasIssueChanges) {
-      this.tokenCountingService.resetTokenCount();
+      if (hasFileChanges) {
+        this.tokenCountingService.clearSelection();
+      }
       this._onDidChangeTreeData.fire();
       vscode.window.showInformationMessage("Cleared all selections.");
     }
@@ -325,23 +339,23 @@ export class MultiRootTreeProvider
    * Toggle all files in all workspaces
    */
   async toggleAllFiles(): Promise<void> {
-    // Check if all files are currently selected
-    const allFiles = FileNodeUtils.getCheckedFiles(this.rootNodes);
+    const checkedFilePaths = FileNodeUtils.getCheckedFilePaths(this.rootNodes);
     const totalFiles = this.getAllFileCount();
-    const allSelected = allFiles.length === totalFiles;
+    const allSelected = checkedFilePaths.length === totalFiles;
 
     const newState = !allSelected;
+    const affectedFilePaths = newState
+      ? FileNodeUtils.getFilePaths(this.rootNodes)
+      : checkedFilePaths;
 
-    // Toggle all root nodes (which will propagate to children)
     for (const rootNode of this.rootNodes) {
       FileNodeUtils.toggleCheckedState(rootNode, newState);
     }
 
-    // Update token count
     if (newState) {
-      this.tokenCountingService.debouncedUpdateTokenCount(this.rootNodes);
+      this.tokenCountingService.replaceSelection(affectedFilePaths);
     } else {
-      this.tokenCountingService.resetTokenCount();
+      this.tokenCountingService.clearSelection();
     }
 
     // Refresh tree

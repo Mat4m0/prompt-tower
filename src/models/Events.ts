@@ -27,9 +27,12 @@ export interface FileSelectionChangeEvent {
   
   /** New checked state */
   isChecked: boolean;
-  
-  /** Whether the change affects children */
-  propagateToChildren: boolean;
+
+  /** Concrete file paths newly selected by this change */
+  addedFilePaths: string[];
+
+  /** Concrete file paths deselected by this change */
+  removedFilePaths: string[];
 }
 
 /**

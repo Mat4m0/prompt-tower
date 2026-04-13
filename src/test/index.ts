@@ -5,6 +5,7 @@ import * as os from "os";
 import * as path from "path";
 import { countTextTokens, countTextTokensLegacy } from "../services/tokenizer";
 import { FileSnapshotService } from "../services/FileSnapshotService";
+import { TokenSelectionState } from "../services/TokenSelectionState";
 import {
   buildGitHubIssueTokenContent,
   buildGitHubPullRequestTokenContent,
@@ -96,6 +97,85 @@ test("GitHub context token fixtures remain non-empty and stable in shape", () =>
   assert.match(prContent, /diff --git/);
   assert.ok(countTextTokens(issueContent) > 0);
   assert.ok(countTextTokens(prContent) > 0);
+});
+
+test("TokenSelectionState adds cached counts immediately on reselect", async () => {
+  const counts = new Map([
+    ["a.ts", 10],
+    ["b.ts", 20],
+  ]);
+  let resolveCalls = 0;
+  const selectionState = new TokenSelectionState(async (filePath) => {
+    resolveCalls++;
+    return { tokenCount: counts.get(filePath) ?? 0, cacheable: true };
+  });
+
+  selectionState.applySelectionDelta(["a.ts", "b.ts"], []);
+  await selectionState.waitForIdle();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 30);
+  assert.equal(resolveCalls, 2);
+
+  selectionState.applySelectionDelta([], ["a.ts", "b.ts"]);
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
+
+  selectionState.applySelectionDelta(["a.ts"], []);
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 10);
+  assert.equal(selectionState.getSnapshot().pendingTokenCount, 0);
+  assert.equal(resolveCalls, 2);
+});
+
+test("TokenSelectionState removes pending paths without re-adding stale results", async () => {
+  let resolvePath:
+    | ((resolution: { tokenCount: number; cacheable: boolean }) => void)
+    | undefined;
+  const selectionState = new TokenSelectionState(
+    (filePath) =>
+      new Promise<{ tokenCount: number; cacheable: boolean }>((resolve) => {
+        if (filePath === "slow.ts") {
+          resolvePath = resolve;
+          return;
+        }
+        resolve({ tokenCount: 5, cacheable: true });
+      })
+  );
+
+  selectionState.applySelectionDelta(["slow.ts"], []);
+  assert.equal(selectionState.getSnapshot().pendingTokenCount, 1);
+
+  selectionState.applySelectionDelta([], ["slow.ts"]);
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
+  assert.equal(selectionState.getSnapshot().pendingTokenCount, 0);
+
+  resolvePath?.({ tokenCount: 99, cacheable: true });
+  await selectionState.waitForIdle();
+
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
+  assert.equal(selectionState.getSnapshot().selectedPathCount, 0);
+});
+
+test("TokenSelectionState replaceSelection keeps exact totals across refresh", async () => {
+  const counts = new Map([
+    ["a.ts", 10],
+    ["b.ts", 20],
+    ["c.ts", 30],
+  ]);
+  const selectionState = new TokenSelectionState(
+    async (filePath) => ({
+      tokenCount: counts.get(filePath) ?? 0,
+      cacheable: true,
+    })
+  );
+
+  selectionState.replaceSelection(["a.ts", "b.ts"]);
+  await selectionState.waitForIdle();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 30);
+
+  selectionState.replaceSelection(["b.ts", "c.ts"]);
+  await selectionState.waitForIdle();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 50);
+
+  selectionState.clearSelection();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
 });
 
 test("minified context output compacts wrapper structure without mutating file content", () => {

@@ -134,42 +134,21 @@ export class FileNodeFactory {
  * Utility functions for working with FileNodes
  */
 export class FileNodeUtils {
-  /**
-   * Gets all descendant file nodes
-   */
-  static getDescendantFiles(node: FileNode): FileNode[] {
-    const files: FileNode[] = [];
-    const stack: FileNode[] = [node];
-
-    while (stack.length > 0) {
-      const currentNode = stack.pop()!;
-
-      if (currentNode.type === "file") {
-        files.push(currentNode);
-      }
-
-      if (currentNode.children) {
-        for (let index = currentNode.children.length - 1; index >= 0; index--) {
-          stack.push(currentNode.children[index]);
-        }
-      }
-    }
-
-    return files;
-  }
-
-  /**
-   * Gets all checked file nodes
-   */
-  static getCheckedFiles(nodes: FileNode[]): FileNode[] {
-    const checkedFiles: FileNode[] = [];
+  private static collectFileNodes(
+    nodes: FileNode[],
+    predicate?: (node: FileNode) => boolean
+  ): FileNode[] {
+    const fileNodes: FileNode[] = [];
     const stack = [...nodes];
 
     while (stack.length > 0) {
       const node = stack.pop()!;
 
-      if (node.type === "file" && node.isChecked) {
-        checkedFiles.push(node);
+      if (
+        node.type === "file" &&
+        (predicate === undefined || predicate(node))
+      ) {
+        fileNodes.push(node);
       }
 
       if (node.children) {
@@ -179,18 +158,62 @@ export class FileNodeUtils {
       }
     }
 
-    return checkedFiles;
+    return fileNodes;
+  }
+
+  /**
+   * Gets all descendant file nodes
+   */
+  static getDescendantFiles(node: FileNode): FileNode[] {
+    return this.collectFileNodes([node]);
+  }
+
+  /**
+   * Gets all checked file nodes
+   */
+  static getCheckedFiles(nodes: FileNode[]): FileNode[] {
+    return this.collectFileNodes(nodes, (node) => node.isChecked);
+  }
+
+  /**
+   * Gets all file paths in the provided nodes
+   */
+  static getFilePaths(nodes: FileNode[]): string[] {
+    return this.collectFileNodes(nodes).map((node) => node.absolutePath);
+  }
+
+  /**
+   * Gets all checked file paths in the provided nodes
+   */
+  static getCheckedFilePaths(nodes: FileNode[]): string[] {
+    return this.collectFileNodes(nodes, (node) => node.isChecked).map(
+      (node) => node.absolutePath
+    );
+  }
+
+  /**
+   * Gets all unchecked file paths in the provided nodes
+   */
+  static getUncheckedFilePaths(nodes: FileNode[]): string[] {
+    return this.collectFileNodes(nodes, (node) => !node.isChecked).map(
+      (node) => node.absolutePath
+    );
   }
 
   /**
    * Toggles the checked state of a node and its children
    */
   static toggleCheckedState(node: FileNode, checked: boolean): void {
-    node.isChecked = checked;
+    const stack: FileNode[] = [node];
 
-    if (node.children) {
-      for (const child of node.children) {
-        this.toggleCheckedState(child, checked);
+    while (stack.length > 0) {
+      const currentNode = stack.pop()!;
+      currentNode.isChecked = checked;
+
+      if (currentNode.children) {
+        for (let index = currentNode.children.length - 1; index >= 0; index--) {
+          stack.push(currentNode.children[index]);
+        }
       }
     }
   }
@@ -207,7 +230,6 @@ export class FileNodeUtils {
       (child) => child.isChecked
     );
     const allChecked = checkedChildren.length === node.parent.children.length;
-    const someChecked = checkedChildren.length > 0;
 
     // For simplicity, parent is checked if all children are checked
     node.parent.isChecked = allChecked;

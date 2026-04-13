@@ -23,6 +23,7 @@ import {
   countTextTokens,
   countTextTokensLegacy,
 } from "../services/tokenizer";
+import { TokenSelectionState } from "../services/TokenSelectionState";
 import { generateFileStructureTree } from "../utils/fileTree";
 
 type ScaleName = "smoke" | "standard" | "large";
@@ -279,6 +280,14 @@ function createFixtureFileContent(
 }
 
 function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
+  const deltaSubtree = fixtureSet.selectedFiles.slice(
+    0,
+    Math.max(1, Math.floor(fixtureSet.selectedFiles.length / 2))
+  );
+  const deltaSubtreePaths = deltaSubtree.map((fileEntry) => fileEntry.absolutePath);
+  let cachedDeltaSelectionState: TokenSelectionState | undefined;
+  let mixedDeltaSelectionState: TokenSelectionState | undefined;
+
   return [
     {
       name: "file-blocks:selected",
@@ -367,6 +376,36 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
         for (const content of contents) {
           countTextTokens(content);
         }
+      },
+    },
+    {
+      name: "tokens:delta-cached-subtree",
+      description: "Toggle a cached subtree without rescanning the full selection",
+      beforeEachRun: async () => {
+        cachedDeltaSelectionState = await warmDeltaSelectionState(
+          fixtureSet.selectedFiles,
+          deltaSubtree
+        );
+      },
+      run: async () => {
+        cachedDeltaSelectionState!.applySelectionDelta([], deltaSubtreePaths);
+        cachedDeltaSelectionState!.applySelectionDelta(deltaSubtreePaths, []);
+        await cachedDeltaSelectionState!.waitForIdle();
+      },
+    },
+    {
+      name: "tokens:delta-mixed-subtree",
+      description: "Toggle a subtree with mixed cached and uncached file counts",
+      beforeEachRun: async () => {
+        mixedDeltaSelectionState = await warmDeltaSelectionState(
+          fixtureSet.selectedFiles,
+          deltaSubtree.slice(0, Math.max(1, Math.floor(deltaSubtree.length / 2)))
+        );
+      },
+      run: async () => {
+        mixedDeltaSelectionState!.applySelectionDelta([], deltaSubtreePaths);
+        mixedDeltaSelectionState!.applySelectionDelta(deltaSubtreePaths, []);
+        await mixedDeltaSelectionState!.waitForIdle();
       },
     },
     {
@@ -507,6 +546,29 @@ async function loadFileContents(
       fs.promises.readFile(fileEntry.absolutePath, "utf8")
     )
   );
+}
+
+async function warmDeltaSelectionState(
+  fileEntries: ContextFileEntry[],
+  warmEntries: ContextFileEntry[]
+): Promise<TokenSelectionState> {
+  const selectionState = new TokenSelectionState(async (filePath) => {
+    const content = await fs.promises.readFile(filePath, "utf8");
+    return {
+      tokenCount: countTextTokens(content),
+      cacheable: true,
+    };
+  });
+  const warmPaths = warmEntries.map((fileEntry) => fileEntry.absolutePath);
+  const selectionPaths = fileEntries.map((fileEntry) => fileEntry.absolutePath);
+
+  selectionState.applySelectionDelta(warmPaths, []);
+  await selectionState.waitForIdle();
+  selectionState.applySelectionDelta([], warmPaths);
+  selectionState.applySelectionDelta(selectionPaths, []);
+  await selectionState.waitForIdle();
+
+  return selectionState;
 }
 
 function average(values: number[]): number {

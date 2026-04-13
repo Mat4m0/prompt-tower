@@ -1,178 +1,87 @@
 import * as vscode from "vscode";
-import { FileNode, FileNodeUtils } from "../models/FileNode";
 import { TokenUpdatePayload } from "../models/Events";
 import { FileSnapshotService } from "./FileSnapshotService";
 import { countTextTokens } from "./tokenizer";
+import { TokenSelectionState } from "./TokenSelectionState";
+
+interface CachedTokenCount {
+  mtimeMs: number;
+  size: number;
+  tokenCount: number;
+}
 
 /**
- * Service for counting tokens in files with async/cancellation support
+ * Service for counting tokens in selected files using selection deltas.
  */
 export class TokenCountingService {
   private _onDidChangeTokens = new vscode.EventEmitter<TokenUpdatePayload>();
   readonly onDidChangeTokens = this._onDidChangeTokens.event;
 
-  private static readonly TOKEN_COUNT_BATCH_SIZE = 32;
+  private githubIssueTokens = 0;
+  private isCountingGitHubIssues = false;
+  private readonly tokenCache = new Map<string, CachedTokenCount>();
+  private readonly selectionState: TokenSelectionState;
 
-  private totalFileTokens: number = 0;
-  private githubIssueTokens: number = 0;
-  private isCountingTokens: boolean = false;
-  private isCountingGitHubIssues: boolean = false;
-  private currentCalculationVersion = 0;
-  private debounceTimeout: NodeJS.Timeout | null = null;
-  private tokenCache = new Map<
-    string,
-    { mtimeMs: number; size: number; tokenCount: number }
-  >();
+  constructor(private fileSnapshotService: FileSnapshotService) {
+    this.selectionState = new TokenSelectionState(
+      async (filePath) => this.resolveTokenCountForFile(filePath),
+      () => this.notifyTokenUpdate()
+    );
+  }
 
-  constructor(private fileSnapshotService: FileSnapshotService) {}
-
-  /**
-   * Get current token count
-   */
   getCurrentTokenCount(): number {
-    return this.totalFileTokens + this.githubIssueTokens;
+    return this.getFileTokenCount() + this.githubIssueTokens;
   }
-  
-  /**
-   * Get file token count only
-   */
+
   getFileTokenCount(): number {
-    return this.totalFileTokens;
+    return this.selectionState.getSnapshot().selectedTokenTotal;
   }
-  
-  /**
-   * Get GitHub issue token count only
-   */
+
   getGitHubIssueTokenCount(): number {
     return this.githubIssueTokens;
   }
-  
-  /**
-   * Check if currently counting tokens
-   */
+
   getIsCounting(): boolean {
-    return this.isCountingTokens || this.isCountingGitHubIssues;
+    const snapshot = this.selectionState.getSnapshot();
+    return snapshot.isCounting || this.isCountingGitHubIssues;
   }
-  
-  /**
-   * Update GitHub issue token count
-   */
+
   setGitHubIssueTokens(count: number, isCounting: boolean = false): void {
     this.githubIssueTokens = count;
     this.isCountingGitHubIssues = isCounting;
     this.notifyTokenUpdate();
   }
-  
-  /**
-   * Count tokens for an array of file nodes (debounced)
-   */
-  debouncedUpdateTokenCount(fileNodes: FileNode[], delay: number = 300): void {
-    // Clear existing timeout
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
-    }
-    
-    // Invalidate any ongoing calculation
-    this.currentCalculationVersion++;
-    
-    // Set new timeout
-    this.debounceTimeout = setTimeout(() => {
-      this.updateTokenCount(fileNodes);
-    }, delay);
+
+  applySelectionDelta(addedPaths: string[], removedPaths: string[]): void {
+    this.selectionState.applySelectionDelta(addedPaths, removedPaths);
   }
-  
-  /**
-   * Count tokens for an array of file nodes
-   */
-  async updateTokenCount(fileNodes: FileNode[]): Promise<void> {
-    const calculationVersion = this.currentCalculationVersion;
-    const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
 
-    if (checkedFiles.length === 0) {
-      if (calculationVersion !== this.currentCalculationVersion) {
-        return;
-      }
-      
-      this.totalFileTokens = 0;
-      this.isCountingTokens = false;
-      this.notifyTokenUpdate();
-      return;
-    }
-    
-    // Start counting
-    this.isCountingTokens = true;
-    this.notifyTokenUpdate();
-    
-    let runningTokenCount = 0;
-
-    try {
-      this.pruneTokenCache(new Set(checkedFiles.map((fileNode) => fileNode.absolutePath)));
-
-      for (
-        let offset = 0;
-        offset < checkedFiles.length;
-        offset += TokenCountingService.TOKEN_COUNT_BATCH_SIZE
-      ) {
-        if (calculationVersion !== this.currentCalculationVersion) {
-          return;
-        }
-
-        const batch = checkedFiles.slice(
-          offset,
-          offset + TokenCountingService.TOKEN_COUNT_BATCH_SIZE
-        );
-        const tokenCounts = await Promise.all(
-          batch.map((fileNode) => this.getTokenCountForFile(fileNode.absolutePath))
-        );
-
-        runningTokenCount += tokenCounts.reduce((sum, tokenCount) => sum + tokenCount, 0);
-        await new Promise((resolve) => setImmediate(resolve));
-      }
-
-      if (calculationVersion !== this.currentCalculationVersion) {
-        return;
-      }
-      
-      // Update final state
-      this.totalFileTokens = runningTokenCount;
-      this.isCountingTokens = false;
-      
-    } catch (error) {
-      console.error("Unexpected error during token counting process:", error);
-      
-      if (calculationVersion === this.currentCalculationVersion) {
-        this.isCountingTokens = false;
-        // Keep previous count on error
-      }
-    } finally {
-      // Notify UI only if this calculation is still the latest
-      if (calculationVersion === this.currentCalculationVersion) {
-        this.isCountingTokens = false;
-        this.notifyTokenUpdate();
-      }
-    }
+  replaceSelection(filePaths: string[]): void {
+    this.selectionState.replaceSelection(filePaths);
   }
-  
-  /**
-   * Count tokens for a specific set of file paths (synchronous for small sets)
-   */
+
+  clearSelection(): void {
+    this.selectionState.clearSelection();
+  }
+
+  async waitForIdle(): Promise<void> {
+    await this.selectionState.waitForIdle();
+  }
+
   async countTokensForFiles(filePaths: string[]): Promise<number> {
     let totalTokens = 0;
 
     for (const filePath of filePaths) {
       try {
-        totalTokens += await this.getTokenCountForFile(filePath);
+        totalTokens += (await this.resolveTokenCountForFile(filePath)).tokenCount;
       } catch (error) {
         console.warn(`Error counting tokens for file ${filePath}:`, error);
       }
     }
-    
+
     return totalTokens;
   }
-  
-  /**
-   * Count tokens for a text string
-   */
+
   countTokensForText(text: string): number {
     try {
       return countTextTokens(text);
@@ -181,25 +90,24 @@ export class TokenCountingService {
       return 0;
     }
   }
-  
-  /**
-   * Reset token count to zero
-   */
+
   resetTokenCount(): void {
-    this.currentCalculationVersion++;
-    this.totalFileTokens = 0;
+    this.clearSelection();
     this.githubIssueTokens = 0;
-    this.isCountingTokens = false;
     this.isCountingGitHubIssues = false;
     this.notifyTokenUpdate();
   }
 
-  private async getTokenCountForFile(filePath: string): Promise<number> {
+  private async resolveTokenCountForFile(filePath: string): Promise<{
+    tokenCount: number;
+    cacheable: boolean;
+  }> {
     try {
       const snapshot = await this.fileSnapshotService.getSnapshot(filePath);
       if (!snapshot) {
         this.tokenCache.delete(filePath);
-        return 0;
+        this.selectionState.forgetTokenCount(filePath);
+        return { tokenCount: 0, cacheable: false };
       }
 
       const cachedValue = this.tokenCache.get(filePath);
@@ -208,7 +116,8 @@ export class TokenCountingService {
         cachedValue.mtimeMs === snapshot.mtimeMs &&
         cachedValue.size === snapshot.size
       ) {
-        return cachedValue.tokenCount;
+        this.selectionState.rememberTokenCount(filePath, cachedValue.tokenCount);
+        return { tokenCount: cachedValue.tokenCount, cacheable: true };
       }
 
       const tokenCount = countTextTokens(snapshot.content);
@@ -217,25 +126,28 @@ export class TokenCountingService {
         size: snapshot.size,
         tokenCount,
       });
-      return tokenCount;
+      this.selectionState.rememberTokenCount(filePath, tokenCount);
+      return { tokenCount, cacheable: true };
     } catch (error) {
       this.tokenCache.delete(filePath);
+      this.selectionState.forgetTokenCount(filePath);
       this.handleTokenCountingError(error, filePath);
-      return 0;
+      return { tokenCount: 0, cacheable: false };
     }
   }
 
-  private pruneTokenCache(selectedPaths: Set<string>): void {
-    for (const cachedPath of this.tokenCache.keys()) {
-      if (!selectedPaths.has(cachedPath)) {
-        this.tokenCache.delete(cachedPath);
-      }
-    }
+  private notifyTokenUpdate(): void {
+    const snapshot = this.selectionState.getSnapshot();
+    const payload: TokenUpdatePayload = {
+      count: snapshot.selectedTokenTotal + this.githubIssueTokens,
+      isCounting: snapshot.isCounting || this.isCountingGitHubIssues,
+      fileTokens: snapshot.selectedTokenTotal,
+      issueTokens: this.githubIssueTokens,
+    };
+
+    this._onDidChangeTokens.fire(payload);
   }
-  
-  /**
-   * Handle token counting errors for individual files
-   */
+
   private handleTokenCountingError(err: unknown, filePath: string): void {
     if (isErrnoException(err) && err.code === "ENOENT") {
       console.warn(`File not found during token count: ${filePath}`);
@@ -245,31 +157,8 @@ export class TokenCountingService {
       console.error(`Error processing file for token count ${filePath}:`, err);
     }
   }
-  
-  /**
-   * Notify listeners of token count changes
-   */
-  private notifyTokenUpdate(): void {
-    const payload: TokenUpdatePayload = {
-      count: this.totalFileTokens + this.githubIssueTokens,
-      isCounting: this.isCountingTokens || this.isCountingGitHubIssues,
-      fileTokens: this.totalFileTokens,
-      issueTokens: this.githubIssueTokens
-    };
-    
-    this._onDidChangeTokens.fire(payload);
-  }
-  
-  /**
-   * Dispose resources
-   */
+
   dispose(): void {
-    if (this.debounceTimeout) {
-      clearTimeout(this.debounceTimeout);
-      this.debounceTimeout = null;
-    }
-    
-    this.currentCalculationVersion++;
     this.tokenCache.clear();
     this._onDidChangeTokens.dispose();
   }

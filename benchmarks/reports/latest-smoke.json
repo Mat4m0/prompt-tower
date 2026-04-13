@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-04-13T20:31:53.937Z",
+  "generatedAt": "2026-04-13T21:03:51.706Z",
   "scale": "smoke",
   "fixture": {
-    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-p6vCLS",
+    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-6J4NIu",
     "totalFiles": 120,
     "selectedFiles": 40,
     "totalBytes": 860020,
@@ -15,156 +15,195 @@
       "name": "file-blocks:selected",
       "description": "Read and format selected file blocks",
       "iterations": 4,
-      "meanMs": 1.404885499999999,
-      "minMs": 1.2853750000000161,
-      "maxMs": 1.6078339999999969,
-      "p95Ms": 1.6078339999999969
+      "meanMs": 1.5311457499999932,
+      "minMs": 1.398916999999983,
+      "maxMs": 1.631750000000011,
+      "p95Ms": 1.631750000000011
     },
     {
       "name": "tree:selected",
       "description": "Generate project tree for selected files only",
       "iterations": 4,
-      "meanMs": 0.145343749999995,
-      "minMs": 0.11866699999998787,
-      "maxMs": 0.20737499999998477,
-      "p95Ms": 0.20737499999998477
+      "meanMs": 0.16764599999999064,
+      "minMs": 0.13266699999999787,
+      "maxMs": 0.22479199999997945,
+      "p95Ms": 0.22479199999997945
     },
     {
       "name": "tree:full",
       "description": "Generate project tree for the full repository view",
       "iterations": 4,
-      "meanMs": 0.21336500000001024,
-      "minMs": 0.19916700000001697,
-      "maxMs": 0.23354199999999992,
-      "p95Ms": 0.23354199999999992
+      "meanMs": 0.24419800000000436,
+      "minMs": 0.22129200000000537,
+      "maxMs": 0.27362499999998136,
+      "p95Ms": 0.27362499999998136
     },
     {
       "name": "tokens:legacy-full",
       "description": "Read and tokenize the full fixture with encode(...).length",
       "iterations": 4,
-      "meanMs": 24.172041500000006,
-      "minMs": 22.813166999999964,
-      "maxMs": 26.403666000000015,
-      "p95Ms": 26.403666000000015
+      "meanMs": 25.995666750000005,
+      "minMs": 24.88425000000001,
+      "maxMs": 28.30416699999998,
+      "p95Ms": 28.30416699999998
     },
     {
       "name": "tokens:selected",
       "description": "Read and tokenize selected files",
       "iterations": 4,
-      "meanMs": 8.560479,
-      "minMs": 7.993207999999981,
-      "maxMs": 9.023374999999987,
-      "p95Ms": 9.023374999999987
+      "meanMs": 9.543531249999987,
+      "minMs": 8.749332999999979,
+      "maxMs": 9.994332999999983,
+      "p95Ms": 9.994332999999983
     },
     {
       "name": "tokens:full",
       "description": "Read and tokenize the full repository fixture",
       "iterations": 4,
-      "meanMs": 23.313791749999993,
-      "minMs": 22.621667000000002,
-      "maxMs": 23.675749999999994,
-      "p95Ms": 23.675749999999994
+      "meanMs": 24.782509999999988,
+      "minMs": 24.499874999999975,
+      "maxMs": 25.08191599999998,
+      "p95Ms": 25.08191599999998
     },
     {
       "name": "tokens:warm-full",
       "description": "Tokenize the full fixture after warming tokenizer merge cache",
       "iterations": 4,
-      "meanMs": 24.806521000000004,
-      "minMs": 23.964875000000006,
-      "maxMs": 25.68349999999998,
-      "p95Ms": 25.68349999999998
+      "meanMs": 27.11230224999997,
+      "minMs": 25.882041999999956,
+      "maxMs": 28.205749999999966,
+      "p95Ms": 28.205749999999966
+    },
+    {
+      "name": "tokens:delta-cached-subtree",
+      "description": "Toggle a cached subtree without rescanning the full selection",
+      "iterations": 4,
+      "meanMs": 0.013833500000060894,
+      "minMs": 0.01329200000009223,
+      "maxMs": 0.014750000000049113,
+      "p95Ms": 0.014750000000049113
+    },
+    {
+      "name": "tokens:delta-mixed-subtree",
+      "description": "Toggle a subtree with mixed cached and uncached file counts",
+      "iterations": 4,
+      "meanMs": 0.013624999999933607,
+      "minMs": 0.011333999999919797,
+      "maxMs": 0.01712499999996453,
+      "p95Ms": 0.01712499999996453
     },
     {
       "name": "context:selected-tree",
       "description": "End-to-end context generation with selected-files tree",
       "iterations": 4,
-      "meanMs": 2.407031499999988,
-      "minMs": 2.1835419999999885,
-      "maxMs": 2.6355419999999867,
-      "p95Ms": 2.6355419999999867
+      "meanMs": 2.2380937500000186,
+      "minMs": 1.9215000000000373,
+      "maxMs": 3.0949170000000095,
+      "p95Ms": 3.0949170000000095
     },
     {
       "name": "context:full-tree",
       "description": "End-to-end context generation with full repository tree",
       "iterations": 4,
-      "meanMs": 2.330781250000001,
-      "minMs": 2.131167000000005,
-      "maxMs": 2.7105419999999185,
-      "p95Ms": 2.7105419999999185
+      "meanMs": 3.739395500000029,
+      "minMs": 2.8150410000000647,
+      "maxMs": 4.593916000000036,
+      "p95Ms": 4.593916000000036
     },
     {
       "name": "context:minified-full-tree",
       "description": "End-to-end context generation with minified wrapper output",
       "iterations": 4,
-      "meanMs": 2.002146000000039,
-      "minMs": 1.7703750000000582,
-      "maxMs": 2.299624999999992,
-      "p95Ms": 2.299624999999992
+      "meanMs": 2.3101875000000405,
+      "minMs": 2.125250000000051,
+      "maxMs": 2.68100000000004,
+      "p95Ms": 2.68100000000004
     }
   ],
   "comparison": [
     {
       "name": "file-blocks:selected",
-      "meanDeltaMs": 0.17164600000000263,
-      "meanDeltaPercent": 13.91830216271885,
-      "p95DeltaMs": -0.05258299999999849,
-      "p95DeltaPercent": -3.1668550731532283
+      "meanDeltaMs": 0.12746874999999136,
+      "meanDeltaPercent": 9.081059958950043,
+      "p95DeltaMs": 0.09491700000000947,
+      "p95DeltaPercent": 6.176142755914883
     },
     {
       "name": "tree:selected",
-      "meanDeltaMs": 0.07329174999999566,
-      "meanDeltaPercent": 101.72063232109633,
-      "p95DeltaMs": 0.08504199999998718,
-      "p95DeltaPercent": 69.51681067249955
+      "meanDeltaMs": 0.004208499999997173,
+      "meanDeltaPercent": 2.5749904397689276,
+      "p95DeltaMs": -0.011125000000021146,
+      "p95DeltaPercent": -4.7156415180004485
     },
     {
       "name": "tree:full",
-      "meanDeltaMs": 0.07050000000001688,
-      "meanDeltaPercent": 49.34728589928965,
-      "p95DeltaMs": 0.07833300000001486,
-      "p95DeltaPercent": 50.46936711145772
+      "meanDeltaMs": -0.005968749999993861,
+      "meanDeltaPercent": -2.385908598962054,
+      "p95DeltaMs": -0.032042000000018334,
+      "p95DeltaPercent": -10.482649419145137
     },
     {
       "name": "tokens:legacy-full",
-      "meanDeltaMs": 13.117364500000008,
-      "meanDeltaPercent": 118.65895765204183,
-      "p95DeltaMs": 12.633083000000028,
-      "p95DeltaPercent": 91.73963803856408
+      "meanDeltaMs": -0.19097924999999805,
+      "meanDeltaPercent": -0.7293001555067343,
+      "p95DeltaMs": -0.5620000000000402,
+      "p95DeltaPercent": -1.946915917170575
     },
     {
       "name": "tokens:selected",
-      "meanDeltaMs": 5.54677075,
-      "meanDeltaPercent": 184.0513510224488,
-      "p95DeltaMs": 5.694290999999993,
-      "p95DeltaPercent": 171.0467804356995
+      "meanDeltaMs": -0.10473974999999314,
+      "meanDeltaPercent": -1.0855805148921849,
+      "p95DeltaMs": -0.9261670000000208,
+      "p95DeltaPercent": -8.480994459960813
     },
     {
       "name": "tokens:full",
-      "meanDeltaMs": 14.310437749999991,
-      "meanDeltaPercent": 158.94563015071924,
-      "p95DeltaMs": 13.426709000000017,
-      "p95DeltaPercent": 131.0045398393864
+      "meanDeltaMs": -0.12398999999999205,
+      "meanDeltaPercent": -0.49782185373292975,
+      "p95DeltaMs": -1.6750010000000088,
+      "p95DeltaPercent": -6.260067256627547
     },
     {
       "name": "tokens:warm-full",
-      "meanDeltaMs": 10.36152100000001,
-      "meanDeltaPercent": 71.7308480443061,
-      "p95DeltaMs": 10.539082999999948,
-      "p95DeltaPercent": 69.59054944142072
+      "meanDeltaMs": 0.6668854999999496,
+      "meanDeltaPercent": 2.521743205275633,
+      "p95DeltaMs": 0.11904099999992468,
+      "p95DeltaPercent": 0.42383392087668403
+    },
+    {
+      "name": "tokens:delta-cached-subtree",
+      "meanDeltaMs": -9.31164524999997,
+      "meanDeltaPercent": -99.85165909042406,
+      "p95DeltaMs": -9.553207999999927,
+      "p95DeltaPercent": -99.8458396242955
+    },
+    {
+      "name": "tokens:delta-mixed-subtree",
+      "meanDeltaMs": -9.806927250000115,
+      "meanDeltaPercent": -99.8612603481649,
+      "p95DeltaMs": -10.967792000000145,
+      "p95DeltaPercent": -99.84410442063455
     },
     {
       "name": "context:selected-tree",
-      "meanDeltaMs": 0.8309897500000147,
-      "meanDeltaPercent": 52.72637923456208,
-      "p95DeltaMs": 0.539291999999989,
-      "p95DeltaPercent": 25.72651162790648
+      "meanDeltaMs": 0.2098230000000001,
+      "meanDeltaPercent": 10.344920667026242,
+      "p95DeltaMs": 0.8288750000000391,
+      "p95DeltaPercent": 36.57809519859075
     },
     {
       "name": "context:full-tree",
-      "meanDeltaMs": 0.7998850000000175,
-      "meanDeltaPercent": 52.24945844632032,
-      "p95DeltaMs": 1.1201249999999732,
-      "p95DeltaPercent": 70.42964203727774
+      "meanDeltaMs": 1.6305097500000159,
+      "meanDeltaPercent": 77.31617277038387,
+      "p95DeltaMs": 2.174374000000057,
+      "p95DeltaPercent": 89.86717320881705
+    },
+    {
+      "name": "context:minified-full-tree",
+      "meanDeltaMs": 0.5892502500000489,
+      "meanDeltaPercent": 34.24007760887574,
+      "p95DeltaMs": 0.7624170000001413,
+      "p95DeltaPercent": 39.73854662530532
     }
   ]
 }
