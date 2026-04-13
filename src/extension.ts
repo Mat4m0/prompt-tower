@@ -237,7 +237,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
               const options = message.options || {};
               const treeType = options.treeType || "fullFilesAndDirectories";
               const copyToClipboard = options.copyToClipboard ?? true;
-              const removeComments = options.removeComments ?? false;
+              const minify = options.minify ?? false;
 
               const allRootNodes = multiRootProvider.getRootNodes();
               const prefix = multiRootProvider.getPromptPrefix();
@@ -250,6 +250,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                   prefix,
                   suffix,
                   treeType: treeType,
+                  minify,
                 }
               );
 
@@ -294,6 +295,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                 {
                   prefix: multiRootProvider.getPromptPrefix(),
                   suffix: multiRootProvider.getPromptSuffix(),
+                  minify: message.options?.minify ?? false,
                 }
               );
 

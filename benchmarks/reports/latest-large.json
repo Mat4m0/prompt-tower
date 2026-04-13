@@ -1,0 +1,106 @@
+{
+  "generatedAt": "2026-04-13T20:34:53.521Z",
+  "scale": "large",
+  "fixture": {
+    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-bQr147",
+    "totalFiles": 2688,
+    "selectedFiles": 448,
+    "totalBytes": 80910925,
+    "selectedBytes": 13484308,
+    "largestFileBytes": 30467,
+    "deepestPathSegments": 17
+  },
+  "results": [
+    {
+      "name": "file-blocks:selected",
+      "description": "Read and format selected file blocks",
+      "iterations": 3,
+      "meanMs": 29.209944333333322,
+      "minMs": 26.305415999999923,
+      "maxMs": 32.11670800000002,
+      "p95Ms": 32.11670800000002
+    },
+    {
+      "name": "tree:selected",
+      "description": "Generate project tree for selected files only",
+      "iterations": 3,
+      "meanMs": 1.7559306666666241,
+      "minMs": 1.6157920000000559,
+      "maxMs": 2.0025419999999485,
+      "p95Ms": 2.0025419999999485
+    },
+    {
+      "name": "tree:full",
+      "description": "Generate project tree for the full repository view",
+      "iterations": 3,
+      "meanMs": 8.397305999999995,
+      "minMs": 8.162833999999975,
+      "maxMs": 8.554417000000058,
+      "p95Ms": 8.554417000000058
+    },
+    {
+      "name": "tokens:legacy-full",
+      "description": "Read and tokenize the full fixture with encode(...).length",
+      "iterations": 3,
+      "meanMs": 2139.3621246666667,
+      "minMs": 2127.5508329999993,
+      "maxMs": 2152.484625,
+      "p95Ms": 2152.484625
+    },
+    {
+      "name": "tokens:selected",
+      "description": "Read and tokenize selected files",
+      "iterations": 3,
+      "meanMs": 339.15325033333346,
+      "minMs": 338.8742920000004,
+      "maxMs": 339.3884170000001,
+      "p95Ms": 339.3884170000001
+    },
+    {
+      "name": "tokens:full",
+      "description": "Read and tokenize the full repository fixture",
+      "iterations": 3,
+      "meanMs": 2035.356264,
+      "minMs": 2026.6712499999994,
+      "maxMs": 2040.6225840000006,
+      "p95Ms": 2040.6225840000006
+    },
+    {
+      "name": "tokens:warm-full",
+      "description": "Tokenize the full fixture after warming tokenizer merge cache",
+      "iterations": 3,
+      "meanMs": 2036.6096943333334,
+      "minMs": 2013.5378749999982,
+      "maxMs": 2060.1229170000006,
+      "p95Ms": 2060.1229170000006
+    },
+    {
+      "name": "context:selected-tree",
+      "description": "End-to-end context generation with selected-files tree",
+      "iterations": 3,
+      "meanMs": 51.96259766666966,
+      "minMs": 49.163875000005646,
+      "maxMs": 56.64033400000335,
+      "p95Ms": 56.64033400000335
+    },
+    {
+      "name": "context:full-tree",
+      "description": "End-to-end context generation with full repository tree",
+      "iterations": 3,
+      "meanMs": 57.12615266666884,
+      "minMs": 56.16391700000531,
+      "maxMs": 57.745208000000275,
+      "p95Ms": 57.745208000000275
+    },
+    {
+      "name": "context:minified-full-tree",
+      "description": "End-to-end context generation with minified wrapper output",
+      "iterations": 3,
+      "meanMs": 43.77363899999909,
+      "minMs": 43.61499999999796,
+      "maxMs": 43.96087499999703,
+      "p95Ms": 43.96087499999703
+    }
+  ],
+  "comparison": []
+}

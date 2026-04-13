@@ -23,6 +23,10 @@ export interface BenchmarkFixtureSummary {
   rootDir: string;
   totalFiles: number;
   selectedFiles: number;
+  totalBytes: number;
+  selectedBytes: number;
+  largestFileBytes: number;
+  deepestPathSegments: number;
 }
 
 export interface BenchmarkReport<ScaleName extends string = string> {
@@ -99,6 +103,7 @@ export function renderMarkdownReport<ScaleName extends string>(
     "",
     `Generated: ${report.generatedAt}`,
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`,
+    `Fixture bytes: ${report.fixture.totalBytes} total, ${report.fixture.selectedBytes} selected, largest file ${report.fixture.largestFileBytes}, deepest path ${report.fixture.deepestPathSegments} segments`,
     "",
     "## Results",
     "",

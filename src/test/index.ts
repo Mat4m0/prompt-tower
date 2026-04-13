@@ -10,6 +10,10 @@ import {
   buildGitHubPullRequestTokenContent,
 } from "../services/githubContextFormatter";
 import {
+  applyContextWrapperTemplate,
+  formatContextFileContent,
+} from "../services/contextGenerationCore";
+import {
   readLatestReport,
   renderMarkdownReport,
   writeLatestReportFiles,
@@ -94,6 +98,48 @@ test("GitHub context token fixtures remain non-empty and stable in shape", () =>
   assert.ok(countTextTokens(prContent) > 0);
 });
 
+test("minified context output compacts wrapper structure without mutating file content", () => {
+  const fileEntry = {
+    absolutePath: "/tmp/example.ts",
+    relativePath: "src/example.ts",
+  };
+  const fileContent = "function demo() {\n\n  return 1;\n}\n";
+  const minifiedBlock = formatContextFileContent(
+    fileEntry,
+    fileContent,
+    {
+      blockTemplate:
+        '<file name="{fileNameWithExtension}" path="{rawFilePath}">\n{fileContent}\n</file>',
+      blockTrimLines: true,
+    },
+    { minify: true }
+  );
+  const wrapped = applyContextWrapperTemplate({
+    config: {
+      blockTemplate:
+        '<file name="{fileNameWithExtension}" path="{rawFilePath}">\n{fileContent}\n</file>',
+      blockSeparator: "\n",
+      blockTrimLines: true,
+      wrapperTemplate:
+        "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
+      projectTree: {
+        enabled: true,
+        template: "<project_tree>\n{projectTree}\n</project_tree>\n",
+      },
+    },
+    fileBlocks: minifiedBlock,
+    githubIssues: "",
+    githubPRs: "",
+    projectTree: "src/\n  example.ts",
+    fileCount: 1,
+    minify: true,
+  });
+
+  assert.match(minifiedBlock, /^<file path="\/src\/example\.ts">/);
+  assert.match(minifiedBlock, /return 1;/);
+  assert.equal(wrapped, "<context><project_tree>src/\n  example.ts</project_tree><project_files><file path=\"/src/example.ts\">function demo() {\n\n  return 1;\n}</file></project_files></context>");
+});
+
 test("benchmark reporting writes latest files only", async () => {
   const reportsRoot = await fs.promises.mkdtemp(
     path.join(os.tmpdir(), "prompt-tower-report-test-")
@@ -107,6 +153,10 @@ test("benchmark reporting writes latest files only", async () => {
         rootDir: "/tmp/fixture",
         totalFiles: 10,
         selectedFiles: 3,
+        totalBytes: 1000,
+        selectedBytes: 300,
+        largestFileBytes: 200,
+        deepestPathSegments: 5,
       },
       results: [
         {
@@ -130,6 +180,7 @@ test("benchmark reporting writes latest files only", async () => {
     assert.ok(await fileExists(paths.latestMd));
     assert.equal(latestReport?.scale, "smoke");
     assert.match(markdown, /Prompt Tower benchmark report/);
+    assert.match(markdown, /Fixture bytes:/);
     assert.equal(await fileExists(path.join(reportsRoot, "history")), false);
   } finally {
     await fs.promises.rm(reportsRoot, { recursive: true, force: true });

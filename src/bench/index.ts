@@ -38,6 +38,10 @@ interface FixtureSet {
   rootDir: string;
   allFiles: ContextFileEntry[];
   selectedFiles: ContextFileEntry[];
+  totalBytes: number;
+  selectedBytes: number;
+  largestFileBytes: number;
+  deepestPathSegments: number;
 }
 
 interface TreeFileEntry {
@@ -65,20 +69,37 @@ const SCALE_CONFIG: Record<
     filesPerDirectory: number;
     selectedEvery: number;
     iterations: number;
+    nestingDepth: number;
+    blocksPerFile: number;
+    statementsPerBlock: number;
   }
 > = {
-  smoke: { directories: 8, filesPerDirectory: 15, selectedEvery: 3, iterations: 4 },
+  smoke: {
+    directories: 8,
+    filesPerDirectory: 15,
+    selectedEvery: 3,
+    iterations: 4,
+    nestingDepth: 2,
+    blocksPerFile: 18,
+    statementsPerBlock: 3,
+  },
   standard: {
-    directories: 24,
-    filesPerDirectory: 35,
+    directories: 32,
+    filesPerDirectory: 48,
     selectedEvery: 4,
     iterations: 6,
+    nestingDepth: 4,
+    blocksPerFile: 36,
+    statementsPerBlock: 5,
   },
   large: {
-    directories: 40,
-    filesPerDirectory: 50,
-    selectedEvery: 5,
-    iterations: 8,
+    directories: 48,
+    filesPerDirectory: 56,
+    selectedEvery: 6,
+    iterations: 3,
+    nestingDepth: 5,
+    blocksPerFile: 52,
+    statementsPerBlock: 6,
   },
 };
 
@@ -102,6 +123,10 @@ async function main(): Promise<void> {
       rootDir: fixtureSet.rootDir,
       totalFiles: fixtureSet.allFiles.length,
       selectedFiles: fixtureSet.selectedFiles.length,
+      totalBytes: fixtureSet.totalBytes,
+      selectedBytes: fixtureSet.selectedBytes,
+      largestFileBytes: fixtureSet.largestFileBytes,
+      deepestPathSegments: fixtureSet.deepestPathSegments,
     };
     const reportsRoot = path.join(process.cwd(), "benchmarks", "reports");
     const previousReport = await readLatestReport(reportsRoot, scale);
@@ -158,10 +183,16 @@ async function createFixtureSet(scale: ScaleName): Promise<FixtureSet> {
   );
   const allFiles: ContextFileEntry[] = [];
   const selectedFiles: ContextFileEntry[] = [];
+  let totalBytes = 0;
+  let selectedBytes = 0;
+  let largestFileBytes = 0;
+  let deepestPathSegments = 0;
 
   for (let directoryIndex = 0; directoryIndex < config.directories; directoryIndex++) {
-    const groupDir = path.join(rootDir, `group-${directoryIndex.toString().padStart(2, "0")}`);
-    const nestedDir = path.join(groupDir, `feature-${directoryIndex % 6}`);
+    const nestedDir = path.join(
+      rootDir,
+      ...createNestedDirectorySegments(directoryIndex, config.nestingDepth)
+    );
     await fs.promises.mkdir(nestedDir, { recursive: true });
 
     for (let fileIndex = 0; fileIndex < config.filesPerDirectory; fileIndex++) {
@@ -170,38 +201,78 @@ async function createFixtureSet(scale: ScaleName): Promise<FixtureSet> {
         .padStart(3, "0")}.ts`;
       const absolutePath = path.join(nestedDir, fileName);
       const relativePath = path.relative(rootDir, absolutePath);
+      deepestPathSegments = Math.max(
+        deepestPathSegments,
+        relativePath.split(path.sep).length
+      );
+      const content = createFixtureFileContent(directoryIndex, fileIndex, config);
+      const contentBytes = Buffer.byteLength(content, "utf8");
       await fs.promises.writeFile(
         absolutePath,
-        createFixtureFileContent(directoryIndex, fileIndex),
+        content,
         "utf8"
       );
+      totalBytes += contentBytes;
+      largestFileBytes = Math.max(largestFileBytes, contentBytes);
 
       const entry = { absolutePath, relativePath };
       allFiles.push(entry);
 
       if ((directoryIndex * config.filesPerDirectory + fileIndex) % config.selectedEvery === 0) {
         selectedFiles.push(entry);
+        selectedBytes += contentBytes;
       }
     }
   }
 
-  return { rootDir, allFiles, selectedFiles };
+  return {
+    rootDir,
+    allFiles,
+    selectedFiles,
+    totalBytes,
+    selectedBytes,
+    largestFileBytes,
+    deepestPathSegments,
+  };
 }
 
-function createFixtureFileContent(directoryIndex: number, fileIndex: number): string {
-  const repeatedSection = Array.from({ length: 18 }, (_, blockIndex) =>
-    [
+function createFixtureFileContent(
+  directoryIndex: number,
+  fileIndex: number,
+  config: (typeof SCALE_CONFIG)[ScaleName]
+): string {
+  const repeatedSection = Array.from({ length: config.blocksPerFile }, (_, blockIndex) => {
+    const statements = Array.from(
+      { length: config.statementsPerBlock },
+      (_, statementIndex) =>
+        `  const value_${statementIndex} = "${directoryIndex}:${fileIndex}:${blockIndex}:${statementIndex}";`
+    ).join("\n");
+
+    return [
       `export function fixture_${directoryIndex}_${fileIndex}_${blockIndex}(input: string): string {`,
       `  const label = "group-${directoryIndex}-file-${fileIndex}-block-${blockIndex}";`,
-      "  return `${label}:${input}`;",
+      statements,
+      `  return [label, input, ${Array.from(
+        { length: config.statementsPerBlock },
+        (_, statementIndex) => `value_${statementIndex}`
+      ).join(", ")}].join(":");`,
       "}",
       "",
-    ].join("\n")
-  ).join("\n");
+      `export const fixture_matrix_${directoryIndex}_${fileIndex}_${blockIndex} = [`,
+      ...Array.from({ length: Math.max(2, config.statementsPerBlock / 2) }, (_, rowIndex) =>
+        `  { id: "${directoryIndex}-${fileIndex}-${blockIndex}-${rowIndex}", score: ${
+          directoryIndex + fileIndex + blockIndex + rowIndex
+        }, enabled: ${rowIndex % 2 === 0 ? "true" : "false"} },`
+      ),
+      "];",
+      "",
+    ].join("\n");
+  }).join("\n");
 
   return [
     `// fixture ${directoryIndex}/${fileIndex}`,
     `export const meta = { directory: ${directoryIndex}, file: ${fileIndex} };`,
+    `export const fixturePath = "group-${directoryIndex}/sample-${fileIndex}";`,
     "",
     repeatedSection,
   ].join("\n");
@@ -344,7 +415,48 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
         });
       },
     },
+    {
+      name: "context:minified-full-tree",
+      description: "End-to-end context generation with minified wrapper output",
+      run: async () => {
+        const fileBlocks = await Promise.all(
+          fixtureSet.selectedFiles.map((fileEntry) =>
+            formatContextFileBlock(fileEntry, DEFAULT_CONFIG, { minify: true })
+          )
+        );
+        const projectTree = await generateFileStructureTree(
+          fixtureSet.rootDir,
+          toTreeEntries(fixtureSet.allFiles)
+        );
+        applyContextWrapperTemplate({
+          config: DEFAULT_CONFIG,
+          fileBlocks: fileBlocks.join(""),
+          githubIssues: "",
+          githubPRs: "",
+          projectTree,
+          fileCount: fixtureSet.selectedFiles.length,
+          minify: true,
+        });
+      },
+    },
   ];
+}
+
+function createNestedDirectorySegments(
+  directoryIndex: number,
+  nestingDepth: number
+): string[] {
+  const segments = ["group-" + directoryIndex.toString().padStart(2, "0")];
+
+  for (let depthIndex = 0; depthIndex < nestingDepth; depthIndex++) {
+    segments.push(
+      `layer-${depthIndex.toString().padStart(2, "0")}`,
+      `bucket-${((directoryIndex + depthIndex) * 7) % 19}`,
+      `feature-${(directoryIndex * (depthIndex + 3)) % 23}`
+    );
+  }
+
+  return segments;
 }
 
 function toTreeEntries(fileEntries: ContextFileEntry[]): TreeFileEntry[] {
@@ -411,6 +523,9 @@ function printResults(
   console.log(`Prompt Tower benchmark suite (${report.scale})`);
   console.log(
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`
+  );
+  console.log(
+    `Bytes: ${report.fixture.totalBytes} total, ${report.fixture.selectedBytes} selected, largest file ${report.fixture.largestFileBytes}, deepest path ${report.fixture.deepestPathSegments} segments`
   );
   console.log("");
   console.log("name                 mean ms   p95 ms   min ms   max ms   iterations");

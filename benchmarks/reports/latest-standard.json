@@ -1,157 +1,170 @@
 {
-  "generatedAt": "2026-04-13T20:20:56.928Z",
+  "generatedAt": "2026-04-13T20:32:15.414Z",
   "scale": "standard",
   "fixture": {
-    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-B6OkOa",
-    "totalFiles": 840,
-    "selectedFiles": 210
+    "rootDir": "/var/folders/cw/90shxw3964q2rcs_j_nvt_cc0000gn/T/prompt-tower-bench-F7CSPN",
+    "totalFiles": 1536,
+    "selectedFiles": 384,
+    "totalBytes": 26939127,
+    "selectedBytes": 6728844,
+    "largestFileBytes": 17756,
+    "deepestPathSegments": 14
   },
   "results": [
     {
       "name": "file-blocks:selected",
       "description": "Read and format selected file blocks",
       "iterations": 6,
-      "meanMs": 6.283722166666688,
-      "minMs": 5.4634170000000495,
-      "maxMs": 8.530417,
-      "p95Ms": 8.530417
+      "meanMs": 17.000284666666705,
+      "minMs": 15.524584000000004,
+      "maxMs": 18.202540999999997,
+      "p95Ms": 18.202540999999997
     },
     {
       "name": "tree:selected",
       "description": "Generate project tree for selected files only",
       "iterations": 6,
-      "meanMs": 0.28086083333334955,
-      "minMs": 0.18716599999999062,
-      "maxMs": 0.4397910000000138,
-      "p95Ms": 0.4397910000000138
+      "meanMs": 1.6314996666666843,
+      "minMs": 1.4428330000000642,
+      "maxMs": 1.8716249999999945,
+      "p95Ms": 1.8716249999999945
     },
     {
       "name": "tree:full",
       "description": "Generate project tree for the full repository view",
       "iterations": 6,
-      "meanMs": 0.6558055000000044,
-      "minMs": 0.608333000000016,
-      "maxMs": 0.71550000000002,
-      "p95Ms": 0.71550000000002
+      "meanMs": 5.828507166666687,
+      "minMs": 4.27800000000002,
+      "maxMs": 9.774875000000065,
+      "p95Ms": 9.774875000000065
     },
     {
       "name": "tokens:legacy-full",
       "description": "Read and tokenize the full fixture with encode(...).length",
       "iterations": 6,
-      "meanMs": 57.94861116666666,
-      "minMs": 55.086791999999946,
-      "maxMs": 67.06583300000011,
-      "p95Ms": 67.06583300000011
+      "meanMs": 725.5877916666665,
+      "minMs": 706.7075409999998,
+      "maxMs": 766.249292,
+      "p95Ms": 766.249292
     },
     {
       "name": "tokens:selected",
       "description": "Read and tokenize selected files",
       "iterations": 6,
-      "meanMs": 13.861166500000005,
-      "minMs": 13.312833000000069,
-      "maxMs": 14.406124999999975,
-      "p95Ms": 14.406124999999975
+      "meanMs": 186.63491666666673,
+      "minMs": 173.93179099999998,
+      "maxMs": 220.61291700000038,
+      "p95Ms": 220.61291700000038
     },
     {
       "name": "tokens:full",
       "description": "Read and tokenize the full repository fixture",
       "iterations": 6,
-      "meanMs": 58.73475700000002,
-      "minMs": 56.144833999999946,
-      "maxMs": 62.18058300000007,
-      "p95Ms": 62.18058300000007
+      "meanMs": 698.2050208333334,
+      "minMs": 666.1686250000002,
+      "maxMs": 727.4102919999987,
+      "p95Ms": 727.4102919999987
     },
     {
       "name": "tokens:warm-full",
       "description": "Tokenize the full fixture after warming tokenizer merge cache",
       "iterations": 6,
-      "meanMs": 54.22155516666677,
-      "minMs": 52.581333000000086,
-      "maxMs": 56.39866600000005,
-      "p95Ms": 56.39866600000005
+      "meanMs": 688.446284666666,
+      "minMs": 668.9825420000016,
+      "maxMs": 715.2012079999986,
+      "p95Ms": 715.2012079999986
     },
     {
       "name": "context:selected-tree",
       "description": "End-to-end context generation with selected-files tree",
       "iterations": 6,
-      "meanMs": 6.3699098333333195,
-      "minMs": 6.212292000000161,
-      "maxMs": 6.540290999999797,
-      "p95Ms": 6.540290999999797
+      "meanMs": 28.613500000000084,
+      "minMs": 27.054041999999754,
+      "maxMs": 30.57341699999961,
+      "p95Ms": 30.57341699999961
     },
     {
       "name": "context:full-tree",
       "description": "End-to-end context generation with full repository tree",
       "iterations": 6,
-      "meanMs": 7.1876251666667486,
-      "minMs": 6.84512500000028,
-      "maxMs": 7.645958999999948,
-      "p95Ms": 7.645958999999948
+      "meanMs": 31.478826666666162,
+      "minMs": 30.051959000000352,
+      "maxMs": 33.73041700000249,
+      "p95Ms": 33.73041700000249
+    },
+    {
+      "name": "context:minified-full-tree",
+      "description": "End-to-end context generation with minified wrapper output",
+      "iterations": 6,
+      "meanMs": 23.990090500000104,
+      "minMs": 22.800500000001193,
+      "maxMs": 25.35920900000201,
+      "p95Ms": 25.35920900000201
     }
   ],
   "comparison": [
     {
       "name": "file-blocks:selected",
-      "meanDeltaMs": -2.5098541666666465,
-      "meanDeltaPercent": -28.541904584971622,
-      "p95DeltaMs": -3.766707999999994,
-      "p95DeltaPercent": -30.630801915081747
+      "meanDeltaMs": 10.716562500000016,
+      "meanDeltaPercent": 170.5448174785361,
+      "p95DeltaMs": 9.672123999999997,
+      "p95DeltaPercent": 113.38395297674188
     },
     {
       "name": "tree:selected",
-      "meanDeltaMs": -0.0054309999999967995,
-      "meanDeltaPercent": -1.8970153415704207,
-      "p95DeltaMs": -0.00762600000001612,
-      "p95DeltaPercent": -1.7044502108805901
+      "meanDeltaMs": 1.3506388333333348,
+      "meanDeltaPercent": 480.8925535481416,
+      "p95DeltaMs": 1.4318339999999807,
+      "p95DeltaPercent": 325.57146462750165
     },
     {
       "name": "tree:full",
-      "meanDeltaMs": -0.0947639999999883,
-      "meanDeltaPercent": -12.62561295123093,
-      "p95DeltaMs": -0.21695899999997437,
-      "p95DeltaPercent": -23.267403714262578
+      "meanDeltaMs": 5.172701666666683,
+      "meanDeltaPercent": 788.7554567118831,
+      "p95DeltaMs": 9.059375000000045,
+      "p95DeltaPercent": 1266.1600279524516
     },
     {
       "name": "tokens:legacy-full",
-      "meanDeltaMs": -8.497618166666705,
-      "meanDeltaPercent": -12.788713899832683,
-      "p95DeltaMs": -6.9546669999998585,
-      "p95DeltaPercent": -9.395595814672774
+      "meanDeltaMs": 667.6391804999998,
+      "meanDeltaPercent": 1152.1228327281137,
+      "p95DeltaMs": 699.1834589999999,
+      "p95DeltaPercent": 1042.5330272122299
     },
     {
       "name": "tokens:selected",
-      "meanDeltaMs": -4.701618333333348,
-      "meanDeltaPercent": -25.328194963993827,
-      "p95DeltaMs": -8.48741700000005,
-      "p95DeltaPercent": -37.073411357666025
+      "meanDeltaMs": 172.77375016666673,
+      "meanDeltaPercent": 1246.458948218151,
+      "p95DeltaMs": 206.2067920000004,
+      "p95DeltaPercent": 1431.382776423228
     },
     {
       "name": "tokens:full",
-      "meanDeltaMs": -2.692722166666684,
-      "meanDeltaPercent": -4.383579146005189,
-      "p95DeltaMs": -2.1169170000000577,
-      "p95DeltaPercent": -3.2923783972939122
+      "meanDeltaMs": 639.4702638333333,
+      "meanDeltaPercent": 1088.7425035798362,
+      "p95DeltaMs": 665.2297089999986,
+      "p95DeltaPercent": 1069.8351107450983
     },
     {
       "name": "tokens:warm-full",
-      "meanDeltaMs": -4.883229666666537,
-      "meanDeltaPercent": -8.261987046288246,
-      "p95DeltaMs": -10.2729589999999,
-      "p95DeltaPercent": -15.408292508244562
+      "meanDeltaMs": 634.2247294999992,
+      "meanDeltaPercent": 1169.6911450630892,
+      "p95DeltaMs": 658.8025419999985,
+      "p95DeltaPercent": 1168.117242347537
     },
     {
       "name": "context:selected-tree",
-      "meanDeltaMs": -0.2520068333334011,
-      "meanDeltaPercent": -3.805647911607653,
-      "p95DeltaMs": -0.8390010000002803,
-      "p95DeltaPercent": -11.36966798441194
+      "meanDeltaMs": 22.243590166666763,
+      "meanDeltaPercent": 349.1978811107736,
+      "p95DeltaMs": 24.03312599999981,
+      "p95DeltaPercent": 367.4626404238062
     },
     {
       "name": "context:full-tree",
-      "meanDeltaMs": -0.20289583333328665,
-      "meanDeltaPercent": -2.745352233398507,
-      "p95DeltaMs": -0.9740000000001601,
-      "p95DeltaPercent": -11.29935768836195
+      "meanDeltaMs": 24.291201499999413,
+      "meanDeltaPercent": 337.95865723009626,
+      "p95DeltaMs": 26.08445800000254,
+      "p95DeltaPercent": 341.15351651771505
     }
   ]
 }

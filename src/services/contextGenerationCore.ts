@@ -24,6 +24,7 @@ export interface WrapperTemplateOptions {
   githubPRs: string;
   projectTree: string;
   fileCount: number;
+  minify?: boolean;
   outputFileName?: string;
   timestamp?: string;
 }
@@ -33,11 +34,14 @@ export async function formatContextFileBlock(
   config: Pick<
     ContextCoreConfig,
     "blockTemplate" | "blockTrimLines"
-  >
+  >,
+  options?: {
+    minify?: boolean;
+  }
 ): Promise<string> {
   try {
     const fileContent = await fs.promises.readFile(fileEntry.absolutePath, "utf8");
-    return formatContextFileContent(fileEntry, fileContent, config);
+    return formatContextFileContent(fileEntry, fileContent, config, options);
   } catch (error) {
     console.error(
       `Error generating block for file ${fileEntry.absolutePath}:`,
@@ -53,7 +57,10 @@ export function formatContextFileContent(
   config: Pick<
     ContextCoreConfig,
     "blockTemplate" | "blockTrimLines"
-  >
+  >,
+  options?: {
+    minify?: boolean;
+  }
 ): string {
   const fileNameWithExtension = path.basename(fileEntry.absolutePath);
   const fileExtension = path.extname(fileEntry.absolutePath);
@@ -76,6 +83,10 @@ export function formatContextFileContent(
     trimmedFileContent = trimmedFileContent.replace(/(\r?\n\s*)+$/, "");
   }
 
+  if (options?.minify) {
+    return `<file path="${sourcePath}">${trimmedFileContent}</file>`;
+  }
+
   return formattedBlock.replace(/{fileContent}/g, trimmedFileContent);
 }
 
@@ -89,9 +100,20 @@ export function applyContextWrapperTemplate(
     githubPRs,
     projectTree,
     fileCount,
+    minify = false,
     outputFileName = "clipboard-content",
     timestamp = new Date().toISOString(),
   } = options;
+
+  if (minify) {
+    return applyMinifiedContextWrapper({
+      fileBlocks,
+      githubIssues,
+      githubPRs,
+      projectTree,
+      includeProjectTree: config.projectTree.enabled,
+    });
+  }
 
   if (!config.wrapperTemplate) {
     const parts = [githubIssues, githubPRs, fileBlocks].filter((part) => part);
@@ -112,4 +134,39 @@ export function applyContextWrapperTemplate(
     .replace(/{timestamp}/g, timestamp)
     .replace(/{fileCount}/g, String(fileCount))
     .replace(/{outputFileName}/g, outputFileName);
+}
+
+function applyMinifiedContextWrapper(options: {
+  fileBlocks: string;
+  githubIssues: string;
+  githubPRs: string;
+  projectTree: string;
+  includeProjectTree: boolean;
+}): string {
+  const sections = [
+    wrapMinifiedSection("github_issues", options.githubIssues),
+    wrapMinifiedSection("github_prs", options.githubPRs),
+    options.includeProjectTree
+      ? wrapMinifiedSection("project_tree", options.projectTree)
+      : "",
+    wrapMinifiedSection("project_files", options.fileBlocks),
+  ].filter((section) => section.length > 0);
+
+  if (sections.length === 0) {
+    return "";
+  }
+
+  return `<context>${sections.join("")}</context>`;
+}
+
+function wrapMinifiedSection(tagName: string, content: string): string {
+  if (!content) {
+    return "";
+  }
+
+  return `<${tagName}>${trimGeneratedSection(content)}</${tagName}>`;
+}
+
+function trimGeneratedSection(content: string): string {
+  return content.trim().replace(/\n{3,}/g, "\n\n");
 }

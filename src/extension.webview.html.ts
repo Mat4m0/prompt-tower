@@ -99,6 +99,11 @@ export function getWebviewHtml(params: WebviewParams): string {
                         <option value="fullDirectoriesOnly">Directories only</option>
                       </select>
                     </div>
+                    <label class="checkbox-container">
+                      <input type="checkbox" id="minifyCheckbox">
+                      <span class="checkmark"></span>
+                      Minify output
+                    </label>
                     <label class="checkbox-container disabled">
                       <input type="checkbox" id="removeCommentsCheckbox" disabled>
                       <span class="checkmark"></span>
@@ -330,6 +335,7 @@ export function getWebviewHtml(params: WebviewParams): string {
                     // Create Context controls
                     const copyToClipboardCheckbox = document.getElementById('copyToClipboardCheckbox');
                     const treeTypeSelect = document.getElementById('treeTypeSelect');
+                    const minifyCheckbox = document.getElementById('minifyCheckbox');
                     const removeCommentsCheckbox = document.getElementById('removeCommentsCheckbox');
                     
                     // Push Prompt controls
@@ -635,6 +641,7 @@ export function getWebviewHtml(params: WebviewParams): string {
                             options: {
                                 treeType: treeTypeSelect?.value || 'fullFilesAndDirectories',
                                 copyToClipboard: copyToClipboardCheckbox?.checked ?? true,
+                                minify: minifyCheckbox?.checked ?? false,
                                 removeComments: removeCommentsCheckbox?.checked ?? false
                             }
                         });

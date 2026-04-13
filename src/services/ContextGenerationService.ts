@@ -106,6 +106,7 @@ export class ContextGenerationService {
       suffix?: string;
       primaryWorkspaceRoot?: string;
       treeType?: string;
+      minify?: boolean;
     }
   ): Promise<ContextGenerationResult> {
     const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
@@ -117,7 +118,11 @@ export class ContextGenerationService {
       const githubPRsPromise = this.generateGitHubPRsBlocks();
       const fileBlocksPromise =
         fileCount > 0
-          ? Promise.all(checkedFiles.map((node) => this.generateFileBlock(node)))
+          ? Promise.all(
+              checkedFiles.map((node) =>
+                this.generateFileBlock(node, options?.minify ?? false)
+              )
+            )
           : Promise.resolve([]);
 
       const [githubIssuesBlocks, githubPRsBlocks, fileBlocks] = await Promise.all([
@@ -168,7 +173,8 @@ export class ContextGenerationService {
             joinedGithubIssues,
             joinedGithubPRs,
             fileTree,
-            fileCount
+            fileCount,
+            options?.minify ?? false
           ),
           options
         ),
@@ -181,7 +187,10 @@ export class ContextGenerationService {
     }
   }
 
-  private async generateFileBlock(fileNode: FileNode): Promise<string> {
+  private async generateFileBlock(
+    fileNode: FileNode,
+    minify: boolean
+  ): Promise<string> {
     try {
       const snapshot = await this.fileSnapshotService.getSnapshot(
         fileNode.absolutePath
@@ -191,7 +200,7 @@ export class ContextGenerationService {
         return `<!-- Error reading file: ${fileNode.relativePath} -->`;
       }
 
-      const configSignature = this.getFileBlockConfigSignature();
+      const configSignature = `${this.getFileBlockConfigSignature()}:${minify ? "min" : "full"}`;
       const cachedBlock = this.fileBlockCache.get(fileNode.absolutePath);
       if (
         cachedBlock &&
@@ -208,7 +217,8 @@ export class ContextGenerationService {
           relativePath: fileNode.relativePath,
         },
         snapshot.content,
-        this.config
+        this.config,
+        { minify }
       );
       this.fileBlockCache.set(fileNode.absolutePath, {
         mtimeMs: snapshot.mtimeMs,
@@ -303,7 +313,8 @@ export class ContextGenerationService {
     githubIssues: string,
     githubPRs: string,
     projectTree: string,
-    fileCount: number
+    fileCount: number,
+    minify: boolean
   ): string {
     return applyContextWrapperTemplate({
       config: this.config,
@@ -312,6 +323,7 @@ export class ContextGenerationService {
       githubPRs,
       projectTree,
       fileCount,
+      minify,
     });
   }
 
@@ -321,6 +333,7 @@ export class ContextGenerationService {
       prefix?: string;
       suffix?: string;
       primaryWorkspaceRoot?: string;
+      minify?: boolean;
     }
   ): Promise<ContextGenerationResult> {
     try {
