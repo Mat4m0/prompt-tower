@@ -58,7 +58,7 @@ const DEFAULT_CONFIG: ContextCoreConfig = {
   wrapperTemplate:
     "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
   projectTree: {
-    enabled: true,
+    type: "fullFilesAndDirectories",
     template: "<project_tree>\n{projectTree}\n</project_tree>\n",
   },
 };
@@ -427,6 +427,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
           githubIssues: "",
           githubPRs: "",
           projectTree,
+          includeProjectTree: true,
           fileCount: fixtureSet.selectedFiles.length,
         });
       },
@@ -450,6 +451,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
           githubIssues: "",
           githubPRs: "",
           projectTree,
+          includeProjectTree: true,
           fileCount: fixtureSet.selectedFiles.length,
         });
       },
@@ -473,6 +475,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
           githubIssues: "",
           githubPRs: "",
           projectTree,
+          includeProjectTree: true,
           fileCount: fixtureSet.selectedFiles.length,
           minify: true,
         });

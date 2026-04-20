@@ -203,7 +203,7 @@ test("minified context output compacts wrapper structure without mutating file c
       wrapperTemplate:
         "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
       projectTree: {
-        enabled: true,
+        type: "fullFilesAndDirectories",
         template: "<project_tree>\n{projectTree}\n</project_tree>\n",
       },
     },
@@ -211,6 +211,7 @@ test("minified context output compacts wrapper structure without mutating file c
     githubIssues: "",
     githubPRs: "",
     projectTree: "src/\n  example.ts",
+    includeProjectTree: true,
     fileCount: 1,
     minify: true,
   });
@@ -218,6 +219,35 @@ test("minified context output compacts wrapper structure without mutating file c
   assert.match(minifiedBlock, /^<file path="\/src\/example\.ts">/);
   assert.match(minifiedBlock, /return 1;/);
   assert.equal(wrapped, "<context><project_tree>src/\n  example.ts</project_tree><project_files><file path=\"/src/example.ts\">function demo() {\n\n  return 1;\n}</file></project_files></context>");
+});
+
+test("wrapper omits project tree when tree type is none", () => {
+  const wrapped = applyContextWrapperTemplate({
+    config: {
+      blockTemplate:
+        '<file name="{fileNameWithExtension}" path="{rawFilePath}">\n{fileContent}\n</file>',
+      blockSeparator: "\n",
+      blockTrimLines: true,
+      wrapperTemplate:
+        "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
+      projectTree: {
+        type: "none",
+        template: "<project_tree>\n{projectTree}\n</project_tree>\n",
+      },
+    },
+    fileBlocks: '<file path="/src/example.ts">const value = 1;</file>',
+    githubIssues: "",
+    githubPRs: "",
+    projectTree: "",
+    includeProjectTree: false,
+    fileCount: 1,
+    minify: true,
+  });
+
+  assert.equal(
+    wrapped,
+    '<context><project_files><file path="/src/example.ts">const value = 1;</file></project_files></context>'
+  );
 });
 
 test("benchmark reporting writes latest files only", async () => {

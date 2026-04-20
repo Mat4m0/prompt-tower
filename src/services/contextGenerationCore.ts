@@ -12,7 +12,11 @@ export interface ContextCoreConfig {
   blockTrimLines: boolean;
   wrapperTemplate: string | null;
   projectTree: {
-    enabled: boolean;
+    type:
+      | "fullFilesAndDirectories"
+      | "fullDirectoriesOnly"
+      | "selectedFilesOnly"
+      | "none";
     template: string;
   };
 }
@@ -23,6 +27,7 @@ export interface WrapperTemplateOptions {
   githubIssues: string;
   githubPRs: string;
   projectTree: string;
+  includeProjectTree: boolean;
   fileCount: number;
   minify?: boolean;
   outputFileName?: string;
@@ -99,6 +104,7 @@ export function applyContextWrapperTemplate(
     githubIssues,
     githubPRs,
     projectTree,
+    includeProjectTree,
     fileCount,
     minify = false,
     outputFileName = "clipboard-content",
@@ -111,7 +117,7 @@ export function applyContextWrapperTemplate(
       githubIssues,
       githubPRs,
       projectTree,
-      includeProjectTree: config.projectTree.enabled,
+      includeProjectTree,
     });
   }
 
@@ -120,7 +126,7 @@ export function applyContextWrapperTemplate(
     return parts.join(config.blockSeparator);
   }
 
-  const treeBlock = config.projectTree.enabled
+  const treeBlock = includeProjectTree
     ? config.projectTree.template.replace("{projectTree}", projectTree)
     : "";
   const githubIssuesSection = githubIssues ? `${githubIssues}\n` : "";

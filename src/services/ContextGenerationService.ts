@@ -32,7 +32,6 @@ interface OutputFormatSettings {
   blockSeparator?: string;
   blockTrimLines?: boolean;
   projectTreeFormat?: {
-    enabled?: boolean;
     type?: ContextConfig["projectTree"]["type"];
     showFileSize?: boolean;
     template?: string;
@@ -79,10 +78,11 @@ export class ContextGenerationService {
           : wrapperFormat?.template ||
             "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
       projectTree: {
-        enabled: projectTreeFormat.enabled ?? true,
         type: projectTreeFormat.type || "fullFilesAndDirectories",
         showFileSize: projectTreeFormat.showFileSize ?? false,
-        template: "<project_tree>\n{projectTree}\n</project_tree>\n",
+        template:
+          projectTreeFormat.template ||
+          "<project_tree>\n{projectTree}\n</project_tree>\n",
       },
       promptPrefix: "",
       promptSuffix: "",
@@ -105,7 +105,7 @@ export class ContextGenerationService {
       prefix?: string;
       suffix?: string;
       primaryWorkspaceRoot?: string;
-      treeType?: string;
+      treeType?: ContextConfig["projectTree"]["type"];
       minify?: boolean;
     }
   ): Promise<ContextGenerationResult> {
@@ -136,9 +136,8 @@ export class ContextGenerationService {
 
       if (fileCount === 0 && !hasGitHubBlocks) {
         if (
-          this.config.projectTree.enabled &&
-          (effectiveTreeType === "fullFilesAndDirectories" ||
-            effectiveTreeType === "fullDirectoriesOnly")
+          effectiveTreeType === "fullFilesAndDirectories" ||
+          effectiveTreeType === "fullDirectoriesOnly"
         ) {
           const fileTree = await this.generateProjectTree(
             fileNodes,
@@ -173,6 +172,7 @@ export class ContextGenerationService {
             joinedGithubIssues,
             joinedGithubPRs,
             fileTree,
+            effectiveTreeType !== "none" && fileTree.length > 0,
             fileCount,
             options?.minify ?? false
           ),
@@ -240,13 +240,13 @@ export class ContextGenerationService {
   private async generateProjectTree(
     fileNodes: FileNode[],
     primaryWorkspaceRoot?: string,
-    treeType?: string
+    treeType?: ContextConfig["projectTree"]["type"]
   ): Promise<string> {
-    if (!this.config.projectTree.enabled) {
+    const effectiveTreeType = treeType || this.config.projectTree.type;
+    if (effectiveTreeType === "none") {
       return "";
     }
 
-    const effectiveTreeType = treeType || this.config.projectTree.type;
     const filesToInclude =
       effectiveTreeType === "selectedFilesOnly"
         ? FileNodeUtils.getCheckedFiles(fileNodes).map((node) => ({
@@ -268,7 +268,7 @@ export class ContextGenerationService {
 
   private getAllWorkspaceFiles(
     fileNodes: FileNode[],
-    treeType: string
+    treeType: ContextConfig["projectTree"]["type"]
   ): StructuredFilePath[] {
     const allFiles: StructuredFilePath[] = [];
     const stack = [...fileNodes];
@@ -313,6 +313,7 @@ export class ContextGenerationService {
     githubIssues: string,
     githubPRs: string,
     projectTree: string,
+    includeProjectTree: boolean,
     fileCount: number,
     minify: boolean
   ): string {
@@ -322,6 +323,7 @@ export class ContextGenerationService {
       githubIssues,
       githubPRs,
       projectTree,
+      includeProjectTree,
       fileCount,
       minify,
     });

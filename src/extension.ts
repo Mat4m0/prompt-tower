@@ -103,6 +103,7 @@ function getWebviewContent(
   extensionUri: vscode.Uri,
   initialPrefix: string = "",
   initialSuffix: string = "",
+  initialTreeType: "fullFilesAndDirectories" | "fullDirectoriesOnly" | "selectedFilesOnly" | "none" = "fullFilesAndDirectories",
   prefixCollapsed: boolean = false,
   suffixCollapsed: boolean = true,
   automationCollapsed: boolean = true
@@ -138,6 +139,7 @@ function getWebviewContent(
     initialPrefix,
     initialSuffix,
     platform: process.platform,
+    initialTreeType,
     prefixCollapsed,
     suffixCollapsed,
     automationCollapsed,
@@ -172,12 +174,20 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
   const prefixCollapsed = context.globalState.get("promptTower.prefixCollapsed", false);
   const suffixCollapsed = context.globalState.get("promptTower.suffixCollapsed", true);
   const automationCollapsed = context.globalState.get("promptTower.automationCollapsed", true);
+  const initialTreeType =
+    vscode.workspace
+      .getConfiguration("promptTower")
+      .get<"fullFilesAndDirectories" | "fullDirectoriesOnly" | "selectedFilesOnly" | "none">(
+        "outputFormat.projectTreeFormat.type",
+        "fullFilesAndDirectories"
+      );
 
   webviewPanel.webview.html = getWebviewContent(
     webviewPanel.webview,
     context.extensionUri,
     multiRootProvider ? multiRootProvider.getPromptPrefix() : "",
     multiRootProvider ? multiRootProvider.getPromptSuffix() : "",
+    initialTreeType,
     prefixCollapsed,
     suffixCollapsed,
     automationCollapsed

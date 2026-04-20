@@ -48,7 +48,6 @@
             "blockSeparator": "\n",
             "blockTrimLines": true,
             "projectTreeFormat": {
-              "enabled": true,
               "type": "fullFilesAndDirectories",
               "showFileSize": false,
               "template": "<project_tree>\n{projectTree}\n</project_tree>\n"
@@ -77,18 +76,14 @@
               "type": "object",
               "description": "Settings for the project tree block.",
               "properties": {
-                "enabled": {
-                  "type": "boolean",
-                  "description": "Enable or disable the project tree block.",
-                  "default": true
-                },
                 "type": {
                   "type": "string",
                   "description": "Type of project tree block to use.",
                   "enum": [
                     "fullFilesAndDirectories",
                     "fullDirectoriesOnly",
-                    "selectedFilesOnly"
+                    "selectedFilesOnly",
+                    "none"
                   ],
                   "default": "fullFilesAndDirectories"
                 },

@@ -11,6 +11,7 @@ export interface WebviewParams {
   initialPrefix: string;
   initialSuffix: string;
   platform: string;
+  initialTreeType: "fullFilesAndDirectories" | "fullDirectoriesOnly" | "selectedFilesOnly" | "none";
   prefixCollapsed: boolean;
   suffixCollapsed: boolean;
   automationCollapsed: boolean;
@@ -94,9 +95,10 @@ export function getWebviewHtml(params: WebviewParams): string {
                     <div class="tree-type-selector">
                       <label for="treeTypeSelect">Tree:</label>
                       <select id="treeTypeSelect">
-                        <option value="fullFilesAndDirectories">Full repo</option>
-                        <option value="selectedFilesOnly">Selected files only</option>
-                        <option value="fullDirectoriesOnly">Directories only</option>
+                        <option value="selectedFilesOnly"${params.initialTreeType === 'selectedFilesOnly' ? ' selected' : ''}>Selected files only</option>
+                        <option value="fullFilesAndDirectories"${params.initialTreeType === 'fullFilesAndDirectories' ? ' selected' : ''}>Full repo</option>
+                        <option value="fullDirectoriesOnly"${params.initialTreeType === 'fullDirectoriesOnly' ? ' selected' : ''}>Directories only</option>
+                        <option value="none"${params.initialTreeType === 'none' ? ' selected' : ''}>None</option>
                       </select>
                     </div>
                     <label class="checkbox-container">

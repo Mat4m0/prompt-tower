@@ -53,7 +53,6 @@ export interface ContextConfig {
   
   /** Project tree configuration */
   projectTree: {
-    enabled: boolean;
     type: 'fullFilesAndDirectories' | 'fullDirectoriesOnly' | 'selectedFilesOnly' | 'none';
     showFileSize: boolean;
     template: string;
