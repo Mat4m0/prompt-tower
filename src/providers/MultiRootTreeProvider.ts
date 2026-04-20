@@ -2,11 +2,22 @@ import * as vscode from "vscode";
 import * as path from "path";
 import { FileNode, FileNodeUtils } from "../models/FileNode";
 import { GitHubSelectionProvider } from "../models/GitHubContext";
-import { FileSelectionChangeEvent } from "../models/Events";
+import {
+  FileSelectionChangeEvent,
+  TreeSyncStatePayload,
+  WorkspaceChangeEvent,
+} from "../models/Events";
+import { Workspace } from "../models/Workspace";
 import { WorkspaceManager } from "../services/WorkspaceManager";
 import { FileDiscoveryService } from "../services/FileDiscoveryService";
 import { TokenCountingService } from "../services/TokenCountingService";
 import { IgnorePatternService } from "../services/IgnorePatternService";
+
+const REFRESH_DEBOUNCE_MS = 300;
+
+export interface EnsureFreshResult {
+  removedSelections: string[];
+}
 
 /**
  * Tree data provider that supports multiple workspace folders
@@ -24,8 +35,22 @@ export class MultiRootTreeProvider
     new vscode.EventEmitter<FileSelectionChangeEvent>();
   readonly onDidChangeSelection = this._onDidChangeSelection.event;
 
+  private _onDidChangeSyncState =
+    new vscode.EventEmitter<TreeSyncStatePayload>();
+  readonly onDidChangeSyncState = this._onDidChangeSyncState.event;
+
   private rootNodes: FileNode[] = [];
   private isInitialized = false;
+  private readonly initializationPromise: Promise<void>;
+  private resolveInitialization?: () => void;
+  private rejectInitialization?: (error: unknown) => void;
+  private workspaceWatchers = new Map<string, vscode.FileSystemWatcher>();
+  private refreshTimeout: NodeJS.Timeout | undefined;
+  private refreshInFlight: Promise<EnsureFreshResult> | undefined;
+  private dirtyVersion = 1;
+  private lastRefreshedVersion = 0;
+  private syncState: TreeSyncStatePayload["state"] = "dirty";
+  private lastRefreshAt: number | undefined;
 
   // Configuration
   private promptPrefix: string = "";
@@ -41,9 +66,14 @@ export class MultiRootTreeProvider
     private ignorePatternService: IgnorePatternService,
     private context: vscode.ExtensionContext
   ) {
+    this.initializationPromise = new Promise<void>((resolve, reject) => {
+      this.resolveInitialization = resolve;
+      this.rejectInitialization = reject;
+    });
+
     this.loadConfiguration();
     this.setupEventListeners();
-    this.initialize();
+    void this.initialize();
   }
 
   /**
@@ -51,8 +81,9 @@ export class MultiRootTreeProvider
    */
   private async initialize(): Promise<void> {
     try {
-      await this.refreshWorkspaces();
+      await this.refreshNow(true);
       this.isInitialized = true;
+      this.resolveInitialization?.();
     } catch (error) {
       console.error(
         "MultiRootTreeProvider: Error during initialization:",
@@ -61,6 +92,7 @@ export class MultiRootTreeProvider
       vscode.window.showErrorMessage(
         "Error initializing Prompt Tower file view."
       );
+      this.rejectInitialization?.(error);
     }
   }
 
@@ -68,18 +100,120 @@ export class MultiRootTreeProvider
    * Setup event listeners
    */
   private setupEventListeners(): void {
-    // Listen for workspace changes
     this.workspaceManager.onDidChangeWorkspaces(async (event) => {
-      await this.refreshWorkspaces();
+      this.handleWorkspaceChange(event);
+      await this.refreshNow(true);
     });
 
-    // Listen for configuration changes
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("promptTower")) {
         this.loadConfiguration();
-        this.refreshWorkspaces();
+        this.markDirty();
       }
     });
+
+    this.ignorePatternService.onDidChangeIgnorePatterns(() => {
+      this.markDirty();
+    });
+  }
+
+  private handleWorkspaceChange(event: WorkspaceChangeEvent): void {
+    if (event.type !== "removed") {
+      return;
+    }
+
+    const watcher = this.workspaceWatchers.get(event.workspace.id);
+    if (watcher) {
+      watcher.dispose();
+      this.workspaceWatchers.delete(event.workspace.id);
+    }
+
+    this.ignorePatternService.cleanupWorkspace(event.workspace);
+  }
+
+  private isDirty(): boolean {
+    return this.dirtyVersion !== this.lastRefreshedVersion;
+  }
+
+  private emitSyncState(): void {
+    this._onDidChangeSyncState.fire(this.getSyncState());
+  }
+
+  private setSyncState(state: TreeSyncStatePayload["state"]): void {
+    if (this.syncState === state) {
+      return;
+    }
+
+    this.syncState = state;
+    this.emitSyncState();
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimeout) {
+      clearTimeout(this.refreshTimeout);
+    }
+
+    this.refreshTimeout = setTimeout(() => {
+      this.refreshTimeout = undefined;
+      void this.refreshNow();
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  private clearScheduledRefresh(): void {
+    if (!this.refreshTimeout) {
+      return;
+    }
+
+    clearTimeout(this.refreshTimeout);
+    this.refreshTimeout = undefined;
+  }
+
+  private markDirty(): void {
+    this.dirtyVersion += 1;
+
+    if (this.syncState !== "refreshing") {
+      this.setSyncState("dirty");
+    }
+
+    this.scheduleRefresh();
+  }
+
+  private setupWorkspaceWatchers(workspaces: Workspace[]): void {
+    const activeWorkspaceIds = new Set(workspaces.map((workspace) => workspace.id));
+
+    for (const workspace of workspaces) {
+      this.ignorePatternService.setupIgnoreFileWatchers(workspace);
+
+      if (this.workspaceWatchers.has(workspace.id)) {
+        continue;
+      }
+
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspace.rootPath, "**/*"),
+        false,
+        true,
+        false
+      );
+
+      watcher.onDidCreate(() => {
+        this.markDirty();
+      });
+      watcher.onDidDelete(() => {
+        this.markDirty();
+      });
+
+      this.workspaceWatchers.set(workspace.id, watcher);
+      this.context.subscriptions.push(watcher);
+    }
+
+    for (const [workspaceId, watcher] of this.workspaceWatchers) {
+      if (activeWorkspaceIds.has(workspaceId)) {
+        continue;
+      }
+
+      watcher.dispose();
+      this.workspaceWatchers.delete(workspaceId);
+    }
   }
 
   /**
@@ -93,42 +227,83 @@ export class MultiRootTreeProvider
   /**
    * Refresh all workspaces
    */
-  async refreshWorkspaces(): Promise<void> {
-    // Preserve currently checked paths (both files and directories)
+  private async refreshWorkspaces(): Promise<EnsureFreshResult> {
+    this.clearScheduledRefresh();
+
     const preserveCheckedPaths = new Set<string>();
     const checkedNodes = this.getAllCheckedNodes(this.rootNodes);
     for (const checkedNode of checkedNodes) {
       preserveCheckedPaths.add(checkedNode.absolutePath);
     }
 
-    // Get current workspaces
+    const checkedFilePathsBeforeRefresh = FileNodeUtils.getCheckedFilePaths(
+      this.rootNodes
+    );
     const workspaces = this.workspaceManager.getWorkspaces();
 
     if (workspaces.length === 0) {
       this.rootNodes = [];
       this.tokenCountingService.clearSelection();
       this._onDidChangeTreeData.fire();
-      return;
+      this.lastRefreshAt = Date.now();
+      this.emitSyncState();
+      return { removedSelections: checkedFilePathsBeforeRefresh };
     }
 
-    // Setup ignore file watchers for each workspace
-    for (const workspace of workspaces) {
-      this.ignorePatternService.setupIgnoreFileWatchers(workspace);
-    }
+    this.setupWorkspaceWatchers(workspaces);
 
-    // Discover files for all workspaces
     this.rootNodes = await this.fileDiscoveryService.discoverFiles(
       workspaces,
       preserveCheckedPaths
     );
 
-    this.tokenCountingService.replaceSelection(
-      FileNodeUtils.getCheckedFilePaths(this.rootNodes)
+    const checkedFilePathsAfterRefresh =
+      FileNodeUtils.getCheckedFilePaths(this.rootNodes);
+    const checkedFilePathSet = new Set(checkedFilePathsAfterRefresh);
+    const removedSelections = checkedFilePathsBeforeRefresh.filter(
+      (filePath) => !checkedFilePathSet.has(filePath)
     );
 
-    // Refresh the tree view
+    this.tokenCountingService.replaceSelection(checkedFilePathsAfterRefresh);
     this._onDidChangeTreeData.fire();
+    this.lastRefreshAt = Date.now();
+    this.emitSyncState();
 
+    return { removedSelections };
+  }
+
+  private async refreshNow(force: boolean = false): Promise<EnsureFreshResult> {
+    if (!force && !this.isDirty() && !this.refreshInFlight) {
+      return { removedSelections: [] };
+    }
+
+    this.clearScheduledRefresh();
+
+    if (this.refreshInFlight) {
+      return this.refreshInFlight;
+    }
+
+    const refreshVersion = this.dirtyVersion;
+    this.setSyncState("refreshing");
+
+    const refreshPromise = this.refreshWorkspaces()
+      .then((result) => {
+        if (this.dirtyVersion === refreshVersion) {
+          this.lastRefreshedVersion = refreshVersion;
+          this.setSyncState("idle");
+        } else {
+          this.setSyncState("dirty");
+          this.scheduleRefresh();
+        }
+
+        return result;
+      })
+      .finally(() => {
+        this.refreshInFlight = undefined;
+      });
+
+    this.refreshInFlight = refreshPromise;
+    return refreshPromise;
   }
 
   /**
@@ -162,31 +337,24 @@ export class MultiRootTreeProvider
       element.collapsibleState
     );
 
-    // Set context value for commands
     treeItem.contextValue = element.type;
-
-    // Set checkbox state (visual indicator only)
     treeItem.checkboxState = element.checkable
       ? element.isChecked
         ? vscode.TreeItemCheckboxState.Checked
         : vscode.TreeItemCheckboxState.Unchecked
       : undefined;
-
-    // Make whole row clickable via command (for all node types)
     treeItem.command = {
       command: "promptTower.toggleFileSelection",
       title: "Toggle Selection",
-      arguments: [element]
+      arguments: [element],
     };
 
-    // Set tooltip
     if (element.type === "workspace-root") {
       treeItem.tooltip = `Workspace: ${element.workspace.name}\nPath: ${element.absolutePath}`;
     } else {
       treeItem.tooltip = element.absolutePath;
     }
 
-    // Set icon theme for files
     if (element.type === "file") {
       treeItem.resourceUri = vscode.Uri.file(element.absolutePath);
     }
@@ -203,11 +371,9 @@ export class MultiRootTreeProvider
     }
 
     if (!element) {
-      // Return workspace root nodes
       return this.rootNodes;
     }
 
-    // Return children of the given element
     return element.children || [];
   }
 
@@ -220,7 +386,6 @@ export class MultiRootTreeProvider
     let userCancelled = false;
 
     try {
-      // Check file size for large files
       if (newState && node.type === "file") {
         await this.checkFileSize(node.absolutePath);
       }
@@ -234,7 +399,6 @@ export class MultiRootTreeProvider
       }
     }
 
-    // Update the node state
     if (newState !== originalState || userCancelled) {
       const addedFilePaths = newState
         ? FileNodeUtils.getUncheckedFilePaths([node])
@@ -243,15 +407,12 @@ export class MultiRootTreeProvider
         ? []
         : FileNodeUtils.getCheckedFilePaths([node]);
 
-      // Toggle this node and its children
       FileNodeUtils.toggleCheckedState(node, newState);
 
-      // Update parent states
       if (node.parent) {
         FileNodeUtils.updateParentCheckedState(node);
       }
 
-      // Emit selection change event
       this._onDidChangeSelection.fire({
         node,
         isChecked: newState,
@@ -264,7 +425,6 @@ export class MultiRootTreeProvider
         removedFilePaths
       );
 
-      // Refresh the tree to show updated checkboxes
       this._onDidChangeTreeData.fire(node);
     }
   }
@@ -299,7 +459,6 @@ export class MultiRootTreeProvider
       ) {
         throw error;
       }
-      // Silently ignore other errors (file might not exist, etc.)
     }
   }
 
@@ -316,11 +475,8 @@ export class MultiRootTreeProvider
       hasFileChanges = true;
     }
 
-    // Also clear GitHub issues if provider is available
     let hasIssueChanges = false;
-    if (
-      this.gitHubIssuesProvider
-    ) {
+    if (this.gitHubIssuesProvider) {
       const hadIssues = this.gitHubIssuesProvider.getSelectedCount() > 0;
       this.gitHubIssuesProvider.clearAllSelections();
       hasIssueChanges = hadIssues;
@@ -358,7 +514,6 @@ export class MultiRootTreeProvider
       this.tokenCountingService.clearSelection();
     }
 
-    // Refresh tree
     this._onDidChangeTreeData.fire();
   }
 
@@ -411,7 +566,42 @@ export class MultiRootTreeProvider
    * Refresh the tree (public method for commands)
    */
   async refresh(): Promise<void> {
-    await this.refreshWorkspaces();
+    await this.refreshNow(true);
+  }
+
+  async ensureFresh(): Promise<EnsureFreshResult> {
+    await this.initializationPromise;
+
+    const removedSelections = new Set<string>();
+
+    while (true) {
+      if (this.refreshInFlight) {
+        const result = await this.refreshInFlight;
+        for (const removedSelection of result.removedSelections) {
+          removedSelections.add(removedSelection);
+        }
+        if (!this.isDirty()) {
+          return { removedSelections: [...removedSelections] };
+        }
+        continue;
+      }
+
+      if (!this.isDirty()) {
+        return { removedSelections: [...removedSelections] };
+      }
+
+      const result = await this.refreshNow();
+      for (const removedSelection of result.removedSelections) {
+        removedSelections.add(removedSelection);
+      }
+    }
+  }
+
+  getSyncState(): TreeSyncStatePayload {
+    return {
+      state: this.syncState,
+      lastRefreshAt: this.lastRefreshAt,
+    };
   }
 
   /**
@@ -460,7 +650,7 @@ export class MultiRootTreeProvider
    * Reset all state (for commands)
    */
   resetAll(): void {
-    this.clearAllSelections(); // This now clears both files and GitHub issues
+    this.clearAllSelections();
     this.setPromptPrefix("");
     this.setPromptSuffix("");
   }
@@ -490,8 +680,14 @@ export class MultiRootTreeProvider
    * Dispose resources
    */
   dispose(): void {
+    this.clearScheduledRefresh();
+    for (const watcher of this.workspaceWatchers.values()) {
+      watcher.dispose();
+    }
+    this.workspaceWatchers.clear();
     this._onDidChangeTreeData.dispose();
     this._onDidChangeSelection.dispose();
+    this._onDidChangeSyncState.dispose();
     this.tokenCountingService.dispose();
     this.ignorePatternService.dispose();
     this.workspaceManager.dispose();

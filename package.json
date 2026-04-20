@@ -117,29 +117,6 @@
               }
             }
           }
-        },
-        "promptTower.automation.defaultBrowser": {
-          "type": "string",
-          "enum": [
-            "chrome",
-            "default"
-          ],
-          "default": "chrome",
-          "description": "Browser to use for automated prompt pushing. 'chrome' targets Google Chrome specifically, 'default' uses system default browser."
-        },
-        "promptTower.automation.automationDelay": {
-          "type": "number",
-          "default": 1.5,
-          "minimum": 0.5,
-          "maximum": 10,
-          "description": "Delay in seconds to wait after opening browser before automating keystrokes. Increase if automation fails due to slow page loading."
-        },
-        "promptTower.automation.focusDelay": {
-          "type": "number",
-          "default": 0.3,
-          "minimum": 0.1,
-          "maximum": 2,
-          "description": "Delay in seconds between automation steps (focus, paste, submit). Increase if automation seems too fast for your system."
         }
       }
     },
@@ -394,6 +371,8 @@
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package:vsix": "npx @vscode/vsce package",
+    "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); npx @vscode/vsce package && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "validate": "npm run check-types && npm run lint"

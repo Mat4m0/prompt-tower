@@ -13,16 +13,12 @@ import { FileDiscoveryService } from "./services/FileDiscoveryService";
 import { TokenCountingService } from "./services/TokenCountingService";
 import { IgnorePatternService } from "./services/IgnorePatternService";
 import { ContextGenerationService } from "./services/ContextGenerationService";
-import { PromptPushService, AIProvider } from "./services/PromptPushService";
-import {
-  AutomationTarget,
-  EditorAutomationService,
-} from "./services/EditorAutomationService";
 import { PromptHistoryService, PromptType } from "./services/PromptHistoryService";
+import { PromptExportService } from "./services/PromptExportService";
 import { configureTokenizerCache } from "./services/tokenizer";
 import { FileSnapshotService } from "./services/FileSnapshotService";
 import { FileNode } from "./models/FileNode";
-import { TokenUpdatePayload } from "./models/Events";
+import { TokenUpdatePayload, TreeSyncStatePayload } from "./models/Events";
 import { GitHubConfigManager } from "./utils/githubConfig";
 import { getWebviewHtml, WebviewParams } from "./extension.webview.html";
 
@@ -37,9 +33,8 @@ let ignorePatternService: IgnorePatternService;
 let fileDiscoveryService: FileDiscoveryService;
 let tokenCountingService: TokenCountingService;
 let contextGenerationService: ContextGenerationService;
-let promptPushService: PromptPushService;
-let editorAutomationService: EditorAutomationService;
 let promptHistoryService: PromptHistoryService;
+let promptExportService: PromptExportService;
 let multiRootProvider: MultiRootTreeProvider;
 let issuesProviderInstance: GitHubIssuesProvider | undefined;
 let prsProviderInstance: GitHubPRsProvider | undefined;
@@ -49,6 +44,14 @@ let fileSnapshotService: FileSnapshotService;
 
 // --- Preview State ---
 let isPreviewValid = false;
+let isContextActionInFlight = false;
+
+interface FreshContextInput {
+  allRootNodes: FileNode[];
+  prefix: string;
+  suffix: string;
+  removedSelections: string[];
+}
 
 // --- Helper Functions ---
 function updateWebviewVisibilityContext() {
@@ -63,10 +66,85 @@ function invalidateWebviewPreview() {
   }
 }
 
+function setSyncStatus(text: string, busy: boolean = isContextActionInFlight) {
+  if (webviewPanel) {
+    webviewPanel.webview.postMessage({
+      command: "syncStatus",
+      payload: {
+        text,
+        busy,
+      },
+    });
+  }
+}
+
+function getSyncStatusText(syncState: TreeSyncStatePayload): string {
+  switch (syncState.state) {
+    case "dirty":
+    case "refreshing":
+      return "Project changed, refreshing...";
+    case "idle":
+      return syncState.lastRefreshAt ? "Synced just now" : "";
+    default:
+      return "";
+  }
+}
+
+function formatRemovedSelectionsMessage(count: number): string {
+  return count === 1
+    ? "1 selected file was removed because it no longer exists"
+    : `${count} selected files were removed because they no longer exist`;
+}
+
+async function withFreshContext<T>(
+  actionLabel: string,
+  operation: (context: FreshContextInput) => Promise<T>
+): Promise<T> {
+  if (!multiRootProvider) {
+    throw new Error("Prompt Tower is not initialized.");
+  }
+
+  let finalStatusText = getSyncStatusText(multiRootProvider.getSyncState());
+  isContextActionInFlight = true;
+  setSyncStatus(`Refreshing before ${actionLabel}...`, true);
+
+  try {
+    const freshness = await multiRootProvider.ensureFresh();
+    finalStatusText =
+      freshness.removedSelections.length > 0
+        ? formatRemovedSelectionsMessage(freshness.removedSelections.length)
+        : "Synced just now";
+
+    setSyncStatus(finalStatusText, true);
+
+    return await operation({
+      allRootNodes: multiRootProvider.getRootNodes(),
+      prefix: multiRootProvider.getPromptPrefix(),
+      suffix: multiRootProvider.getPromptSuffix(),
+      removedSelections: freshness.removedSelections,
+    });
+  } catch (error) {
+    finalStatusText = getSyncStatusText(multiRootProvider.getSyncState());
+    throw error;
+  } finally {
+    isContextActionInFlight = false;
+    setSyncStatus(finalStatusText, false);
+  }
+}
+
 function resetWebviewPreview() {
   if (webviewPanel) {
     webviewPanel.webview.postMessage({ command: "resetPreview" });
   }
+}
+
+function getPrimaryWorkspaceRoot(): string {
+  const primaryWorkspace = workspaceManager.getPrimaryWorkspace();
+  if (!primaryWorkspace) {
+    throw new Error("No workspace available for prompt export.");
+  }
+
+  return primaryWorkspace.rootPath;
 }
 
 function getNonce() {
@@ -105,44 +183,26 @@ function getWebviewContent(
   initialSuffix: string = "",
   initialTreeType: "fullFilesAndDirectories" | "fullDirectoriesOnly" | "selectedFilesOnly" | "none" = "fullFilesAndDirectories",
   prefixCollapsed: boolean = false,
-  suffixCollapsed: boolean = true,
-  automationCollapsed: boolean = true
+  suffixCollapsed: boolean = true
 ): string {
   const nonce = getNonce();
-
-  // Get provider logo URIs
-  const chatgptLogo = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "assets", "chatgpt.png")
-  );
-  const claudeLogo = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "assets", "claude.png")
-  );
-  const geminiLogo = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "assets", "gemini.png")
-  );
-  const aistudioLogo = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "assets", "aistudio.png")
-  );
-  const cursorLogo = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, "assets", "cursor.png")
-  );
+  const exportOptions = promptExportService.getOptions();
 
   // Use the modular HTML generator
   const params: WebviewParams = {
     nonce,
     cspSource: webview.cspSource,
-    chatgptLogo: chatgptLogo.toString(),
-    claudeLogo: claudeLogo.toString(),
-    geminiLogo: geminiLogo.toString(),
-    aistudioLogo: aistudioLogo.toString(),
-    cursorLogo: cursorLogo.toString(),
     initialPrefix,
     initialSuffix,
-    platform: process.platform,
     initialTreeType,
+    initialExportFileName: exportOptions.fileName,
+    initialExportFormat: exportOptions.format,
+    initialExportLocation: exportOptions.location,
+    initialCustomFolderPath: exportOptions.customFolderPath,
+    initialCustomFolderPathMode: exportOptions.customFolderPathMode,
+    initialIncludeTimestamp: exportOptions.includeTimestamp,
     prefixCollapsed,
     suffixCollapsed,
-    automationCollapsed,
   };
 
   return getWebviewHtml(params);
@@ -173,7 +233,6 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
   // Get collapse states from globalState
   const prefixCollapsed = context.globalState.get("promptTower.prefixCollapsed", false);
   const suffixCollapsed = context.globalState.get("promptTower.suffixCollapsed", true);
-  const automationCollapsed = context.globalState.get("promptTower.automationCollapsed", true);
   const initialTreeType =
     vscode.workspace
       .getConfiguration("promptTower")
@@ -189,8 +248,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
     multiRootProvider ? multiRootProvider.getPromptSuffix() : "",
     initialTreeType,
     prefixCollapsed,
-    suffixCollapsed,
-    automationCollapsed
+    suffixCollapsed
   );
 
   // Update context for status tree visibility
@@ -216,6 +274,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
 
         case "webviewReady":
           if (multiRootProvider && webviewPanel) {
+            const exportOptions = promptExportService.getOptions();
             // Send initial state
             webviewPanel.webview.postMessage({
               command: "updatePrefix",
@@ -237,57 +296,66 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
               command: "treeVisibilityChanged",
               visible: mainTreeView.visible,
             });
+            webviewPanel.webview.postMessage({
+              command: "updateExportOptions",
+              payload: exportOptions,
+            });
+            setSyncStatus(getSyncStatusText(multiRootProvider.getSyncState()));
+          }
+          break;
+
+        case "updateExportOptions":
+          if (message.options && typeof message.options === "object") {
+            await promptExportService.saveOptions(message.options);
           }
           break;
 
         case "createContext":
           if (multiRootProvider && contextGenerationService && webviewPanel) {
             try {
-              // Process options from webview
+              const panel = webviewPanel;
               const options = message.options || {};
               const treeType = options.treeType || "fullFilesAndDirectories";
               const copyToClipboard = options.copyToClipboard ?? true;
               const minify = options.minify ?? false;
-
-              const allRootNodes = multiRootProvider.getRootNodes();
-              const prefix = multiRootProvider.getPromptPrefix();
-              const suffix = multiRootProvider.getPromptSuffix();
-
-              // Generate context with tree type option
-              const result = await contextGenerationService.generateContext(
+              await withFreshContext("create", async ({
                 allRootNodes,
-                {
-                  prefix,
-                  suffix,
-                  treeType: treeType,
-                  minify,
+                prefix,
+                suffix,
+              }) => {
+                const result = await contextGenerationService.generateContext(
+                  allRootNodes,
+                  {
+                    prefix,
+                    suffix,
+                    treeType: treeType,
+                    minify,
+                  }
+                );
+
+                const primaryWorkspace = workspaceManager.getPrimaryWorkspace();
+                if (primaryWorkspace && promptHistoryService) {
+                  promptHistoryService.savePrompts(
+                    prefix,
+                    suffix,
+                    primaryWorkspace.name,
+                    primaryWorkspace.rootPath
+                  );
                 }
-              );
 
-              // Save prompts to history
-              const primaryWorkspace = workspaceManager.getPrimaryWorkspace();
-              if (primaryWorkspace && promptHistoryService) {
-                promptHistoryService.savePrompts(
-                  prefix,
-                  suffix,
-                  primaryWorkspace.name,
-                  primaryWorkspace.rootPath
-                );
-              }
+                if (copyToClipboard) {
+                  await vscode.env.clipboard.writeText(result.contextString);
+                  vscode.window.showInformationMessage(
+                    "✨ Context copied to clipboard!"
+                  );
+                }
 
-              // Copy to clipboard if option is checked
-              if (copyToClipboard) {
-                await vscode.env.clipboard.writeText(result.contextString);
-                vscode.window.showInformationMessage(
-                  "✨ Context copied to clipboard!"
-                );
-              }
-
-              webviewPanel.webview.postMessage({
-                command: "updatePreview",
-                payload: { context: result.contextString },
+                panel.webview.postMessage({
+                  command: "updatePreview",
+                  payload: { context: result.contextString },
+                });
+                isPreviewValid = true;
               });
-              isPreviewValid = true;
             } catch (error) {
               vscode.window.showErrorMessage(
                 `Error generating context: ${error}`
@@ -296,26 +364,140 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           }
           break;
 
-        case "createAndCopyToClipboard":
-          if (multiRootProvider && contextGenerationService) {
+        case "savePromptFile":
+          if (multiRootProvider && contextGenerationService && webviewPanel) {
             try {
-              const allRootNodes = multiRootProvider.getRootNodes();
-              const result = await contextGenerationService.copyToClipboard(
-                allRootNodes,
-                {
-                  prefix: multiRootProvider.getPromptPrefix(),
-                  suffix: multiRootProvider.getPromptSuffix(),
-                  minify: message.options?.minify ?? false,
-                }
+              const panel = webviewPanel;
+              const workspaceRoot = getPrimaryWorkspaceRoot();
+              const exportOptions = await promptExportService.saveOptions(
+                message.options ?? {}
               );
+              const exportDate = new Date();
+              const timestamp =
+                promptExportService.createWrapperTimestamp(exportDate);
+              const outputFileName = `${exportOptions.fileName}.${exportOptions.format}`;
+              await withFreshContext("save", async ({
+                allRootNodes,
+                prefix,
+                suffix,
+              }) => {
+                const result = await contextGenerationService.generateContext(
+                  allRootNodes,
+                  {
+                    prefix,
+                    suffix,
+                    treeType:
+                      message.options?.treeType || "fullFilesAndDirectories",
+                    minify: message.options?.minify ?? false,
+                    outputFileName,
+                    timestamp,
+                  }
+                );
 
-              if (webviewPanel) {
-                webviewPanel.webview.postMessage({
+                if (result.fileCount === 0 && !result.contextString) {
+                  vscode.window.showWarningMessage(
+                    "No files selected or prompt text entered to save."
+                  );
+                  return;
+                }
+
+                const savedFile = await promptExportService.writePromptFile(
+                  workspaceRoot,
+                  result.contextString,
+                  exportOptions,
+                  exportDate
+                );
+
+                panel.webview.postMessage({
                   command: "updatePreview",
                   payload: { context: result.contextString },
                 });
+                panel.webview.postMessage({
+                  command: "promptFileSaved",
+                  payload: {
+                    filePath: savedFile.absolutePath,
+                    fileName: savedFile.fileName,
+                  },
+                });
                 isPreviewValid = true;
-              }
+
+                vscode.window.showInformationMessage(
+                  `Saved prompt file: ${savedFile.fileName}`
+                );
+              });
+            } catch (error) {
+              vscode.window.showErrorMessage(
+                `Error saving prompt file: ${error}`
+              );
+            }
+          }
+          break;
+
+        case "openSavedPromptFile":
+          if (typeof message.filePath === "string") {
+            try {
+              const document = await vscode.workspace.openTextDocument(
+                vscode.Uri.file(message.filePath)
+              );
+              await vscode.window.showTextDocument(document, {
+                preview: false,
+                preserveFocus: false,
+              });
+            } catch (error) {
+              vscode.window.showErrorMessage(
+                `Could not open saved prompt file: ${error}`
+              );
+            }
+          }
+          break;
+
+        case "revealSavedPromptFile":
+          if (typeof message.filePath === "string") {
+            try {
+              await vscode.commands.executeCommand(
+                "revealFileInOS",
+                vscode.Uri.file(message.filePath)
+              );
+            } catch (error) {
+              vscode.window.showErrorMessage(
+                `Could not reveal saved prompt file: ${error}`
+              );
+            }
+          }
+          break;
+
+        case "copySavedPromptFilePath":
+          if (typeof message.filePath === "string") {
+            await vscode.env.clipboard.writeText(message.filePath);
+            vscode.window.showInformationMessage("Prompt file path copied.");
+          }
+          break;
+
+        case "createAndCopyToClipboard":
+          if (multiRootProvider && contextGenerationService) {
+            try {
+              await withFreshContext("copy", async ({
+                allRootNodes,
+                prefix,
+                suffix,
+              }) => {
+                const result = await contextGenerationService.copyToClipboard(
+                  allRootNodes,
+                  {
+                    prefix,
+                    suffix,
+                    minify: message.options?.minify ?? false,
+                  }
+                );
+
+                if (webviewPanel) {
+                  webviewPanel.webview.postMessage({
+                    command: "updatePreview",
+                    payload: { context: result.contextString },
+                  });
+                  isPreviewValid = true;
+                }
+              });
             } catch (error) {
               console.error("Error in createAndCopyToClipboard:", error);
             }
@@ -374,198 +556,8 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           await vscode.commands.executeCommand("workbench.view.extension.prompt-tower");
           break;
 
-        case "pushPrompt":
-          if (
-            message.provider &&
-            multiRootProvider &&
-            contextGenerationService &&
-            promptPushService
-          ) {
-            try {
-              // Check if this is the first time using automation
-              const isFirstTime = !context.globalState.get(
-                "promptTower.automationUsed",
-                false
-              );
-
-              if (isFirstTime) {
-                // Show onboarding modal and return early
-                if (webviewPanel) {
-                  webviewPanel.webview.postMessage({
-                    command: "showOnboardingModal",
-                  });
-                }
-                return;
-              }
-              const allRootNodes = multiRootProvider.getRootNodes();
-              const result = await contextGenerationService.generateContext(
-                allRootNodes,
-                {
-                  prefix: multiRootProvider.getPromptPrefix(),
-                  suffix: multiRootProvider.getPromptSuffix(),
-                }
-              );
-
-              // Validate provider type
-              const provider = message.provider as AIProvider;
-              const autoSubmit = message.autoSubmit ?? true;
-
-              if (
-                !promptPushService.getSupportedProviders().includes(provider)
-              ) {
-                throw new Error(`Unsupported provider: ${provider}`);
-              }
-
-              // Attempt to push the prompt to the AI provider
-              const pushResult = await promptPushService.pushPrompt(
-                provider,
-                result.contextString,
-                autoSubmit
-              );
-
-              if (pushResult.success) {
-                // Show success message
-                vscode.window.showInformationMessage(
-                  `✨ Prompt successfully pushed to ${promptPushService.getProviderDisplayName(
-                    provider
-                  )}!`
-                );
-              } else {
-                // Handle different failure scenarios
-                if (pushResult.requiresPermissions) {
-                  const enablePermissions =
-                    await vscode.window.showWarningMessage(
-                      `❌ ${pushResult.error}\n\nTo enable automated prompt pushing on macOS, VS Code needs Accessibility permissions.`,
-                      "Open System Preferences",
-                      "Copy to Clipboard Only"
-                    );
-
-                  if (enablePermissions === "Open System Preferences") {
-                    vscode.env.openExternal(
-                      vscode.Uri.parse(
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                      )
-                    );
-                  }
-                } else if (pushResult.fallbackToClipboard) {
-                  vscode.window.showWarningMessage(
-                    `⚠️ ${pushResult.error}\n\nPrompt copied to clipboard as fallback.`
-                  );
-                } else {
-                  vscode.window.showErrorMessage(
-                    `❌ Failed to push prompt: ${pushResult.error}`
-                  );
-                }
-              }
-
-              // Update preview if webview is still active
-              if (webviewPanel) {
-                webviewPanel.webview.postMessage({
-                  command: "updatePreview",
-                  payload: { context: result.contextString },
-                });
-                isPreviewValid = true;
-              }
-            } catch (error) {
-              vscode.window.showErrorMessage(
-                `Error pushing prompt to ${message.provider}: ${error}`
-              );
-            }
-          }
-          break;
-
-        case "completeOnboarding":
-          // Mark automation as used and proceed with the original push prompt request
-          await context.globalState.update("promptTower.automationUsed", true);
-
-          if (
-            message.originalRequest &&
-            multiRootProvider &&
-            contextGenerationService &&
-            promptPushService
-          ) {
-            // Re-execute the original push prompt request
-            const originalMessage = message.originalRequest;
-            try {
-              const allRootNodes = multiRootProvider.getRootNodes();
-              const result = await contextGenerationService.generateContext(
-                allRootNodes,
-                {
-                  prefix: multiRootProvider.getPromptPrefix(),
-                  suffix: multiRootProvider.getPromptSuffix(),
-                }
-              );
-
-              // Validate provider type
-              const provider = originalMessage.provider as AIProvider;
-              const autoSubmit = originalMessage.autoSubmit ?? true;
-
-              if (
-                !promptPushService.getSupportedProviders().includes(provider)
-              ) {
-                throw new Error(`Unsupported provider: ${provider}`);
-              }
-
-              // Attempt to push the prompt to the AI provider
-              const pushResult = await promptPushService.pushPrompt(
-                provider,
-                result.contextString,
-                autoSubmit
-              );
-
-              if (pushResult.success) {
-                vscode.window.showInformationMessage(
-                  `✨ Prompt successfully pushed to ${promptPushService.getProviderDisplayName(
-                    provider
-                  )}!`
-                );
-              } else {
-                // Handle failure scenarios (same as original handler)
-                if (pushResult.requiresPermissions) {
-                  const enablePermissions =
-                    await vscode.window.showWarningMessage(
-                      `❌ ${pushResult.error}\n\nTo enable automated prompt pushing on macOS, VS Code needs Accessibility permissions.`,
-                      "Open System Preferences",
-                      "Copy to Clipboard Only"
-                    );
-
-                  if (enablePermissions === "Open System Preferences") {
-                    vscode.env.openExternal(
-                      vscode.Uri.parse(
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                      )
-                    );
-                  }
-                } else if (pushResult.fallbackToClipboard) {
-                  vscode.window.showWarningMessage(
-                    `⚠️ ${pushResult.error}\n\nPrompt copied to clipboard as fallback.`
-                  );
-                } else {
-                  vscode.window.showErrorMessage(
-                    `❌ Failed to push prompt: ${pushResult.error}`
-                  );
-                }
-              }
-
-              // Update preview
-              if (webviewPanel) {
-                webviewPanel.webview.postMessage({
-                  command: "updatePreview",
-                  payload: { context: result.contextString },
-                });
-                isPreviewValid = true;
-              }
-            } catch (error) {
-              vscode.window.showErrorMessage(
-                `Error pushing prompt to ${originalMessage.provider}: ${error}`
-              );
-            }
-          }
-          break;
-
         case "toggleCollapse":
-          // Persist collapse state for prefix/suffix/automation sections
-          if (message.section === "prefix" || message.section === "suffix" || message.section === "automation") {
+          if (message.section === "prefix" || message.section === "suffix") {
             const key = `promptTower.${message.section}Collapsed`;
             context.globalState.update(key, message.collapsed);
           }
@@ -614,89 +606,6 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           }
           break;
 
-        case "sendToEditor":
-          if (
-            multiRootProvider &&
-            contextGenerationService &&
-            editorAutomationService
-          ) {
-            try {
-              // Generate context (similar to createContext flow)
-              const allRootNodes = multiRootProvider.getRootNodes();
-              const result = await contextGenerationService.generateContext(
-                allRootNodes,
-                {
-                  prefix: multiRootProvider.getPromptPrefix(),
-                  suffix: multiRootProvider.getPromptSuffix(),
-                }
-              );
-
-              // Update preview if webview is active
-              if (webviewPanel) {
-                webviewPanel.webview.postMessage({
-                  command: "updatePreview",
-                  payload: { context: result.contextString },
-                });
-                isPreviewValid = true;
-              }
-
-              // Get target from message or default to agent
-              const target = isAutomationTarget(message.target)
-                ? message.target
-                : "agent";
-
-              // Send to Cursor using the service
-              const automationResult =
-                await editorAutomationService.sendToEditor(
-                  "cursor",
-                  target,
-                  result.contextString
-                );
-
-              if (automationResult.success) {
-                vscode.window.showInformationMessage(
-                  `✨ Context sent to ${editorAutomationService.getEditorDisplayName(
-                    "cursor"
-                  )} ${editorAutomationService.getTargetDisplayName(
-                    target
-                  )}!`
-                );
-              } else {
-                // Handle different failure scenarios
-                if (automationResult.requiresPermissions) {
-                  const enablePermissions =
-                    await vscode.window.showWarningMessage(
-                      `❌ ${automationResult.error}\n\nTo enable editor automation on macOS, VS Code needs Accessibility permissions.`,
-                      "Open System Preferences",
-                      "Copy to Clipboard Only"
-                    );
-
-                  if (enablePermissions === "Open System Preferences") {
-                    vscode.env.openExternal(
-                      vscode.Uri.parse(
-                        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-                      )
-                    );
-                  } else {
-                    // Fallback: just copy to clipboard
-                    await vscode.env.clipboard.writeText(result.contextString);
-                    vscode.window.showInformationMessage(
-                      "📋 Context copied to clipboard as fallback."
-                    );
-                  }
-                } else {
-                  vscode.window.showErrorMessage(
-                    `❌ Failed to send to editor chat: ${automationResult.error}`
-                  );
-                }
-              }
-            } catch (error) {
-              vscode.window.showErrorMessage(
-                `Error sending context to editor: ${error}`
-              );
-            }
-          }
-          break;
       }
     },
     undefined,
@@ -833,9 +742,8 @@ export function activate(context: vscode.ExtensionContext) {
   configureTokenizerCache();
   tokenCountingService = new TokenCountingService(fileSnapshotService);
   contextGenerationService = new ContextGenerationService(fileSnapshotService);
-  promptPushService = new PromptPushService();
-  editorAutomationService = new EditorAutomationService();
   promptHistoryService = new PromptHistoryService(context);
+  promptExportService = new PromptExportService(context);
 
   // Check if we have workspaces
   if (!workspaceManager.hasWorkspaces()) {
@@ -978,6 +886,28 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  context.subscriptions.push(
+    multiRootProvider.onDidChangeSyncState((payload: TreeSyncStatePayload) => {
+      if (payload.state !== "idle") {
+        invalidateWebviewPreview();
+      }
+      setSyncStatus(getSyncStatusText(payload));
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      if (document.uri.scheme !== "file") {
+        return;
+      }
+
+      const node = multiRootProvider.findNodeByPath(document.uri.fsPath);
+      if (node?.isChecked) {
+        invalidateWebviewPreview();
+      }
+    })
+  );
+
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand("promptTower.showTowerUI", () => {
@@ -1004,10 +934,15 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand("promptTower.copyToClipboard", async () => {
       if (contextGenerationService) {
-        const allRootNodes = multiRootProvider.getRootNodes();
-        await contextGenerationService.copyToClipboard(allRootNodes, {
-          prefix: multiRootProvider.getPromptPrefix(),
-          suffix: multiRootProvider.getPromptSuffix(),
+        await withFreshContext("copy", async ({
+          allRootNodes,
+          prefix,
+          suffix,
+        }) => {
+          await contextGenerationService.copyToClipboard(allRootNodes, {
+            prefix,
+            suffix,
+          });
         });
       }
     }),
@@ -1017,10 +952,15 @@ export function activate(context: vscode.ExtensionContext) {
       "promptTower.copyContextToClipboard",
       async () => {
         if (contextGenerationService) {
-          const allRootNodes = multiRootProvider.getRootNodes();
-          await contextGenerationService.copyToClipboard(allRootNodes, {
-            prefix: multiRootProvider.getPromptPrefix(),
-            suffix: multiRootProvider.getPromptSuffix(),
+          await withFreshContext("copy", async ({
+            allRootNodes,
+            prefix,
+            suffix,
+          }) => {
+            await contextGenerationService.copyToClipboard(allRootNodes, {
+              prefix,
+              suffix,
+            });
           });
         }
       }
@@ -1212,8 +1152,4 @@ function isFileNode(value: unknown): value is FileNode {
     "type" in value &&
     "absolutePath" in value
   );
-}
-
-function isAutomationTarget(value: unknown): value is AutomationTarget {
-  return value === "agent" || value === "ask" || value === "copilot";
 }

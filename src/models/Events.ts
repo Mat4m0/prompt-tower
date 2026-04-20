@@ -47,6 +47,25 @@ export interface WorkspaceChangeEvent {
 }
 
 /**
+ * Ignore pattern change event
+ */
+export interface IgnorePatternChangeEvent {
+  /** Workspace whose ignore sources changed */
+  workspace: import("./Workspace").Workspace;
+}
+
+/**
+ * Tree sync state payload
+ */
+export interface TreeSyncStatePayload {
+  /** Current sync state */
+  state: "idle" | "dirty" | "refreshing";
+
+  /** Timestamp of the last completed refresh */
+  lastRefreshAt?: number;
+}
+
+/**
  * Context generation event
  */
 export interface ContextGenerationEvent {

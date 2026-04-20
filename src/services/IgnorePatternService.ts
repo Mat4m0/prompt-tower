@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import ignore from "ignore";
 import { Workspace, IgnorePatterns } from "../models/Workspace";
+import { IgnorePatternChangeEvent } from "../models/Events";
 import { ALWAYS_IGNORE } from "../utils/alwaysIgnore";
 
 /**
@@ -12,6 +13,9 @@ export class IgnorePatternService {
   private ignoreInstanceCache = new Map<string, ignore.Ignore>();
   private patternCache = new Map<string, IgnorePatterns>();
   private fileWatchers = new Map<string, vscode.FileSystemWatcher[]>();
+  private _onDidChangeIgnorePatterns =
+    new vscode.EventEmitter<IgnorePatternChangeEvent>();
+  readonly onDidChangeIgnorePatterns = this._onDidChangeIgnorePatterns.event;
   
   constructor(private context: vscode.ExtensionContext) {
     this.setupConfigurationWatcher();
@@ -78,19 +82,20 @@ export class IgnorePatternService {
     );
     
     // Common handler for all ignore file changes
-    const handleIgnoreFileChange = (fileName: string) => {
+    const handleIgnoreFileChange = () => {
       this.invalidateCache(workspace);
+      this._onDidChangeIgnorePatterns.fire({ workspace });
     };
     
     // Setup gitignore watchers
-    gitignoreWatcher.onDidCreate(() => handleIgnoreFileChange('.gitignore'));
-    gitignoreWatcher.onDidChange(() => handleIgnoreFileChange('.gitignore'));
-    gitignoreWatcher.onDidDelete(() => handleIgnoreFileChange('.gitignore'));
+    gitignoreWatcher.onDidCreate(() => handleIgnoreFileChange());
+    gitignoreWatcher.onDidChange(() => handleIgnoreFileChange());
+    gitignoreWatcher.onDidDelete(() => handleIgnoreFileChange());
     
     // Setup towerignore watchers
-    towerignoreWatcher.onDidCreate(() => handleIgnoreFileChange('.towerignore'));
-    towerignoreWatcher.onDidChange(() => handleIgnoreFileChange('.towerignore'));
-    towerignoreWatcher.onDidDelete(() => handleIgnoreFileChange('.towerignore'));
+    towerignoreWatcher.onDidCreate(() => handleIgnoreFileChange());
+    towerignoreWatcher.onDidChange(() => handleIgnoreFileChange());
+    towerignoreWatcher.onDidDelete(() => handleIgnoreFileChange());
     
     watchers.push(gitignoreWatcher, towerignoreWatcher);
     this.fileWatchers.set(workspace.id, watchers);
@@ -250,6 +255,8 @@ export class IgnorePatternService {
    * Dispose all resources
    */
   dispose(): void {
+    this._onDidChangeIgnorePatterns.dispose();
+
     // Dispose all file watchers
     for (const watchers of this.fileWatchers.values()) {
       watchers.forEach(watcher => watcher.dispose());

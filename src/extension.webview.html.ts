@@ -3,18 +3,21 @@ import { getWebviewStyles } from "./extension.webview.css";
 export interface WebviewParams {
   nonce: string;
   cspSource: string;
-  chatgptLogo: string;
-  claudeLogo: string;
-  geminiLogo: string;
-  aistudioLogo: string;
-  cursorLogo: string;
   initialPrefix: string;
   initialSuffix: string;
-  platform: string;
-  initialTreeType: "fullFilesAndDirectories" | "fullDirectoriesOnly" | "selectedFilesOnly" | "none";
+  initialTreeType:
+    | "fullFilesAndDirectories"
+    | "fullDirectoriesOnly"
+    | "selectedFilesOnly"
+    | "none";
+  initialExportFileName: string;
+  initialExportFormat: "md" | "txt";
+  initialExportLocation: "prompttower" | "workspaceRoot" | "customFolder";
+  initialCustomFolderPath: string;
+  initialCustomFolderPathMode: "relative" | "absolute";
+  initialIncludeTimestamp: boolean;
   prefixCollapsed: boolean;
   suffixCollapsed: boolean;
-  automationCollapsed: boolean;
 }
 
 export function getWebviewHtml(params: WebviewParams): string {
@@ -27,7 +30,6 @@ export function getWebviewHtml(params: WebviewParams): string {
             <meta http-equiv="Content-Security-Policy" content="
                 default-src 'none';
                 style-src ${params.cspSource} 'unsafe-inline';
-                img-src ${params.cspSource} https: data:;
                 script-src 'nonce-${params.nonce}';
             ">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -46,6 +48,7 @@ export function getWebviewHtml(params: WebviewParams): string {
                   Open File Selector
                 </button>
               </div>
+
               <div id="token-info">
                   <span>Selected Tokens:</span>
                   <span id="token-count">0</span>
@@ -53,12 +56,12 @@ export function getWebviewHtml(params: WebviewParams): string {
                   <span id="token-status"></span>
               </div>
 
-              <div style="margin-bottom: 1em;">
-                  <button id="clearButton">Clear Selected</button> 
+              <div class="toolbar-row">
+                  <button id="clearButton">Clear Selected</button>
                   <button id="resetAllButton">Reset All</button>
               </div>
 
-              <div id="prompt-prefix-container" class="textarea-container collapsible${params.prefixCollapsed ? ' collapsed' : ''}">
+              <div id="prompt-prefix-container" class="textarea-container collapsible${params.prefixCollapsed ? " collapsed" : ""}">
                 <div class="section-header" data-toggle="prefix">
                   <span class="collapse-icon">▶</span>
                   <label for="prompt-prefix">Prompt Prefix</label>
@@ -69,7 +72,7 @@ export function getWebviewHtml(params: WebviewParams): string {
                 </div>
               </div>
 
-              <div id="prompt-suffix-container" class="textarea-container collapsible${params.suffixCollapsed ? ' collapsed' : ''}">
+              <div id="prompt-suffix-container" class="textarea-container collapsible${params.suffixCollapsed ? " collapsed" : ""}">
                 <div class="section-header" data-toggle="suffix">
                   <span class="collapse-icon">▶</span>
                   <label for="prompt-suffix">Prompt Suffix</label>
@@ -81,7 +84,6 @@ export function getWebviewHtml(params: WebviewParams): string {
               </div>
 
               <div class="action-groups">
-                <!-- Create Context Group -->
                 <div class="action-group">
                   <div class="action-buttons">
                     <button id="createContextButton">Create Context</button>
@@ -95,10 +97,10 @@ export function getWebviewHtml(params: WebviewParams): string {
                     <div class="tree-type-selector">
                       <label for="treeTypeSelect">Tree:</label>
                       <select id="treeTypeSelect">
-                        <option value="selectedFilesOnly"${params.initialTreeType === 'selectedFilesOnly' ? ' selected' : ''}>Selected files only</option>
-                        <option value="fullFilesAndDirectories"${params.initialTreeType === 'fullFilesAndDirectories' ? ' selected' : ''}>Full repo</option>
-                        <option value="fullDirectoriesOnly"${params.initialTreeType === 'fullDirectoriesOnly' ? ' selected' : ''}>Directories only</option>
-                        <option value="none"${params.initialTreeType === 'none' ? ' selected' : ''}>None</option>
+                        <option value="selectedFilesOnly"${params.initialTreeType === "selectedFilesOnly" ? " selected" : ""}>Selected files only</option>
+                        <option value="fullFilesAndDirectories"${params.initialTreeType === "fullFilesAndDirectories" ? " selected" : ""}>Full repo</option>
+                        <option value="fullDirectoriesOnly"${params.initialTreeType === "fullDirectoriesOnly" ? " selected" : ""}>Directories only</option>
+                        <option value="none"${params.initialTreeType === "none" ? " selected" : ""}>None</option>
                       </select>
                     </div>
                     <label class="checkbox-container">
@@ -113,184 +115,63 @@ export function getWebviewHtml(params: WebviewParams): string {
                       <span class="feature-badge">Soon</span>
                     </label>
                   </div>
+                  <div class="sync-status-row">
+                    <span id="sync-status"></span>
+                  </div>
                 </div>
 
-                <!-- Automation Section (collapsible, inline) -->
-                <div id="automation-section" class="automation-section inline${params.automationCollapsed ? ' collapsed' : ''}">
-                  <div class="section-header" data-toggle="automation">
-                    <span class="collapse-icon">▶</span>
-                    <h3>Automation</h3>
+                <div class="action-group">
+                  <div class="action-buttons">
+                    <button id="savePromptFileButton">Save Prompt File</button>
                   </div>
-                  <div class="section-content">
-                    <div class="automation-groups">
-                    <!-- Send to Editor Group (macOS working, Windows coming soon) -->
-                    ${params.platform === 'darwin' ? `
-                    <div class="action-group">
-                      <div class="action-buttons">
-                        <div class="send-to-editor-group">
-                          <button id="sendToEditorButton" class="send-to-editor-btn">
-                            <img src="${params.cursorLogo}" alt="Cursor" class="editor-logo">
-                            Send to Chat
-                          </button>
-                        </div>
-                      </div>
-                      <div class="action-options">
-                        <div class="send-to-options">
-                          <span style="margin-right: 8px; font-size: 0.9em; color: var(--vscode-descriptionForeground);">Send to:</span>
-                          <label class="radio-container">
-                            <input type="radio" name="sendTarget" value="agent" checked>
-                            <span class="radio-checkmark"></span>
-                            Agent
-                          </label>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="sendTarget" value="ask" disabled>
-                            <span class="radio-checkmark"></span>
-                            Ask
-                            <span class="feature-badge">Soon</span>
-                          </label>
-                        </div>
-                        <div class="chat-target-options">
-                          <span style="margin-right: 8px; font-size: 0.9em; color: var(--vscode-descriptionForeground);">Chat:</span>
-                          <label class="radio-container">
-                            <input type="radio" name="chatTarget" value="new" checked>
-                            <span class="radio-checkmark"></span>
-                            New
-                          </label>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="chatTarget" value="current" disabled>
-                            <span class="radio-checkmark"></span>
-                            Current
-                            <span class="feature-badge">Soon</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    ` : params.platform === 'win32' ? `
-                    <div class="action-group windows-preview">
-                      <div class="action-buttons">
-                        <div class="send-to-editor-group">
-                          <button class="send-to-editor-btn disabled" disabled>
-                            <img src="${params.cursorLogo}" alt="Cursor" class="editor-logo">
-                            Send to Chat
-                            <span class="feature-badge">Windows Soon</span>
-                          </button>
-                        </div>
-                      </div>
-                      <div class="action-options">
-                        <div class="send-to-options">
-                          <span style="margin-right: 8px; font-size: 0.9em; color: var(--vscode-descriptionForeground);">Send to:</span>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="sendTarget" value="agent" checked disabled>
-                            <span class="radio-checkmark"></span>
-                            Agent
-                          </label>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="sendTarget" value="ask" disabled>
-                            <span class="radio-checkmark"></span>
-                            Ask
-                            <span class="feature-badge">Soon</span>
-                          </label>
-                        </div>
-                        <div class="chat-target-options">
-                          <span style="margin-right: 8px; font-size: 0.9em; color: var(--vscode-descriptionForeground);">Chat:</span>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="chatTarget" value="new" checked disabled>
-                            <span class="radio-checkmark"></span>
-                            New
-                          </label>
-                          <label class="radio-container disabled">
-                            <input type="radio" name="chatTarget" value="current" disabled>
-                            <span class="radio-checkmark"></span>
-                            Current
-                            <span class="feature-badge">Soon</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    ` : ''}
-
-                    <!-- Push Prompt Group (macOS working, Windows coming soon) -->
-                    ${params.platform === 'darwin' ? `
-                    <div class="action-group">
-                      <div class="action-buttons">
-                        <div class="push-prompt-group">
-                          <button id="pushPromptButton" class="push-prompt-btn">Push Prompt</button>
-                          <div class="provider-dropdown">
-                            <button class="provider-dropdown-btn" id="providerDropdownBtn">
-                              <img id="selectedProviderLogo" src="${params.geminiLogo}" alt="Selected Provider" class="selected-provider-logo">
-                              <svg viewBox="0 0 16 16">
-                                <path d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"></path>
-                              </svg>
-                            </button>
-                            <div class="provider-dropdown-content" id="providerDropdownContent">
-                              <button class="provider-option" data-provider="chatgpt">
-                                <img src="${params.chatgptLogo}" alt="ChatGPT" class="provider-logo">
-                                <span class="provider-name">ChatGPT</span>
-                              </button>
-                              <button class="provider-option" data-provider="claude">
-                                <img src="${params.claudeLogo}" alt="Claude" class="provider-logo">
-                                <span class="provider-name">Claude</span>
-                              </button>
-                              <button class="provider-option" data-provider="gemini">
-                                <img src="${params.geminiLogo}" alt="Gemini" class="provider-logo">
-                                <span class="provider-name">Gemini</span>
-                              </button>
-                              <button class="provider-option" data-provider="aistudio">
-                                <img src="${params.aistudioLogo}" alt="AI Studio" class="provider-logo">
-                                <span class="provider-name">AI Studio</span>
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="action-options">
-                        <label class="checkbox-container">
-                          <input type="checkbox" id="autoSubmitCheckbox" checked>
-                          <span class="checkmark"></span>
-                          Auto-submit
-                        </label>
-                        <span class="option-separator">•</span>
-                        <a href="#" id="helpfulInfoLink" class="helpful-info-link">helpful info</a>
-                      </div>
-                    </div>
-                    ` : params.platform === 'win32' ? `
-                    <div class="action-group windows-preview">
-                      <div class="action-buttons">
-                        <div class="push-prompt-group">
-                          <button class="push-prompt-btn disabled" disabled>
-                            Push Prompt
-                            <span class="feature-badge">Windows Soon</span>
-                          </button>
-                          <button class="provider-dropdown-btn disabled" disabled>
-                            <img src="${params.geminiLogo}" alt="Selected Provider" class="selected-provider-logo">
-                            <svg viewBox="0 0 16 16">
-                              <path d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"></path>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      <div class="action-options">
-                        <label class="checkbox-container disabled">
-                          <input type="checkbox" checked disabled>
-                          <span class="checkmark"></span>
-                          Auto-submit
-                        </label>
-                        <span class="option-separator">•</span>
-                        <span style="color: var(--vscode-descriptionForeground); font-size: 0.9em;">helpful info</span>
-                      </div>
-                    </div>
-                    ` : ''}
-
-                    <!-- Linux users notice -->
-                    ${params.platform !== 'darwin' && params.platform !== 'win32' ? `
-                    <div class="action-group">
-                      <div style="padding: 12px; text-align: center; color: var(--vscode-descriptionForeground); font-style: italic;">
-                        Editor automation features are available on macOS and Windows only.
-                        <br>
-                        Use "Create Context" to copy content manually.
-                      </div>
-                    </div>
-                    ` : ''}
+                  <div class="export-options-grid">
+                    <label class="export-field">
+                      <span>Filename</span>
+                      <input type="text" id="exportFileName" value="${params.initialExportFileName}" spellcheck="false">
+                    </label>
+                    <label class="export-field">
+                      <span>Format</span>
+                      <select id="exportFormatSelect">
+                        <option value="md"${params.initialExportFormat === "md" ? " selected" : ""}>.md</option>
+                        <option value="txt"${params.initialExportFormat === "txt" ? " selected" : ""}>.txt</option>
+                      </select>
+                    </label>
+                    <label class="export-field">
+                      <span>Location</span>
+                      <select id="exportLocationSelect">
+                        <option value="prompttower"${params.initialExportLocation === "prompttower" ? " selected" : ""}>.prompttower/prompts</option>
+                        <option value="workspaceRoot"${params.initialExportLocation === "workspaceRoot" ? " selected" : ""}>Project root</option>
+                        <option value="customFolder"${params.initialExportLocation === "customFolder" ? " selected" : ""}>Custom folder</option>
+                      </select>
+                    </label>
+                    <label class="checkbox-container export-checkbox">
+                      <input type="checkbox" id="exportTimestampCheckbox"${params.initialIncludeTimestamp ? " checked" : ""}>
+                      <span class="checkmark"></span>
+                      Append timestamp
+                    </label>
+                  </div>
+                  <label id="customExportPathField" class="export-field custom-export-path-field${params.initialExportLocation === "customFolder" ? "" : " hidden"}">
+                    <span>Path type</span>
+                    <select id="customExportPathModeSelect">
+                      <option value="relative"${params.initialCustomFolderPathMode === "relative" ? " selected" : ""}>Relative</option>
+                      <option value="absolute"${params.initialCustomFolderPathMode === "absolute" ? " selected" : ""}>Absolute</option>
+                    </select>
+                    <span>Custom folder</span>
+                    <input
+                      type="text"
+                      id="customExportPathInput"
+                      value="${params.initialCustomFolderPath}"
+                      placeholder="${params.initialCustomFolderPathMode === "absolute" ? "/Users/me/prompts" : "prompts/chat-exports"}"
+                      spellcheck="false"
+                    >
+                    <small id="customExportPathHelp" class="export-help-text">${params.initialCustomFolderPathMode === "absolute" ? "Uses the absolute filesystem path as entered." : "Relative to the project root."}</small>
+                  </label>
+                  <div class="export-status-row">
+                    <span id="export-status">Saves the generated prompt as a real file.</span>
+                    <div id="export-actions" class="export-actions hidden">
+                      <a id="openSavedPromptFile">Open</a>
+                      <a id="revealSavedPromptFile">Reveal</a>
+                      <a id="copySavedPromptFilePath">Copy Path</a>
                     </div>
                   </div>
                 </div>
@@ -305,191 +186,83 @@ export function getWebviewHtml(params: WebviewParams): string {
                   <textarea id="context-preview"></textarea>
               </div>
             </div>
-            
-            <!-- Modal Overlay -->
-            <div id="modal-overlay" class="modal-overlay" style="display: none;">
-              <div class="modal-container">
-                <div class="modal-header">
-                  <h2 id="modal-title">Modal Title</h2>
-                  <button id="modal-close" class="modal-close">&times;</button>
-                </div>
-                <div class="modal-content" id="modal-content">
-                  <!-- Dynamic content will be inserted here -->
-                </div>
-                <div class="modal-footer" id="modal-footer">
-                  <!-- Optional footer buttons -->
-                </div>
-              </div>
-            </div>
+
             <script nonce="${params.nonce}">
                 (function() {
                     const vscode = acquireVsCodeApi();
-                    
+
                     const tokenCountElement = document.getElementById('token-count');
                     const tokenStatusElement = document.getElementById('token-status');
                     const spinnerElement = document.getElementById('spinner');
-                    const prefixTextArea = document.getElementById("prompt-prefix");
-                    const suffixTextArea = document.getElementById("prompt-suffix");
-                    const previewTextArea = document.getElementById("context-preview");
-                    const previewContainer = document.getElementById("preview-container");
-                    const previewStatusElement = document.getElementById("preview-status");
-                    
-                    // Create Context controls
+                    const prefixTextArea = document.getElementById('prompt-prefix');
+                    const suffixTextArea = document.getElementById('prompt-suffix');
+                    const previewTextArea = document.getElementById('context-preview');
+                    const previewContainer = document.getElementById('preview-container');
+                    const previewStatusElement = document.getElementById('preview-status');
+                    const syncStatusElement = document.getElementById('sync-status');
+                    const createContextButton = document.getElementById('createContextButton');
                     const copyToClipboardCheckbox = document.getElementById('copyToClipboardCheckbox');
                     const treeTypeSelect = document.getElementById('treeTypeSelect');
                     const minifyCheckbox = document.getElementById('minifyCheckbox');
                     const removeCommentsCheckbox = document.getElementById('removeCommentsCheckbox');
-                    
-                    // Push Prompt controls
-                    const autoSubmitCheckbox = document.getElementById('autoSubmitCheckbox');
-                    const helpfulInfoLink = document.getElementById('helpfulInfoLink');
-                    
-                    // Modal elements
-                    const modalOverlay = document.getElementById('modal-overlay');
-                    const modalTitle = document.getElementById('modal-title');
-                    const modalContent = document.getElementById('modal-content');
-                    const modalFooter = document.getElementById('modal-footer');
-                    const modalClose = document.getElementById('modal-close');
-                    
-                    // Provider dropdown functionality
-                    const providerDropdownBtn = document.getElementById('providerDropdownBtn');
-                    const providerDropdownContent = document.getElementById('providerDropdownContent');
-                    const pushPromptButton = document.getElementById('pushPromptButton');
-                    const selectedProviderLogo = document.getElementById('selectedProviderLogo');
-                    let selectedProvider = 'gemini'; // Default provider
-                    
-                    // Provider logo mapping
-                    const providerLogos = {
-                        'chatgpt': '${params.chatgptLogo}',
-                        'claude': '${params.claudeLogo}',
-                        'gemini': '${params.geminiLogo}',
-                        'aistudio': '${params.aistudioLogo}'
-                    };
-                    
-                    // Toggle dropdown
-                    providerDropdownBtn?.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        providerDropdownContent?.classList.toggle('show');
-                    });
-                    
-                    // Close dropdown when clicking outside
-                    document.addEventListener('click', () => {
-                        providerDropdownContent?.classList.remove('show');
-                    });
-                    
-                    // Handle provider selection
-                    document.querySelectorAll('.provider-option').forEach(option => {
-                        option.addEventListener('click', (e) => {
-                            const provider = e.currentTarget.getAttribute('data-provider');
-                            if (provider && providerLogos[provider]) {
-                                selectedProvider = provider;
-                                // Update the displayed logo
-                                if (selectedProviderLogo) {
-                                    selectedProviderLogo.src = providerLogos[provider];
-                                    selectedProviderLogo.alt = provider.charAt(0).toUpperCase() + provider.slice(1);
-                                }
-                                providerDropdownContent?.classList.remove('show');
-                            }
-                        });
-                    });
-                    
-                    // Push Prompt button functionality
-                    pushPromptButton?.addEventListener('click', (e) => {
-                        // Prevent action if button is disabled (Windows preview)
-                        if (e.target.disabled || e.target.closest('.windows-preview')) {
-                            return;
-                        }
-                        
-                        // Add shimmer effect like create context
-                        if (previewContainer) {
-                            previewContainer.classList.add('cyber-generating');
-                            // Remove effect after animation completes
-                            setTimeout(() => {
-                                previewContainer.classList.remove('cyber-generating');
-                            }, 750);
-                        }
-                        
-                        const pushRequest = { 
-                            command: "pushPrompt", 
-                            provider: selectedProvider,
-                            autoSubmit: autoSubmitCheckbox?.checked ?? true
-                        };
-                        
-                        // Store the request for potential onboarding flow
-                        window.lastPushPromptRequest = pushRequest;
-                        
-                        vscode.postMessage(pushRequest);
-                    });
-                    
-                    // Modal functionality
-                    function showModal(type, title, content, footerButtons = []) {
-                        if (modalOverlay && modalTitle && modalContent && modalFooter) {
-                            modalTitle.textContent = title;
-                            modalContent.innerHTML = content;
-                            
-                            // Clear and add footer buttons
-                            modalFooter.innerHTML = '';
-                            footerButtons.forEach(button => {
-                                const btn = document.createElement('button');
-                                btn.textContent = button.text;
-                                btn.onclick = button.onClick;
-                                if (button.primary) {
-                                    btn.style.background = 'var(--vscode-button-background)';
-                                    btn.style.color = 'var(--vscode-button-foreground)';
-                                }
-                                modalFooter.appendChild(btn);
+                    const savePromptFileButton = document.getElementById('savePromptFileButton');
+                    const exportFileNameInput = document.getElementById('exportFileName');
+                    const exportFormatSelect = document.getElementById('exportFormatSelect');
+                    const exportLocationSelect = document.getElementById('exportLocationSelect');
+                    const customExportPathField = document.getElementById('customExportPathField');
+                    const customExportPathModeSelect = document.getElementById('customExportPathModeSelect');
+                    const customExportPathInput = document.getElementById('customExportPathInput');
+                    const customExportPathHelp = document.getElementById('customExportPathHelp');
+                    const exportTimestampCheckbox = document.getElementById('exportTimestampCheckbox');
+                    const exportStatusElement = document.getElementById('export-status');
+                    const exportActionsElement = document.getElementById('export-actions');
+                    let lastSavedPromptFilePath = '';
+
+                    function setActionButtonsBusy(isBusy) {
+                        [createContextButton, savePromptFileButton]
+                            .filter(Boolean)
+                            .forEach((button) => {
+                                button.disabled = isBusy;
                             });
-                            
-                            modalOverlay.style.display = 'flex';
+                    }
+
+                    function getExportOptions() {
+                        return {
+                            fileName: exportFileNameInput?.value || 'prompt',
+                            format: exportFormatSelect?.value || 'md',
+                            location: exportLocationSelect?.value || 'prompttower',
+                            customFolderPath: customExportPathInput?.value ?? '',
+                            customFolderPathMode: customExportPathModeSelect?.value || 'relative',
+                            includeTimestamp: exportTimestampCheckbox?.checked ?? true
+                        };
+                    }
+
+                    function updateCustomFolderPathModeUi() {
+                        const isAbsolute = customExportPathModeSelect?.value === 'absolute';
+                        if (customExportPathInput) {
+                            customExportPathInput.placeholder = isAbsolute ? '/Users/me/prompts' : 'prompts/chat-exports';
+                        }
+                        if (customExportPathHelp) {
+                            customExportPathHelp.textContent = isAbsolute
+                                ? 'Uses the absolute filesystem path as entered.'
+                                : 'Relative to the project root.';
                         }
                     }
-                    
-                    function hideModal() {
-                        if (modalOverlay) {
-                            modalOverlay.style.display = 'none';
-                        }
+
+                    function updateCustomFolderVisibility() {
+                        const showCustomFolder = exportLocationSelect?.value === 'customFolder';
+                        customExportPathField?.classList.toggle('hidden', !showCustomFolder);
+                        updateCustomFolderPathModeUi();
                     }
-                    
-                    // Modal event handlers
-                    modalClose?.addEventListener('click', hideModal);
-                    modalOverlay?.addEventListener('click', (e) => {
-                        if (e.target === modalOverlay) {
-                            hideModal();
-                        }
-                    });
-                    
-                    // Helpful info link handler
-                    helpfulInfoLink?.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        showModal('help', 'Automation Help', \`
-                            <h3>Prompt Pushing Settings</h3>
-                            <p><strong>Auto-submit:</strong> When checked (default), prompts are automatically submitted after pasting. When unchecked, prompts are only pasted - you submit manually.</p>
-                            
-                            <h3>Configuration</h3>
-                            <p>You can customize automation behavior in VS Code settings:</p>
-                            <ul>
-                                <li><code>promptTower.automation.defaultBrowser</code> - Choose Chrome or system default</li>
-                                <li><code>promptTower.automation.automationDelay</code> - Delay before automation (increase if pages load slowly)</li>
-                                <li><code>promptTower.automation.focusDelay</code> - Delay between automation steps</li>
-                            </ul>
-                            
-                            <h3>macOS Permissions</h3>
-                            <p>Automation requires Accessibility permissions for VS Code. If automation fails, check System Preferences → Security & Privacy → Privacy → Accessibility.</p>
-                            
-                            <h3>Troubleshooting</h3>
-                            <p>If automation doesn't work:</p>
-                            <ul>
-                                <li>Increase automation delays in settings</li>
-                                <li>Try unchecking auto-submit and submit manually</li>
-                                <li>Ensure you're logged into the AI service</li>
-                                <li>Check that the browser page loaded completely</li>
-                            </ul>
-                        \`, [
-                            { text: 'Close', onClick: hideModal }
-                        ]);
-                    });
-                    
-                    // Event listeners
+
+                    function syncExportOptions() {
+                        updateCustomFolderVisibility();
+                        vscode.postMessage({
+                            command: 'updateExportOptions',
+                            options: getExportOptions()
+                        });
+                    }
+
                     window.addEventListener('message', event => {
                         const message = event.data;
                         switch (message.command) {
@@ -519,11 +292,42 @@ export function getWebviewHtml(params: WebviewParams): string {
                             case 'updatePreview':
                                 if (message.payload && previewTextArea) {
                                     previewTextArea.value = message.payload.context;
-                                    // Clear invalidation state when preview is updated
                                     if (previewContainer && previewStatusElement) {
                                         previewContainer.classList.remove('invalidated');
                                         previewStatusElement.textContent = '';
                                     }
+                                }
+                                break;
+                            case 'updateExportOptions':
+                                if (message.payload) {
+                                    if (exportFileNameInput && typeof message.payload.fileName === 'string') {
+                                        exportFileNameInput.value = message.payload.fileName;
+                                    }
+                                    if (exportFormatSelect && typeof message.payload.format === 'string') {
+                                        exportFormatSelect.value = message.payload.format;
+                                    }
+                                    if (exportLocationSelect && typeof message.payload.location === 'string') {
+                                        exportLocationSelect.value = message.payload.location;
+                                    }
+                                    if (customExportPathInput && typeof message.payload.customFolderPath === 'string') {
+                                        customExportPathInput.value = message.payload.customFolderPath;
+                                    }
+                                    if (customExportPathModeSelect && typeof message.payload.customFolderPathMode === 'string') {
+                                        customExportPathModeSelect.value = message.payload.customFolderPathMode;
+                                    }
+                                    if (exportTimestampCheckbox && typeof message.payload.includeTimestamp === 'boolean') {
+                                        exportTimestampCheckbox.checked = message.payload.includeTimestamp;
+                                    }
+                                    updateCustomFolderVisibility();
+                                }
+                                break;
+                            case 'promptFileSaved':
+                                if (message.payload && typeof message.payload.filePath === 'string') {
+                                    lastSavedPromptFilePath = message.payload.filePath;
+                                    if (exportStatusElement) {
+                                        exportStatusElement.textContent = 'Saved ' + message.payload.fileName;
+                                    }
+                                    exportActionsElement?.classList.remove('hidden');
                                 }
                                 break;
                             case 'treeVisibilityChanged':
@@ -533,113 +337,53 @@ export function getWebviewHtml(params: WebviewParams): string {
                                 }
                                 break;
                             case 'invalidatePreview':
-                                // Show visual warning that context is out of sync
                                 if (previewContainer && previewStatusElement) {
                                     previewContainer.classList.add('invalidated');
                                     previewStatusElement.textContent = '⚠️ Context may be out of sync. Click "Create Context" to update.';
                                 }
                                 break;
-                            case 'setCollapseState':
-                                // Update collapse states from extension
-                                const prefixContainer = document.getElementById('prompt-prefix-container');
-                                const suffixContainer = document.getElementById('prompt-suffix-container');
-                                const automationSection = document.getElementById('automation-section');
-                                if (prefixContainer) {
-                                    if (message.prefix) {
-                                        prefixContainer.classList.add('collapsed');
-                                    } else {
-                                        prefixContainer.classList.remove('collapsed');
+                            case 'syncStatus':
+                                if (message.payload) {
+                                    if (syncStatusElement) {
+                                        syncStatusElement.textContent = message.payload.text || '';
                                     }
+                                    setActionButtonsBusy(message.payload.busy === true);
                                 }
-                                if (suffixContainer) {
-                                    if (message.suffix) {
-                                        suffixContainer.classList.add('collapsed');
-                                    } else {
-                                        suffixContainer.classList.remove('collapsed');
-                                    }
-                                }
-                                if (automationSection) {
-                                    if (message.automation) {
-                                        automationSection.classList.add('collapsed');
-                                    } else {
-                                        automationSection.classList.remove('collapsed');
-                                    }
-                                }
-                                break;
-                            case 'showOnboardingModal':
-                                // Show the first-time onboarding modal
-                                showModal('onboarding', 'Welcome to Automated Prompt Pushing!', \`
-                                    <h3>🚀 Getting Started</h3>
-                                    <p>You're about to use automated prompt pushing for the first time! This feature will:</p>
-                                    <ul>
-                                        <li>Open your selected AI provider in the browser</li>
-                                        <li>Automatically paste your generated prompt</li>
-                                        <li>Submit it for you (if auto-submit is enabled)</li>
-                                    </ul>
-                                    
-                                    <h3>⚠️ macOS Permissions Required</h3>
-                                    <p><strong>Important:</strong> On macOS, this feature requires Accessibility permissions for VS Code to control your browser.</p>
-                                    <p>If automation fails, you'll be guided to enable these permissions in System Preferences.</p>
-                                    
-                                    <h3>💡 Tips</h3>
-                                    <ul>
-                                        <li>Make sure you're logged into your AI provider</li>
-                                        <li>The "Auto-submit" checkbox controls whether prompts are submitted automatically</li>
-                                        <li>Click "helpful info" anytime for more configuration options</li>
-                                    </ul>
-                                    
-                                    <p><strong>Ready to try it?</strong> Click "Continue" to proceed with your prompt push!</p>
-                                \`, [
-                                    { 
-                                        text: 'Continue', 
-                                        primary: true,
-                                        onClick: () => {
-                                            hideModal();
-                                            // Store the original request and send it after onboarding completion
-                                            const originalRequest = window.lastPushPromptRequest;
-                                            vscode.postMessage({ 
-                                                command: 'completeOnboarding',
-                                                originalRequest: originalRequest
-                                            });
-                                        }
-                                    },
-                                    { 
-                                        text: 'Cancel', 
-                                        onClick: hideModal 
-                                    }
-                                ]);
                                 break;
                         }
                     });
-                    
-                    // Input event listeners
-                    if (prefixTextArea) {
-                        prefixTextArea.addEventListener("input", (e) => {
-                            vscode.postMessage({ command: "updatePrefix", text: e.target.value });
-                        });
-                    }
-                    if (suffixTextArea) {
-                        suffixTextArea.addEventListener("input", (e) => {
-                            vscode.postMessage({ command: "updateSuffix", text: e.target.value });
-                        });
-                    }
-                    
-                    // Button event listeners
-                    document.getElementById('createContextButton')?.addEventListener("click", () => {
-                        // Show toast notification
-                        vscode.postMessage({ command: "showToast", payload: { message: "Generating context..." } });
-                        
-                        // Add shimmer effect
+
+                    prefixTextArea?.addEventListener('input', (e) => {
+                        vscode.postMessage({ command: 'updatePrefix', text: e.target.value });
+                    });
+
+                    suffixTextArea?.addEventListener('input', (e) => {
+                        vscode.postMessage({ command: 'updateSuffix', text: e.target.value });
+                    });
+
+                    exportFileNameInput?.addEventListener('input', syncExportOptions);
+                    exportFormatSelect?.addEventListener('change', syncExportOptions);
+                    exportLocationSelect?.addEventListener('change', syncExportOptions);
+                    customExportPathModeSelect?.addEventListener('change', syncExportOptions);
+                    customExportPathInput?.addEventListener('input', syncExportOptions);
+                    exportTimestampCheckbox?.addEventListener('change', syncExportOptions);
+
+                    createContextButton?.addEventListener('click', () => {
+                        if (createContextButton.disabled) {
+                            return;
+                        }
+
+                        vscode.postMessage({ command: 'showToast', payload: { message: 'Generating context...' } });
+
                         if (previewContainer) {
                             previewContainer.classList.add('cyber-generating');
-                            // Remove effect after animation completes
                             setTimeout(() => {
                                 previewContainer.classList.remove('cyber-generating');
                             }, 750);
                         }
-                        
-                        vscode.postMessage({ 
-                            command: "createContext",
+
+                        vscode.postMessage({
+                            command: 'createContext',
                             options: {
                                 treeType: treeTypeSelect?.value || 'fullFilesAndDirectories',
                                 copyToClipboard: copyToClipboardCheckbox?.checked ?? true,
@@ -648,96 +392,91 @@ export function getWebviewHtml(params: WebviewParams): string {
                             }
                         });
                     });
-                    
-                    
-                    document.getElementById('clearButton')?.addEventListener("click", () => {
-                        vscode.postMessage({ command: "clearSelections" });
-                    });
-                    
-                    document.getElementById('resetAllButton')?.addEventListener("click", () => {
-                        vscode.postMessage({ command: "resetAll" });
-                    });
-                    
-                    document.getElementById('showTreeButton')?.addEventListener("click", () => {
-                        vscode.postMessage({ command: "showTree" });
-                    });
-                    
-                    document.getElementById('sendToEditorButton')?.addEventListener("click", (e) => {
-                        // Prevent action if button is disabled (Windows preview)
-                        if (e.target.disabled || e.target.closest('.windows-preview')) {
+
+                    savePromptFileButton?.addEventListener('click', () => {
+                        if (savePromptFileButton.disabled) {
                             return;
                         }
-                        
-                        // Add shimmer effect like other buttons
+
                         if (previewContainer) {
                             previewContainer.classList.add('cyber-generating');
-                            // Remove effect after animation completes
                             setTimeout(() => {
                                 previewContainer.classList.remove('cyber-generating');
                             }, 750);
                         }
-                        
-                        // Get selected target from radio buttons
-                        const selectedTarget = document.querySelector('input[name="sendTarget"]:checked')?.value || 'agent';
-                        vscode.postMessage({ 
-                            command: "sendToEditor",
-                            target: selectedTarget
+
+                        if (exportStatusElement) {
+                            exportStatusElement.textContent = 'Saving prompt file...';
+                        }
+
+                        vscode.postMessage({
+                            command: 'savePromptFile',
+                            options: {
+                                ...getExportOptions(),
+                                treeType: treeTypeSelect?.value || 'fullFilesAndDirectories',
+                                minify: minifyCheckbox?.checked ?? false
+                            }
                         });
                     });
-                    
-                    // Preview action event listeners  
-                    document.getElementById('copy-preview-content')?.addEventListener("click", () => {
+
+                    document.getElementById('clearButton')?.addEventListener('click', () => {
+                        vscode.postMessage({ command: 'clearSelections' });
+                    });
+
+                    document.getElementById('resetAllButton')?.addEventListener('click', () => {
+                        vscode.postMessage({ command: 'resetAll' });
+                    });
+
+                    document.getElementById('showTreeButton')?.addEventListener('click', () => {
+                        vscode.postMessage({ command: 'showTree' });
+                    });
+
+                    document.getElementById('copy-preview-content')?.addEventListener('click', () => {
                         if (previewTextArea) {
                             previewTextArea.select();
-                            document.execCommand("copy");
-                            // Show toast notification
-                            vscode.postMessage({ command: "showToast", payload: { message: "Context copied to clipboard." } });
+                            document.execCommand('copy');
+                            vscode.postMessage({ command: 'showToast', payload: { message: 'Context copied to clipboard.' } });
                         }
                     });
-                    
-                    document.getElementById('expand-preview')?.addEventListener("click", () => {
+
+                    document.getElementById('expand-preview')?.addEventListener('click', () => {
                         if (previewContainer) {
                             const expandButton = document.getElementById('expand-preview');
-                            previewContainer.classList.toggle("expanded");
-                            
-                            // Update button text and handle scrolling
-                            if (previewContainer.classList.contains("expanded")) {
-                              if (expandButton) expandButton.textContent = "Collapse";
-                              setTimeout(() => {
-                                window.scrollBy({
-                                  top: 492, // 748-256 = height difference
+                            previewContainer.classList.toggle('expanded');
+
+                            if (previewContainer.classList.contains('expanded')) {
+                                if (expandButton) expandButton.textContent = 'Collapse';
+                                setTimeout(() => {
+                                    window.scrollBy({
+                                      top: 492,
+                                      behavior: 'smooth'
+                                    });
+                                }, 300);
+                            } else {
+                                if (expandButton) expandButton.textContent = 'Expand';
+                                window.scrollTo({
+                                  top: 0,
                                   behavior: 'smooth'
                                 });
-                              }, 300); // Wait for 0.3s CSS transition to finish
-                            } else {
-                              if (expandButton) expandButton.textContent = "Expand";
-                              window.scrollTo({
-                                top: 0,
-                                behavior: 'smooth'
-                              });
                             }
                         }
                     });
-                    
-                    // Section header collapse toggle handlers
+
                     document.querySelectorAll('.section-header').forEach(header => {
                         header.addEventListener('click', () => {
                             const section = header.getAttribute('data-toggle');
-                            // Find the collapsible container (could be textarea-container or automation-section)
-                            const container = header.closest('.textarea-container') || header.closest('.automation-section');
+                            const container = header.closest('.textarea-container');
                             if (container && section) {
                                 container.classList.toggle('collapsed');
-                                const isCollapsed = container.classList.contains('collapsed');
                                 vscode.postMessage({
                                     command: 'toggleCollapse',
                                     section: section,
-                                    collapsed: isCollapsed
+                                    collapsed: container.classList.contains('collapsed')
                                 });
                             }
                         });
                     });
 
-                    // Select Previous link handlers
                     document.querySelectorAll('.select-previous-link').forEach(link => {
                         link.addEventListener('click', (e) => {
                             e.preventDefault();
@@ -749,9 +488,40 @@ export function getWebviewHtml(params: WebviewParams): string {
                         });
                     });
 
-                    vscode.postMessage({ command: "webviewReady" });
+                    document.getElementById('openSavedPromptFile')?.addEventListener('click', () => {
+                        if (!lastSavedPromptFilePath) {
+                            return;
+                        }
+                        vscode.postMessage({
+                            command: 'openSavedPromptFile',
+                            filePath: lastSavedPromptFilePath
+                        });
+                    });
+
+                    document.getElementById('revealSavedPromptFile')?.addEventListener('click', () => {
+                        if (!lastSavedPromptFilePath) {
+                            return;
+                        }
+                        vscode.postMessage({
+                            command: 'revealSavedPromptFile',
+                            filePath: lastSavedPromptFilePath
+                        });
+                    });
+
+                    document.getElementById('copySavedPromptFilePath')?.addEventListener('click', () => {
+                        if (!lastSavedPromptFilePath) {
+                            return;
+                        }
+                        vscode.postMessage({
+                            command: 'copySavedPromptFilePath',
+                            filePath: lastSavedPromptFilePath
+                        });
+                    });
+
+                    vscode.postMessage({ command: 'webviewReady' });
+                    updateCustomFolderVisibility();
                 }());
-              </script>
-          </body>
+            </script>
+        </body>
         </html>`;
 }

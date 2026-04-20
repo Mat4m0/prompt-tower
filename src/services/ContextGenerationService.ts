@@ -22,6 +22,16 @@ export interface ContextGenerationResult {
   tokenCount?: number;
 }
 
+export interface GenerateContextOptions {
+  prefix?: string;
+  suffix?: string;
+  primaryWorkspaceRoot?: string;
+  treeType?: ContextConfig["projectTree"]["type"];
+  minify?: boolean;
+  outputFileName?: string;
+  timestamp?: string;
+}
+
 interface StructuredFilePath {
   origin: string;
   tree: string;
@@ -101,13 +111,7 @@ export class ContextGenerationService {
 
   async generateContext(
     fileNodes: FileNode[],
-    options?: {
-      prefix?: string;
-      suffix?: string;
-      primaryWorkspaceRoot?: string;
-      treeType?: ContextConfig["projectTree"]["type"];
-      minify?: boolean;
-    }
+    options?: GenerateContextOptions
   ): Promise<ContextGenerationResult> {
     const checkedFiles = FileNodeUtils.getCheckedFiles(fileNodes);
     const fileCount = checkedFiles.length;
@@ -174,7 +178,9 @@ export class ContextGenerationService {
             fileTree,
             effectiveTreeType !== "none" && fileTree.length > 0,
             fileCount,
-            options?.minify ?? false
+            options?.minify ?? false,
+            options?.outputFileName,
+            options?.timestamp
           ),
           options
         ),
@@ -315,7 +321,9 @@ export class ContextGenerationService {
     projectTree: string,
     includeProjectTree: boolean,
     fileCount: number,
-    minify: boolean
+    minify: boolean,
+    outputFileName?: string,
+    timestamp?: string
   ): string {
     return applyContextWrapperTemplate({
       config: this.config,
@@ -326,17 +334,14 @@ export class ContextGenerationService {
       includeProjectTree,
       fileCount,
       minify,
+      outputFileName,
+      timestamp,
     });
   }
 
   async copyToClipboard(
     fileNodes: FileNode[],
-    options?: {
-      prefix?: string;
-      suffix?: string;
-      primaryWorkspaceRoot?: string;
-      minify?: boolean;
-    }
+    options?: GenerateContextOptions
   ): Promise<ContextGenerationResult> {
     try {
       const result = await this.generateContext(fileNodes, options);

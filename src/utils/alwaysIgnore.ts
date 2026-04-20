@@ -11,6 +11,7 @@ export const ALWAYS_IGNORE = [
   ".vscode/",
   ".idea/",
   ".vs/",
+  ".prompttower/",
   ".vscode-test/",
   ".sublime-project",
   ".sublime-workspace",

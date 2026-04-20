@@ -2,12 +2,18 @@ import * as path from "path";
 import * as vscode from "vscode";
 
 export type PromptExportFormat = "md" | "txt";
-export type PromptExportLocation = "prompttower" | "workspaceRoot";
+export type PromptExportCustomPathMode = "relative" | "absolute";
+export type PromptExportLocation =
+  | "prompttower"
+  | "workspaceRoot"
+  | "customFolder";
 
 export interface PromptExportOptions {
   fileName: string;
   format: PromptExportFormat;
   location: PromptExportLocation;
+  customFolderPath: string;
+  customFolderPathMode: PromptExportCustomPathMode;
   includeTimestamp: boolean;
 }
 
@@ -15,7 +21,6 @@ export interface SavedPromptFile {
   uri: vscode.Uri;
   absolutePath: string;
   fileName: string;
-  directoryPath: string;
 }
 
 const STORAGE_KEY = "promptTower.promptExportOptions";
@@ -24,6 +29,8 @@ const DEFAULT_EXPORT_OPTIONS: PromptExportOptions = {
   fileName: "prompt",
   format: "md",
   location: "prompttower",
+  customFolderPath: "prompts",
+  customFolderPathMode: "relative",
   includeTimestamp: true,
 };
 
@@ -39,6 +46,13 @@ export class PromptExportService {
       fileName: this.sanitizeInputFileName(stored.fileName),
       format: this.normalizeFormat(stored.format),
       location: this.normalizeLocation(stored.location),
+      customFolderPathMode: this.normalizeCustomFolderPathMode(
+        stored.customFolderPathMode
+      ),
+      customFolderPath: this.normalizeCustomFolderPath(
+        stored.customFolderPath,
+        this.normalizeCustomFolderPathMode(stored.customFolderPathMode)
+      ),
       includeTimestamp: stored.includeTimestamp ?? DEFAULT_EXPORT_OPTIONS.includeTimestamp,
     };
   }
@@ -56,12 +70,17 @@ export class PromptExportService {
   async writePromptFile(
     workspaceRoot: string,
     content: string,
-    options: PromptExportOptions
+    options: PromptExportOptions,
+    date: Date = new Date()
   ): Promise<SavedPromptFile> {
     const normalized = this.normalizeOptions(options);
-    const timestamp = new Date();
-    const fileName = this.buildFileName(normalized, timestamp);
-    const directoryPath = this.resolveDirectoryPath(workspaceRoot, normalized.location);
+    const fileName = this.buildFileName(normalized, date);
+    const directoryPath = this.resolveDirectoryPath(
+      workspaceRoot,
+      normalized.location,
+      normalized.customFolderPath,
+      normalized.customFolderPathMode
+    );
     const uri = vscode.Uri.file(path.join(directoryPath, fileName));
 
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(directoryPath));
@@ -71,7 +90,6 @@ export class PromptExportService {
       uri,
       absolutePath: uri.fsPath,
       fileName,
-      directoryPath,
     };
   }
 
@@ -84,6 +102,13 @@ export class PromptExportService {
       fileName: this.sanitizeInputFileName(options.fileName),
       format: this.normalizeFormat(options.format),
       location: this.normalizeLocation(options.location),
+      customFolderPathMode: this.normalizeCustomFolderPathMode(
+        options.customFolderPathMode
+      ),
+      customFolderPath: this.normalizeCustomFolderPath(
+        options.customFolderPath,
+        this.normalizeCustomFolderPathMode(options.customFolderPathMode)
+      ),
       includeTimestamp: options.includeTimestamp,
     };
   }
@@ -116,9 +141,46 @@ export class PromptExportService {
   private normalizeLocation(
     location: PromptExportLocation | string | undefined
   ): PromptExportLocation {
-    return location === "workspaceRoot"
-      ? "workspaceRoot"
-      : DEFAULT_EXPORT_OPTIONS.location;
+    if (location === "workspaceRoot" || location === "customFolder") {
+      return location;
+    }
+
+    return DEFAULT_EXPORT_OPTIONS.location;
+  }
+
+  private normalizeCustomFolderPathMode(
+    mode: PromptExportCustomPathMode | string | undefined
+  ): PromptExportCustomPathMode {
+    return mode === "absolute" ? "absolute" : "relative";
+  }
+
+  private normalizeCustomFolderPath(
+    customFolderPath: string | undefined,
+    mode: PromptExportCustomPathMode
+  ): string {
+    const fallback =
+      mode === "relative" ? DEFAULT_EXPORT_OPTIONS.customFolderPath : "";
+    if (!customFolderPath) {
+      return fallback;
+    }
+
+    const trimmed = customFolderPath.trim();
+    if (!trimmed) {
+      return fallback;
+    }
+
+    if (mode === "absolute") {
+      return path.normalize(trimmed);
+    }
+
+    const normalized = trimmed
+      .replace(/\\/g, "/")
+      .replace(/^\.\/+/, "")
+      .replace(/^\/+/, "")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+    return normalized || fallback;
   }
 
   private buildFileName(options: PromptExportOptions, date: Date): string {
@@ -130,13 +192,56 @@ export class PromptExportService {
 
   private resolveDirectoryPath(
     workspaceRoot: string,
-    location: PromptExportLocation
+    location: PromptExportLocation,
+    customFolderPath: string,
+    customFolderPathMode: PromptExportCustomPathMode
   ): string {
     if (location === "workspaceRoot") {
       return workspaceRoot;
     }
 
+    if (location === "customFolder") {
+      return this.resolveCustomDirectoryPath(
+        workspaceRoot,
+        customFolderPath,
+        customFolderPathMode
+      );
+    }
+
     return path.join(workspaceRoot, ".prompttower", "prompts");
+  }
+
+  private resolveCustomDirectoryPath(
+    workspaceRoot: string,
+    customFolderPath: string,
+    customFolderPathMode: PromptExportCustomPathMode
+  ): string {
+    const normalizedPath = this.normalizeCustomFolderPath(
+      customFolderPath,
+      customFolderPathMode
+    );
+    if (!normalizedPath) {
+      throw new Error("Custom folder path cannot be empty.");
+    }
+
+    if (customFolderPathMode === "absolute") {
+      if (!path.isAbsolute(normalizedPath)) {
+        throw new Error("Absolute custom folder path must be absolute.");
+      }
+
+      return path.resolve(normalizedPath);
+    }
+
+    const resolvedPath = path.resolve(workspaceRoot, normalizedPath);
+    const relativeToRoot = path.relative(workspaceRoot, resolvedPath);
+    const escapesWorkspace =
+      relativeToRoot.startsWith("..") || path.isAbsolute(relativeToRoot);
+
+    if (escapesWorkspace) {
+      throw new Error("Custom folder must stay inside the workspace root.");
+    }
+
+    return resolvedPath;
   }
 
   private formatFileNameTimestamp(date: Date): string {
