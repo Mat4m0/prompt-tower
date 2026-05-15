@@ -28,16 +28,15 @@ export interface EnsureFreshResult {
   removedSelections: string[];
 }
 
-interface SelectionRefinementGroup {
+export interface SelectionFilterGroup {
   id: string;
   label: string;
-  description: string;
   sortLabel: string;
-  filePaths: Set<string>;
-}
-
-interface SelectionRefinementPick extends vscode.QuickPickItem {
-  group: SelectionRefinementGroup;
+  totalFiles: number;
+  selectedFiles: number;
+  selectedTokenCount: number;
+  excludedTokenCount: number;
+  excluded: boolean;
 }
 
 /**
@@ -79,6 +78,7 @@ export class MultiRootTreeProvider
   private maxFileSizeWarningKB: number = 500;
   private showTreeTokenCounts: boolean = true;
   private tokenProfile: TokenProfile = getTokenProfile(undefined);
+  private excludedSelectionGroupIds = new Set<string>();
 
   private gitHubIssuesProvider?: GitHubSelectionProvider;
 
@@ -95,6 +95,7 @@ export class MultiRootTreeProvider
     });
 
     this.loadConfiguration();
+    this.loadSelectionFilters();
     this.setupEventListeners();
     void this.initialize();
   }
@@ -263,6 +264,21 @@ export class MultiRootTreeProvider
     );
   }
 
+  private loadSelectionFilters(): void {
+    const excludedGroupIds = this.context.workspaceState.get<string[]>(
+      "promptTower.excludedSelectionGroupIds",
+      []
+    );
+    this.excludedSelectionGroupIds = new Set(excludedGroupIds);
+  }
+
+  private async persistSelectionFilters(): Promise<void> {
+    await this.context.workspaceState.update(
+      "promptTower.excludedSelectionGroupIds",
+      [...this.excludedSelectionGroupIds]
+    );
+  }
+
   /**
    * Refresh all workspaces
    */
@@ -296,6 +312,7 @@ export class MultiRootTreeProvider
       preserveCheckedPaths
     );
     FileNodeUtils.recomputeEstimatedTokenCounts(this.rootNodes, this.tokenProfile);
+    this.applySelectionFiltersToCurrentSelection();
 
     const checkedFilePathsAfterRefresh =
       FileNodeUtils.getCheckedFilePaths(this.rootNodes);
@@ -478,22 +495,23 @@ export class MultiRootTreeProvider
     }
 
     if (newState !== originalState || userCancelled) {
-      const addedFilePaths = newState
-        ? FileNodeUtils.getUncheckedFilePaths([node])
-        : [];
-      const removedFilePaths = newState
-        ? []
-        : FileNodeUtils.getCheckedFilePaths([node]);
+      const checkedBefore = new Set(FileNodeUtils.getCheckedFilePaths([node]));
 
-      FileNodeUtils.toggleCheckedState(node, newState);
+      this.setCheckedState(node, newState);
 
-      if (node.parent) {
-        FileNodeUtils.updateParentCheckedState(node);
-      }
+      this.updateAncestorCheckedStateWithFilters(node);
+
+      const checkedAfter = new Set(FileNodeUtils.getCheckedFilePaths([node]));
+      const addedFilePaths = [...checkedAfter].filter(
+        (filePath) => !checkedBefore.has(filePath)
+      );
+      const removedFilePaths = [...checkedBefore].filter(
+        (filePath) => !checkedAfter.has(filePath)
+      );
 
       this._onDidChangeSelection.fire({
         node,
-        isChecked: newState,
+        isChecked: node.isChecked,
         addedFilePaths,
         removedFilePaths,
       });
@@ -507,152 +525,44 @@ export class MultiRootTreeProvider
     }
   }
 
-  async refineFolderSelection(node: FileNode): Promise<void> {
-    if (node.type === "file") {
-      return;
-    }
+  getSelectionFilterGroups(): SelectionFilterGroup[] {
+    const groups = new Map<string, SelectionFilterGroup>();
+    const stack = [...this.rootNodes];
 
-    const descendantFiles = FileNodeUtils.getDescendantFiles(node);
-    if (descendantFiles.length === 0) {
-      vscode.window.showInformationMessage("No files found in this folder.");
-      return;
-    }
-
-    const groups = this.buildSelectionRefinementGroups(descendantFiles);
-    if (groups.length === 0) {
-      vscode.window.showInformationMessage("No file groups found in this folder.");
-      return;
-    }
-
-    const picks = groups.map<SelectionRefinementPick>((group) => ({
-      label: group.label,
-      description: group.description,
-      picked: this.isGroupCurrentlySelected(group),
-      group,
-    }));
-    const selectedPicks = await vscode.window.showQuickPick(picks, {
-      title: `Select files in ${node.label}`,
-      placeHolder: "Choose file groups to include",
-      canPickMany: true,
-    });
-
-    if (!selectedPicks) {
-      return;
-    }
-
-    const selectedFilePaths = new Set<string>();
-    for (const pick of selectedPicks) {
-      for (const filePath of pick.group.filePaths) {
-        selectedFilePaths.add(filePath);
+    while (stack.length > 0) {
+      const file = stack.pop()!;
+      if (file.children) {
+        for (let index = file.children.length - 1; index >= 0; index--) {
+          stack.push(file.children[index]);
+        }
       }
-    }
-
-    const addedFilePaths: string[] = [];
-    const removedFilePaths: string[] = [];
-
-    for (const file of descendantFiles) {
-      const shouldBeChecked = selectedFilePaths.has(file.absolutePath);
-      if (file.isChecked === shouldBeChecked) {
+      if (file.type !== "file") {
         continue;
       }
 
-      file.isChecked = shouldBeChecked;
-      if (shouldBeChecked) {
-        addedFilePaths.push(file.absolutePath);
-      } else {
-        removedFilePaths.push(file.absolutePath);
-      }
-    }
-
-    FileNodeUtils.updateCheckedStateFromChildren(node);
-
-    if (addedFilePaths.length === 0 && removedFilePaths.length === 0) {
-      return;
-    }
-
-    this._onDidChangeSelection.fire({
-      node,
-      isChecked: node.isChecked,
-      addedFilePaths,
-      removedFilePaths,
-    });
-    this.tokenCountingService.applySelectionDelta(
-      addedFilePaths,
-      removedFilePaths
-    );
-    this._onDidChangeTreeData.fire();
-  }
-
-  async refineSelectedFolderSelection(): Promise<void> {
-    const folders = this.getCheckedRefinableFolders();
-
-    if (folders.length === 0) {
-      vscode.window.showInformationMessage(
-        "Select a folder in the Prompt Tower tree first."
-      );
-      return;
-    }
-
-    if (folders.length === 1) {
-      await this.refineFolderSelection(folders[0]);
-      return;
-    }
-
-    const selectedFolder = await vscode.window.showQuickPick(
-      folders.map((folder) => ({
-        label: folder.label,
-        description: folder.relativePath || folder.workspace.name,
-        folder,
-      })),
-      {
-        title: "Refine selected folder",
-        placeHolder: "Choose which selected folder to refine",
-      }
-    );
-
-    if (!selectedFolder) {
-      return;
-    }
-
-    await this.refineFolderSelection(selectedFolder.folder);
-  }
-
-  private buildSelectionRefinementGroups(
-    files: FileNode[]
-  ): SelectionRefinementGroup[] {
-    const groups = new Map<string, SelectionRefinementGroup>();
-
-    const addToGroup = (
-      definition: {
-        id: string;
-        label: string;
-        sortLabel: string;
-      },
-      file: FileNode
-    ) => {
-      const { id, label, sortLabel } = definition;
-      const group = groups.get(id) ?? {
-        id,
-        label,
-        description: "",
-        sortLabel,
-        filePaths: new Set<string>(),
+      const definition = getSelectionRefinementDefinition(file.label);
+      const group = groups.get(definition.id) ?? {
+        id: definition.id,
+        label: definition.label,
+        sortLabel: definition.sortLabel,
+        totalFiles: 0,
+        selectedFiles: 0,
+        selectedTokenCount: 0,
+        excludedTokenCount: 0,
+        excluded: this.excludedSelectionGroupIds.has(definition.id),
       };
-      group.filePaths.add(file.absolutePath);
-      groups.set(id, group);
-    };
-
-    for (const file of files) {
-      addToGroup(getSelectionRefinementDefinition(file.label), file);
+      group.totalFiles += 1;
+      if (file.isChecked) {
+        group.selectedFiles += 1;
+        group.selectedTokenCount += file.estimatedTokenCount;
+      } else if (group.excluded && this.hasCheckedAncestor(file)) {
+        group.excludedTokenCount += file.estimatedTokenCount;
+      }
+      groups.set(definition.id, group);
     }
 
-    return Array.from(groups.values())
-      .map((group) => ({
-        ...group,
-        description: `${group.filePaths.size} ${
-          group.filePaths.size === 1 ? "file" : "files"
-        }`,
-      }))
+    return [...groups.values()]
+      .filter((group) => group.selectedFiles > 0 || group.excluded)
       .sort((left, right) => {
         if (left.id.startsWith("pattern:") !== right.id.startsWith("pattern:")) {
           return left.id.startsWith("pattern:") ? 1 : -1;
@@ -661,44 +571,234 @@ export class MultiRootTreeProvider
       });
   }
 
-  private isGroupCurrentlySelected(group: SelectionRefinementGroup): boolean {
-    if (group.filePaths.size === 0) {
-      return false;
+  async setSelectionFilterExcluded(
+    groupId: string,
+    excluded: boolean
+  ): Promise<void> {
+    if (excluded) {
+      this.excludedSelectionGroupIds.add(groupId);
+    } else {
+      this.excludedSelectionGroupIds.delete(groupId);
     }
 
-    for (const filePath of group.filePaths) {
-      const node = this.findNodeByPath(filePath);
-      if (!node?.isChecked) {
-        return false;
+    await this.persistSelectionFilters();
+
+    if (excluded) {
+      const removedFilePaths = this.applySelectionFiltersToCurrentSelection();
+      if (removedFilePaths.length > 0) {
+        this.tokenCountingService.applySelectionDelta([], removedFilePaths);
+        this._onDidChangeTreeData.fire();
       }
+      return;
     }
 
-    return true;
+    const addedFilePaths = this.restoreFilesCoveredByCheckedAncestors(groupId);
+    if (addedFilePaths.length > 0) {
+      this.tokenCountingService.applySelectionDelta(addedFilePaths, []);
+    }
+    this._onDidChangeTreeData.fire();
   }
 
-  private getCheckedRefinableFolders(): FileNode[] {
-    const folders: FileNode[] = [];
-    const stack = [...this.rootNodes];
+  async resetSelectionFilters(): Promise<void> {
+    if (this.excludedSelectionGroupIds.size === 0) {
+      return;
+    }
 
-    while (stack.length > 0) {
-      const node = stack.pop()!;
-      if (
-        node.type !== "file" &&
-        node.isChecked &&
-        FileNodeUtils.getDescendantFiles(node).length > 0
-      ) {
-        folders.push(node);
+    this.excludedSelectionGroupIds.clear();
+    await this.persistSelectionFilters();
+    const addedFilePaths = this.restoreFilesCoveredByCheckedAncestors();
+    if (addedFilePaths.length > 0) {
+      this.tokenCountingService.applySelectionDelta(addedFilePaths, []);
+    }
+    this._onDidChangeTreeData.fire();
+  }
+
+  private setCheckedState(node: FileNode, checked: boolean): void {
+    if (!checked) {
+      FileNodeUtils.toggleCheckedState(node, false);
+      return;
+    }
+
+    this.setCheckedStateWithFilters(node);
+  }
+
+  private setCheckedStateWithFilters(node: FileNode): boolean {
+    if (node.type === "file") {
+      const selectable = !this.isFileExcludedBySelectionFilters(node);
+      node.isChecked = selectable;
+      return selectable;
+    }
+
+    let allChildrenChecked = true;
+    let hasSelectableChildren = false;
+    for (const child of node.children ?? []) {
+      const childHasSelectableFiles = this.setCheckedStateWithFilters(child);
+      if (!childHasSelectableFiles) {
+        continue;
+      }
+      hasSelectableChildren = true;
+      allChildrenChecked = child.isChecked && allChildrenChecked;
+    }
+    node.isChecked = hasSelectableChildren && allChildrenChecked;
+    return hasSelectableChildren;
+  }
+
+  private applySelectionFiltersToCurrentSelection(): string[] {
+    const removedFilePaths: string[] = [];
+
+    for (const file of FileNodeUtils.getCheckedFiles(this.rootNodes)) {
+      if (!this.isFileExcludedBySelectionFilters(file)) {
         continue;
       }
 
-      if (node.children) {
-        for (let index = node.children.length - 1; index >= 0; index--) {
-          stack.push(node.children[index]);
-        }
+      file.isChecked = false;
+      removedFilePaths.push(file.absolutePath);
+    }
+
+    for (const rootNode of this.rootNodes) {
+      this.updateCheckedStateFromChildrenWithFilters(rootNode);
+    }
+
+    return removedFilePaths;
+  }
+
+  private restoreFilesCoveredByCheckedAncestors(groupId?: string): string[] {
+    const addedFilePaths: string[] = [];
+
+    for (const rootNode of this.rootNodes) {
+      this.restoreFilesCoveredByCheckedAncestorsInNode(
+        rootNode,
+        false,
+        groupId,
+        addedFilePaths
+      );
+      this.updateCheckedStateFromChildrenWithFilters(rootNode);
+    }
+
+    return addedFilePaths;
+  }
+
+  private restoreFilesCoveredByCheckedAncestorsInNode(
+    node: FileNode,
+    hasCheckedAncestor: boolean,
+    groupId: string | undefined,
+    addedFilePaths: string[]
+  ): void {
+    if (node.type === "file") {
+      if (!hasCheckedAncestor || this.isFileExcludedBySelectionFilters(node)) {
+        return;
+      }
+
+      const definition = getSelectionRefinementDefinition(node.label);
+      if (groupId !== undefined && definition.id !== groupId) {
+        return;
+      }
+
+      if (!node.isChecked) {
+        node.isChecked = true;
+        addedFilePaths.push(node.absolutePath);
+      }
+      return;
+    }
+
+    const childHasCheckedAncestor = hasCheckedAncestor || node.isChecked;
+    for (const child of node.children ?? []) {
+      this.restoreFilesCoveredByCheckedAncestorsInNode(
+        child,
+        childHasCheckedAncestor,
+        groupId,
+        addedFilePaths
+      );
+    }
+  }
+
+  private updateCheckedStateFromChildrenWithFilters(node: FileNode): boolean {
+    if (node.type === "file") {
+      return !this.isFileExcludedBySelectionFilters(node);
+    }
+
+    let hasSelectableChildren = false;
+    let allSelectableChildrenChecked = true;
+
+    for (const child of node.children ?? []) {
+      const childHasSelectableFiles =
+        this.updateCheckedStateFromChildrenWithFilters(child);
+      if (!childHasSelectableFiles) {
+        continue;
+      }
+
+      hasSelectableChildren = true;
+      allSelectableChildrenChecked =
+        child.isChecked && allSelectableChildrenChecked;
+    }
+
+    node.isChecked = hasSelectableChildren && allSelectableChildrenChecked;
+    return hasSelectableChildren;
+  }
+
+  private updateAncestorCheckedStateWithFilters(node: FileNode): void {
+    let ancestor = node.parent;
+
+    while (ancestor) {
+      this.updateSingleNodeCheckedStateFromChildrenWithFilters(ancestor);
+      ancestor = ancestor.parent;
+    }
+  }
+
+  private updateSingleNodeCheckedStateFromChildrenWithFilters(
+    node: FileNode
+  ): void {
+    if (node.type === "file") {
+      return;
+    }
+
+    let hasSelectableChildren = false;
+    let allSelectableChildrenChecked = true;
+
+    for (const child of node.children ?? []) {
+      if (!this.hasSelectableFiles(child)) {
+        continue;
+      }
+
+      hasSelectableChildren = true;
+      allSelectableChildrenChecked =
+        child.isChecked && allSelectableChildrenChecked;
+    }
+
+    node.isChecked = hasSelectableChildren && allSelectableChildrenChecked;
+  }
+
+  private hasSelectableFiles(node: FileNode): boolean {
+    if (node.type === "file") {
+      return !this.isFileExcludedBySelectionFilters(node);
+    }
+
+    for (const child of node.children ?? []) {
+      if (this.hasSelectableFiles(child)) {
+        return true;
       }
     }
 
-    return folders;
+    return false;
+  }
+
+  private hasCheckedAncestor(node: FileNode): boolean {
+    let ancestor = node.parent;
+
+    while (ancestor) {
+      if (ancestor.isChecked) {
+        return true;
+      }
+      ancestor = ancestor.parent;
+    }
+
+    return false;
+  }
+
+  private isFileExcludedBySelectionFilters(file: FileNode): boolean {
+    return this.excludedSelectionGroupIds.has(
+      getSelectionRefinementDefinition(file.label).id
+    );
   }
 
   /**
@@ -768,16 +868,14 @@ export class MultiRootTreeProvider
    */
   async toggleAllFiles(): Promise<void> {
     const checkedFilePaths = FileNodeUtils.getCheckedFilePaths(this.rootNodes);
-    const totalFiles = this.getAllFileCount();
-    const allSelected = checkedFilePaths.length === totalFiles;
+    const selectableFilePaths = this.getSelectableFilePaths();
+    const allSelected = checkedFilePaths.length === selectableFilePaths.length;
 
     const newState = !allSelected;
-    const affectedFilePaths = newState
-      ? FileNodeUtils.getFilePaths(this.rootNodes)
-      : checkedFilePaths;
+    const affectedFilePaths = newState ? selectableFilePaths : checkedFilePaths;
 
     for (const rootNode of this.rootNodes) {
-      FileNodeUtils.toggleCheckedState(rootNode, newState);
+      this.setCheckedState(rootNode, newState);
     }
 
     if (newState) {
@@ -792,14 +890,14 @@ export class MultiRootTreeProvider
   /**
    * Get total count of all files across all workspaces
    */
-  private getAllFileCount(): number {
-    let count = 0;
+  private getSelectableFilePaths(): string[] {
+    const filePaths: string[] = [];
     const stack = [...this.rootNodes];
 
     while (stack.length > 0) {
       const node = stack.pop()!;
-      if (node.type === "file") {
-        count++;
+      if (node.type === "file" && !this.isFileExcludedBySelectionFilters(node)) {
+        filePaths.push(node.absolutePath);
       }
       if (node.children) {
         for (let index = node.children.length - 1; index >= 0; index--) {
@@ -807,7 +905,7 @@ export class MultiRootTreeProvider
         }
       }
     }
-    return count;
+    return filePaths;
   }
 
   /**

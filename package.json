@@ -149,6 +149,11 @@
           "type": "tree"
         },
         {
+          "id": "promptTowerSelectionFiltersView",
+          "name": "Selection Filters",
+          "type": "tree"
+        },
+        {
           "id": "promptTowerPRsView",
           "name": "GitHub PRs",
           "type": "tree"
@@ -179,6 +184,12 @@
       {
         "command": "promptTower.clearSelections",
         "title": "Clear All Selections",
+        "category": "Prompt Tower",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "promptTower.resetSelectionFilters",
+        "title": "Reset Selection Filters",
         "category": "Prompt Tower",
         "icon": "$(clear-all)"
       },
@@ -239,12 +250,6 @@
         "command": "promptTower.previewFile",
         "title": "Preview File",
         "category": "Prompt Tower"
-      },
-      {
-        "command": "promptTower.refineFolderSelection",
-        "title": "Select Folder Contents...",
-        "category": "Prompt Tower",
-        "icon": "$(filter)"
       }
     ],
     "menus": {
@@ -303,6 +308,11 @@
           "group": "navigation@4"
         },
         {
+          "command": "promptTower.resetSelectionFilters",
+          "when": "view == promptTowerSelectionFiltersView",
+          "group": "navigation@1"
+        },
+        {
           "command": "promptTower.hideTreeTokenCounts",
           "when": "view == promptTowerView && promptTower.treeTokenCountsVisible",
           "group": "navigation@5"
@@ -339,10 +349,6 @@
         {
           "command": "promptTower.previewFile",
           "when": "view == promptTowerView && viewItem == file"
-        },
-        {
-          "command": "promptTower.refineFolderSelection",
-          "when": "view == promptTowerView && (viewItem == directory || viewItem == workspaceRoot)"
         }
       ]
     }

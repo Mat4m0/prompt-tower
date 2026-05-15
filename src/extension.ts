@@ -8,6 +8,10 @@ import {
   GitHubPRsProvider,
   GitHubPR,
 } from "./providers/GitHubPRsProvider";
+import {
+  SelectionFiltersProvider,
+  type SelectionFilterNode,
+} from "./providers/SelectionFiltersProvider";
 import { WorkspaceManager } from "./services/WorkspaceManager";
 import { FileDiscoveryService } from "./services/FileDiscoveryService";
 import { TokenCountingService } from "./services/TokenCountingService";
@@ -49,6 +53,8 @@ let multiRootProvider: MultiRootTreeProvider;
 let issuesProviderInstance: GitHubIssuesProvider | undefined;
 let prsProviderInstance: GitHubPRsProvider | undefined;
 let mainTreeView: vscode.TreeView<FileNode>;
+let selectionFiltersProvider: SelectionFiltersProvider | undefined;
+let selectionFiltersTreeView: vscode.TreeView<SelectionFilterNode> | undefined;
 let statusWebview: vscode.WebviewView | undefined;
 let fileSnapshotService: FileSnapshotService;
 let currentTokenProfile: TokenProfile = getTokenProfile(DEFAULT_TOKEN_PROFILE_ID);
@@ -186,6 +192,16 @@ function setSyncStatus(text: string, busy: boolean = isContextActionInFlight) {
         busy,
       },
     });
+  }
+}
+
+function postSelectionFiltersUpdate(): void {
+  selectionFiltersProvider?.refresh();
+  if (selectionFiltersTreeView) {
+    selectionFiltersTreeView.message =
+      multiRootProvider?.getSelectionFilterGroups().length === 0
+        ? "No selected files"
+        : undefined;
   }
 }
 
@@ -438,6 +454,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
               payload: exportOptions,
             });
             setSyncStatus(getSyncStatusText(multiRootProvider.getSyncState()));
+            postSelectionFiltersUpdate();
             scheduleEstimatedTokenPreviewUpdate(0);
           }
           break;
@@ -648,14 +665,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
         case "clearSelections":
           if (multiRootProvider) {
             multiRootProvider.clearAllSelections();
-            scheduleEstimatedTokenPreviewUpdate();
-          }
-          break;
-
-        case "refineSelectedFolder":
-          if (multiRootProvider) {
-            await multiRootProvider.refineSelectedFolderSelection();
-            invalidateWebviewPreview();
+            postSelectionFiltersUpdate();
             scheduleEstimatedTokenPreviewUpdate();
           }
           break;
@@ -664,6 +674,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           if (multiRootProvider && webviewPanel) {
             // Reset all selections (files and GitHub issues)
             multiRootProvider.resetAll();
+            await multiRootProvider.resetSelectionFilters();
 
             // Clear prompt prefix and suffix
             multiRootProvider.setPromptPrefix("");
@@ -687,6 +698,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
 
             // Reset preview state
             isPreviewValid = false;
+            postSelectionFiltersUpdate();
             scheduleEstimatedTokenPreviewUpdate();
 
             // Show confirmation
@@ -928,6 +940,31 @@ export function activate(context: vscode.ExtensionContext) {
     manageCheckboxStateManually: true,
   });
 
+  selectionFiltersProvider = new SelectionFiltersProvider(multiRootProvider);
+  selectionFiltersTreeView = vscode.window.createTreeView(
+    "promptTowerSelectionFiltersView",
+    {
+      treeDataProvider: selectionFiltersProvider,
+      showCollapseAll: false,
+      manageCheckboxStateManually: true,
+    }
+  );
+  selectionFiltersTreeView.message = "No selected files";
+  context.subscriptions.push(
+    selectionFiltersTreeView,
+    selectionFiltersTreeView.onDidChangeCheckboxState(async (event) => {
+      for (const [item, state] of event.items) {
+        await multiRootProvider.setSelectionFilterExcluded(
+          item.group.id,
+          state !== vscode.TreeItemCheckboxState.Checked
+        );
+      }
+      postSelectionFiltersUpdate();
+      invalidateWebviewPreview();
+      scheduleEstimatedTokenPreviewUpdate();
+    })
+  );
+
   // Auto-open webview when activity bar is clicked (tree view becomes visible)
   context.subscriptions.push(
     mainTreeView.onDidChangeVisibility((e) => {
@@ -955,6 +992,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
         invalidateWebviewPreview();
+        postSelectionFiltersUpdate();
         scheduleEstimatedTokenPreviewUpdate();
       })
   );
@@ -1042,6 +1080,7 @@ export function activate(context: vscode.ExtensionContext) {
     tokenCountingService.onDidChangeTokens((payload: TokenUpdatePayload) => {
       if (webviewPanel) {
         scheduleEstimatedTokenPreviewUpdate();
+        postSelectionFiltersUpdate();
         invalidateWebviewPreview();
       }
     })
@@ -1053,6 +1092,7 @@ export function activate(context: vscode.ExtensionContext) {
         invalidateWebviewPreview();
       }
       setSyncStatus(getSyncStatusText(payload));
+      postSelectionFiltersUpdate();
     })
   );
 
@@ -1080,16 +1120,38 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("promptTower.toggleFileSelection", async (fileNode: FileNode) => {
       await multiRootProvider.toggleNodeSelection(fileNode);
       invalidateWebviewPreview();
+      postSelectionFiltersUpdate();
       scheduleEstimatedTokenPreviewUpdate();
     }),
 
     vscode.commands.registerCommand("promptTower.refresh", async () => {
       await multiRootProvider.refresh();
+      postSelectionFiltersUpdate();
       scheduleEstimatedTokenPreviewUpdate();
     }),
 
     vscode.commands.registerCommand("promptTower.clearSelections", () => {
       multiRootProvider.clearAllSelections();
+      postSelectionFiltersUpdate();
+      scheduleEstimatedTokenPreviewUpdate();
+    }),
+
+    vscode.commands.registerCommand(
+      "promptTower.toggleSelectionFilter",
+      async (filterNode: SelectionFilterNode) => {
+        await multiRootProvider.setSelectionFilterExcluded(
+          filterNode.group.id,
+          !filterNode.group.excluded
+        );
+        postSelectionFiltersUpdate();
+        invalidateWebviewPreview();
+        scheduleEstimatedTokenPreviewUpdate();
+      }
+    ),
+
+    vscode.commands.registerCommand("promptTower.resetSelectionFilters", async () => {
+      await multiRootProvider.resetSelectionFilters();
+      postSelectionFiltersUpdate();
       scheduleEstimatedTokenPreviewUpdate();
     }),
 
@@ -1107,6 +1169,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand("promptTower.toggleAllFiles", async () => {
       await multiRootProvider.toggleAllFiles();
+      postSelectionFiltersUpdate();
       scheduleEstimatedTokenPreviewUpdate();
     }),
 
@@ -1283,6 +1346,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Select the file using the existing selection system
       await multiRootProvider.toggleNodeSelection(fileNode);
+      postSelectionFiltersUpdate();
       scheduleEstimatedTokenPreviewUpdate();
 
       vscode.window.showInformationMessage(
@@ -1305,12 +1369,6 @@ export function activate(context: vscode.ExtensionContext) {
     // Right-click file preview
     vscode.commands.registerCommand("promptTower.previewFile", async (fileNode: FileNode) => {
       await showFilePreview(fileNode);
-    }),
-
-    vscode.commands.registerCommand("promptTower.refineFolderSelection", async (fileNode: FileNode) => {
-      await multiRootProvider.refineFolderSelection(fileNode);
-      invalidateWebviewPreview();
-      scheduleEstimatedTokenPreviewUpdate();
     })
   );
 
