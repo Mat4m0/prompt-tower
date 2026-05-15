@@ -4,6 +4,9 @@ import os from 'os'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
+// Benchmark-only exception: Vite+ owns the normal build/test loop, while this
+// script uses esbuild to run the TypeScript benchmark entry without adding a
+// second project-wide TS runner.
 const tempDir = await mkdtemp(path.join(os.tmpdir(), 'prompt-lupinum-bundle-'))
 const outfile = path.join(tempDir, 'benchmark.mjs')
 

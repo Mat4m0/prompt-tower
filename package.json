@@ -11,59 +11,21 @@
     "Programming Languages"
   ],
   "keywords": [
-    "AI",
-    "AI Code Assistant",
-    "AI Context Management",
-    "AI Prompt Engineering",
-    "AI Studio",
-    "AI-Powered Coding",
-    "ChatGPT",
-    "Claude",
-    "Claude Code",
-    "Copilot",
-    "Cursor",
-    "DeepSeek",
-    "Developer Productivity",
-    "Gemini",
-    "Grok",
-    "HuggingChat",
-    "LLM",
-    "Mistral",
-    "RooCode",
-    "Sonnet",
-    "VS Code",
-    "ai",
-    "assistant",
-    "autocomplete",
-    "c#",
-    "c++",
+    "ai context",
+    "ai prompts",
+    "claude",
     "clipboard",
-    "code",
+    "code context",
     "context",
-    "context creation",
-    "context injection",
     "context management",
     "copy context",
-    "free",
-    "go",
-    "golang",
-    "javascript",
-    "json",
-    "kotlin",
-    "llm code context",
-    "llm code prompts",
-    "mcp",
+    "developer tools",
+    "gemini",
+    "llm",
     "openai",
-    "php",
     "prompt",
     "prompt templates",
-    "python",
-    "refactoring",
-    "ruby",
-    "tools",
-    "typescript",
-    "vibe coding",
-    "yaml"
+    "vscode"
   ],
   "homepage": "https://github.com/matthias/prompt-lupinum",
   "bugs": {
@@ -100,19 +62,15 @@
     "prepare": "vp config"
   },
   "dependencies": {
-    "ignore": "^7.0.3"
+    "ignore": "7.0.5"
   },
   "devDependencies": {
-    "@types/node": "20.x",
-    "@types/vscode": "^1.96.0",
+    "@types/node": "20.19.24",
+    "@types/vscode": "1.96.0",
     "@vscode/vsce": "^3.9.1",
-    "esbuild": "^0.25.2",
-    "typescript": "^5.7.2",
-    "vite-plus": "latest"
-  },
-  "overrides": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+    "esbuild": "0.25.12",
+    "typescript": "5.9.3",
+    "vite-plus": "0.1.21"
   },
   "contributes": {
     "configuration": {
@@ -280,7 +238,6 @@
       ]
     }
   },
-  "activationEvents": [],
   "icon": "assets/prompt-lupinum-icon.png",
   "engines": {
     "vscode": "^1.96.0"

@@ -43,12 +43,14 @@ vscode shell
 - Context generation is pure; update golden fixtures for intentional output changes.
 - Prompt preset edits create recoverable versions. Do not silently overwrite old prefix text.
 - Generated benchmark reports are local artifacts, not product documentation.
+- `scripts/benchmark.mjs` deliberately uses `esbuild` as the only benchmark-only TypeScript bundling exception. Do not add another TS runner just to remove it.
 
 ## Verification
 
 Before finishing meaningful changes, run:
 
 ```sh
+vp install
 vp check
 vp test
 vp run test:architecture

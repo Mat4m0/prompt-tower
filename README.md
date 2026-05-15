@@ -40,8 +40,10 @@ export const value = 1;
 
 ```bash
 vp install
-vp run validate
+vp check
 vp test
+vp build
+vp run validate
 vp run deploy:local
 ```
 
