@@ -16,6 +16,9 @@ export default defineConfig({
       },
     },
   },
+  ssr: {
+    noExternal: ['ignore'],
+  },
   test: {
     include: ['src/test/**/*.test.ts'],
     environment: 'node',

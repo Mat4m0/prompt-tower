@@ -5,10 +5,7 @@
   "description": "Select codebase files, manage reusable prompt prefixes, and create AI-ready context.",
   "categories": [
     "AI",
-    "Chat",
-    "Machine Learning",
-    "Other",
-    "Programming Languages"
+    "Other"
   ],
   "keywords": [
     "ai context",
@@ -44,21 +41,21 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "vp run package",
-    "benchmark": "node scripts/benchmark.mjs",
-    "benchmark:smoke": "node scripts/benchmark.mjs --scale=smoke",
-    "benchmark:json": "node scripts/benchmark.mjs --json",
-    "test": "vp test run",
-    "test:architecture": "node scripts/check-architecture.mjs",
     "compile": "vp check && vp build",
     "watch": "vp build --watch",
     "build": "vp build",
     "package": "vp build",
     "package:vsix": "vp exec vsce package",
     "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); vp run package:vsix && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
+    "check": "vp check",
     "check-types": "vp check --no-fmt --no-lint",
     "lint": "vp lint src",
-    "check": "vp check",
+    "test": "vp test run",
+    "test:architecture": "node scripts/check-architecture.mjs",
     "validate": "vp check && vp test run && vp run test:architecture",
+    "benchmark": "node scripts/benchmark.mjs",
+    "benchmark:smoke": "node scripts/benchmark.mjs --scale=smoke",
+    "benchmark:json": "node scripts/benchmark.mjs --json",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -67,7 +64,7 @@
   "devDependencies": {
     "@types/node": "20.19.24",
     "@types/vscode": "1.96.0",
-    "@vscode/vsce": "^3.9.1",
+    "@vscode/vsce": "3.9.1",
     "esbuild": "0.25.12",
     "typescript": "5.9.3",
     "vite-plus": "0.1.21"
@@ -136,13 +133,13 @@
       },
       {
         "command": "promptLupinum.includeAllSelectionFilters",
-        "title": "Include All Selection Filters",
+        "title": "Include All Filters",
         "category": "prompt.lupinum",
         "icon": "$(checklist)"
       },
       {
         "command": "promptLupinum.excludeAllSelectionFilters",
-        "title": "Exclude All Selection Filters",
+        "title": "Exclude All Filters",
         "category": "prompt.lupinum",
         "icon": "$(list-selection)"
       },
@@ -159,7 +156,7 @@
       },
       {
         "command": "promptLupinum.addCurrentFile",
-        "title": "Add to prompt.lupinum",
+        "title": "Add Current File to Context",
         "category": "prompt.lupinum",
         "icon": "$(add)"
       }
@@ -238,6 +235,18 @@
       ]
     }
   },
+  "activationEvents": [
+    "onCommand:promptLupinum.addCurrentFile",
+    "onCommand:promptLupinum.clearSelection",
+    "onCommand:promptLupinum.copyContext",
+    "onCommand:promptLupinum.excludeAllSelectionFilters",
+    "onCommand:promptLupinum.includeAllSelectionFilters",
+    "onCommand:promptLupinum.open",
+    "onCommand:promptLupinum.refresh",
+    "onCommand:promptLupinum.showLogs",
+    "onView:promptLupinum.files",
+    "onView:promptLupinum.selectionFilters"
+  ],
   "icon": "assets/prompt-lupinum-icon.png",
   "engines": {
     "vscode": "^1.96.0"
