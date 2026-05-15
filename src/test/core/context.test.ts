@@ -53,11 +53,18 @@ test('context token estimate includes tree modes and minified wrapper shape', ()
     treeType: 'fullFilesAndDirectories',
     minify: true,
   })
+  const gitChars = estimateContextCharacters({
+    ...base,
+    selectedGitDiffChars: 80,
+    treeType: 'none',
+    minify: false,
+  })
 
   assert.ok(fullTreeChars > noTreeChars)
   assert.equal(selectedTreeChars, fullTreeChars)
   assert.equal(directoriesOnlyChars, fullTreeChars)
   assert.ok(minifiedChars < fullTreeChars)
+  assert.ok(gitChars > noTreeChars)
 })
 
 test('ContextAssembler matches readable golden fixture', async () => {
@@ -133,6 +140,37 @@ test('ContextAssembler reports missing file snapshots', async () => {
       path: 'src/example.ts',
     },
   ])
+})
+
+test('ContextAssembler includes selected git commit diffs', () => {
+  const result = assembleContext({
+    files: [],
+    snapshots: new Map(),
+    prefix: '',
+    projectTree: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+    gitDiffs: [
+      {
+        commit: {
+          id: 'workspace:abc123',
+          workspaceName: 'demo',
+          hash: 'abc123',
+          shortHash: 'abc123',
+          authorName: 'Ada',
+          authorDate: '2026-05-16T10:00:00.000Z',
+          subject: 'Fix parser',
+        },
+        patch: 'diff --git a/src/parser.ts b/src/parser.ts\n+export const ok = true\n',
+      },
+    ],
+  })
+
+  assert.match(result.text, /^<context>\n<git_commits>/)
+  assert.match(result.text, /<commit hash="abc123" subject="Fix parser" workspace="demo">/)
+  assert.match(result.text, /diff --git a\/src\/parser\.ts b\/src\/parser\.ts/)
+  assert.equal(result.fileCount, 0)
+  assert.equal(result.commitCount, 1)
 })
 
 test('ContextApplicationService prefixes multi-root tree paths', async () => {

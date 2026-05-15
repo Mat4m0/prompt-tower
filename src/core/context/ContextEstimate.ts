@@ -5,6 +5,7 @@ export interface ContextCharacterEstimateInput {
   suffix: string
   selectedFileBlockChars: number
   selectedFileCount: number
+  selectedGitDiffChars?: number
   projectTree: string
   treeType: ProjectTreeMode
   minify: boolean
@@ -28,7 +29,7 @@ export function estimateContextCharacters(input: ContextCharacterEstimateInput):
           separatorChars
       : 0
   const wrapperChars =
-    treeChars > 0 || fileSectionChars > 0
+    treeChars > 0 || fileSectionChars > 0 || (input.selectedGitDiffChars ?? 0) > 0
       ? input.minify
         ? '<context></context>'.length
         : '<context>\n</context>'.length
@@ -36,5 +37,12 @@ export function estimateContextCharacters(input: ContextCharacterEstimateInput):
   const prefixChars = input.prefix ? input.prefix.length + 1 : 0
   const suffixChars = input.suffix ? input.suffix.length + 1 : 0
 
-  return prefixChars + suffixChars + wrapperChars + treeChars + fileSectionChars
+  return (
+    prefixChars +
+    suffixChars +
+    wrapperChars +
+    treeChars +
+    fileSectionChars +
+    (input.selectedGitDiffChars ?? 0)
+  )
 }

@@ -3,10 +3,13 @@ import { estimateContextCharacters } from '../core/context/ContextEstimate'
 import type {
   ContextFile,
   ContextFileSnapshot,
+  ContextGitDiff,
   ContextOutputMode,
   ProjectTreeMode,
 } from '../core/context/ContextFormat'
 import { generateFileStructureTree } from '../core/context/ProjectTreeBuilder'
+import { estimateGitDiffChars } from '../core/git/GitDiffFormatter'
+import type { GitCommitDiff } from '../core/git/GitTypes'
 import type { FileIndex, IndexedNode } from '../core/files/FileIndex'
 import type { FileSelection } from '../core/files/FileSelection'
 import {
@@ -17,6 +20,7 @@ import {
 import { buildPromptExportTarget } from '../core/export/PromptFileWriter'
 import type { PromptExportOptions } from '../core/export/ExportOptions'
 import type { Clipboard, TextFileSystem } from './ports'
+import type { GitApplicationService } from './GitApplicationService'
 
 export interface ContextBuildOptions {
   prefix: string
@@ -27,6 +31,7 @@ export interface ContextBuildOptions {
 export interface ContextBuildOutput {
   text: string
   fileCount: number
+  commitCount: number
   estimatedTokens: number
   estimatedCost: string
 }
@@ -38,6 +43,7 @@ export class ContextApplicationService {
     private fileSystem: TextFileSystem,
     private clipboard: Clipboard,
     private tokenProfile: TokenProfile,
+    private git?: GitApplicationService,
   ) {}
 
   setTokenProfile(profile: TokenProfile): void {
@@ -59,6 +65,7 @@ export class ContextApplicationService {
     )
     const snapshots = await this.loadSnapshots(files)
     const projectTree = await this.buildProjectTree(options.treeMode)
+    const gitDiffs = await this.loadGitDiffs()
     const result = assembleContext({
       files,
       snapshots,
@@ -66,11 +73,13 @@ export class ContextApplicationService {
       projectTree,
       treeMode: options.treeMode,
       outputMode: options.outputMode,
+      gitDiffs,
     })
     const estimatedTokens = estimateTokensFromText(result.text, this.tokenProfile)
     return {
       text: result.text,
       fileCount: result.fileCount,
+      commitCount: result.commitCount,
       estimatedTokens,
       estimatedCost: formatTokenCost(estimatedTokens, this.tokenProfile),
     }
@@ -119,15 +128,27 @@ export class ContextApplicationService {
       (sum, file) => sum + estimateFileBlockChars(file, options.outputMode),
       0,
     )
+    const selectedGitDiffChars = await this.estimateGitDiffCharacters(options.outputMode)
     return estimateContextCharacters({
       prefix: options.prefix,
       suffix: '',
       selectedFileBlockChars,
       selectedFileCount: selection.selectedFiles.length,
+      selectedGitDiffChars,
       projectTree,
       treeType: options.treeMode,
       minify: options.outputMode === 'compact',
     })
+  }
+
+  private async loadGitDiffs(): Promise<ContextGitDiff[]> {
+    const diffs = await this.git?.readSelectedDiffs()
+    return (diffs ?? []).map(toContextGitDiff)
+  }
+
+  private async estimateGitDiffCharacters(outputMode: ContextOutputMode): Promise<number> {
+    const diffs = await this.loadGitDiffs()
+    return estimateGitDiffChars(diffs, outputMode === 'compact')
   }
 
   private async loadSnapshots(
@@ -174,6 +195,21 @@ export class ContextApplicationService {
         ),
       })),
     )
+  }
+}
+
+function toContextGitDiff(diff: GitCommitDiff): ContextGitDiff {
+  return {
+    commit: {
+      id: diff.commit.id,
+      workspaceName: diff.commit.workspaceName,
+      hash: diff.commit.hash,
+      shortHash: diff.commit.shortHash,
+      authorName: diff.commit.authorName,
+      authorDate: diff.commit.authorDate,
+      subject: diff.commit.subject,
+    },
+    patch: diff.patch,
   }
 }
 

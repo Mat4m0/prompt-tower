@@ -105,11 +105,19 @@
           "icon": "assets/prompt-lupinum.svg",
           "id": "promptLupinum.files",
           "name": "Files",
+          "initialSize": 3,
           "type": "tree"
         },
         {
           "id": "promptLupinum.selectionFilters",
           "name": "Selection Filters",
+          "initialSize": 1,
+          "type": "tree"
+        },
+        {
+          "id": "promptLupinum.gitCommits",
+          "name": "Git Commits",
+          "initialSize": 1,
           "type": "tree"
         }
       ]
@@ -159,6 +167,30 @@
         "title": "Add Current File to Context",
         "category": "prompt.lupinum",
         "icon": "$(add)"
+      },
+      {
+        "command": "promptLupinum.refreshGitCommits",
+        "title": "Refresh Git Commits",
+        "category": "prompt.lupinum",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "promptLupinum.clearGitCommits",
+        "title": "Clear Commit Selection",
+        "category": "prompt.lupinum",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "promptLupinum.selectLatestGitCommit",
+        "title": "Select Latest Commit",
+        "category": "prompt.lupinum",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "promptLupinum.selectLatestThreeGitCommits",
+        "title": "Select Latest 3 Commits",
+        "category": "prompt.lupinum",
+        "icon": "$(git-commit)"
       }
     ],
     "menus": {
@@ -187,6 +219,18 @@
         },
         {
           "command": "promptLupinum.addCurrentFile"
+        },
+        {
+          "command": "promptLupinum.refreshGitCommits"
+        },
+        {
+          "command": "promptLupinum.clearGitCommits"
+        },
+        {
+          "command": "promptLupinum.selectLatestGitCommit"
+        },
+        {
+          "command": "promptLupinum.selectLatestThreeGitCommits"
         }
       ],
       "view/title": [
@@ -219,6 +263,26 @@
           "command": "promptLupinum.excludeAllSelectionFilters",
           "when": "view == promptLupinum.selectionFilters",
           "group": "navigation@2"
+        },
+        {
+          "command": "promptLupinum.selectLatestGitCommit",
+          "when": "view == promptLupinum.gitCommits",
+          "group": "navigation@1"
+        },
+        {
+          "command": "promptLupinum.selectLatestThreeGitCommits",
+          "when": "view == promptLupinum.gitCommits",
+          "group": "navigation@2"
+        },
+        {
+          "command": "promptLupinum.refreshGitCommits",
+          "when": "view == promptLupinum.gitCommits",
+          "group": "navigation@3"
+        },
+        {
+          "command": "promptLupinum.clearGitCommits",
+          "when": "view == promptLupinum.gitCommits",
+          "group": "navigation@4"
         }
       ],
       "editor/context": [
@@ -237,14 +301,19 @@
   },
   "activationEvents": [
     "onCommand:promptLupinum.addCurrentFile",
+    "onCommand:promptLupinum.clearGitCommits",
     "onCommand:promptLupinum.clearSelection",
     "onCommand:promptLupinum.copyContext",
     "onCommand:promptLupinum.excludeAllSelectionFilters",
     "onCommand:promptLupinum.includeAllSelectionFilters",
     "onCommand:promptLupinum.open",
     "onCommand:promptLupinum.refresh",
+    "onCommand:promptLupinum.refreshGitCommits",
+    "onCommand:promptLupinum.selectLatestGitCommit",
+    "onCommand:promptLupinum.selectLatestThreeGitCommits",
     "onCommand:promptLupinum.showLogs",
     "onView:promptLupinum.files",
+    "onView:promptLupinum.gitCommits",
     "onView:promptLupinum.selectionFilters"
   ],
   "icon": "assets/prompt-lupinum-icon.png",

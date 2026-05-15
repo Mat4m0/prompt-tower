@@ -5,6 +5,7 @@ import type {
   ContextFile,
   ContextWarning,
 } from './ContextFormat'
+import { formatCompactGitDiffs, formatReadableGitDiffs } from '../git/GitDiffFormatter'
 
 export function assembleContext(request: ContextBuildRequest): ContextBuildResult {
   const warnings: ContextWarning[] = []
@@ -37,6 +38,7 @@ export function assembleContext(request: ContextBuildRequest): ContextBuildResul
   return {
     text,
     fileCount: fileBlocks.length,
+    commitCount: request.gitDiffs?.length ?? 0,
     characterCount: text.length,
     warnings,
   }
@@ -48,12 +50,13 @@ function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly
     : ''
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>\n${fileBlocks.join('\n')}\n</project_files>\n` : ''
+  const gitBlock = formatReadableGitDiffs(request.gitDiffs ?? [])
 
-  if (!treeBlock && !filesBlock) {
+  if (!treeBlock && !filesBlock && !gitBlock) {
     return ''
   }
 
-  return `<context>\n${treeBlock}${filesBlock}</context>`
+  return `<context>\n${treeBlock}${filesBlock}${gitBlock}</context>`
 }
 
 function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
@@ -62,8 +65,11 @@ function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly 
     : ''
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>${fileBlocks.join('')}</project_files>` : ''
+  const gitBlock = formatCompactGitDiffs(request.gitDiffs ?? [])
 
-  return treeBlock || filesBlock ? `<context>${treeBlock}${filesBlock}</context>` : ''
+  return treeBlock || filesBlock || gitBlock
+    ? `<context>${treeBlock}${filesBlock}${gitBlock}</context>`
+    : ''
 }
 
 function formatReadableFileBlock(file: ContextFile, content: string): string {

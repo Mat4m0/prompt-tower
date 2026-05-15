@@ -1,17 +1,20 @@
 import * as vscode from 'vscode'
 import type { ServiceContainer } from './serviceContainer'
 import type { FileTreeProvider } from '../views/FileTreeProvider'
+import type { GitCommitsProvider } from '../views/GitCommitsProvider'
 import type {
   SelectionFilterNode,
   SelectionFiltersProvider,
 } from '../views/SelectionFiltersProvider'
 import { isIndexedNode } from './messageRouter'
+import type { GitCommit } from '../../core/git/GitTypes'
 
 export function registerCommands(options: {
   context: vscode.ExtensionContext
   services: ServiceContainer
   fileTreeProvider: FileTreeProvider
   selectionFiltersProvider: SelectionFiltersProvider
+  gitCommitsProvider: GitCommitsProvider
   showPanel: () => void | Promise<void>
 }): void {
   const { context, services, showPanel } = options
@@ -35,6 +38,23 @@ export function registerCommands(options: {
     }),
     vscode.commands.registerCommand('promptLupinum.excludeAllSelectionFilters', () => {
       services.fileSelection.excludeAllFilters(services.fileIndex.getSnapshot())
+    }),
+    vscode.commands.registerCommand('promptLupinum.refreshGitCommits', async () => {
+      await services.gitService.refreshCommits()
+    }),
+    vscode.commands.registerCommand('promptLupinum.clearGitCommits', () => {
+      services.gitSelection.clear()
+    }),
+    vscode.commands.registerCommand('promptLupinum.selectLatestGitCommit', () => {
+      services.gitSelection.selectLatest(1)
+    }),
+    vscode.commands.registerCommand('promptLupinum.selectLatestThreeGitCommits', () => {
+      services.gitSelection.selectLatest(3)
+    }),
+    vscode.commands.registerCommand('promptLupinum.toggleGitCommit', (commit: GitCommit) => {
+      if (commit?.id) {
+        services.gitSelection.toggleCommit(commit.id)
+      }
     }),
     vscode.commands.registerCommand('promptLupinum.toggleFileSelection', async (node: unknown) => {
       if (isIndexedNode(node)) {
@@ -71,7 +91,17 @@ export function registerCommands(options: {
         treeMode: services.workspaceState.getTreeMode(),
         outputMode: services.workspaceState.getOutputMode(),
       })
-      vscode.window.showInformationMessage(`Copied ${output.fileCount} files to clipboard.`)
+      vscode.window.showInformationMessage(formatCopyMessage(output.fileCount, output.commitCount))
     }),
   )
+}
+
+function formatCopyMessage(fileCount: number, commitCount: number): string {
+  const files = `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
+  if (commitCount === 0) {
+    return `Copied ${files} to clipboard.`
+  }
+
+  const commits = `${commitCount} ${commitCount === 1 ? 'commit diff' : 'commit diffs'}`
+  return `Copied ${files} and ${commits} to clipboard.`
 }

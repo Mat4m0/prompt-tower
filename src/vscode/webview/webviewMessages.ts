@@ -62,6 +62,7 @@ export interface ContextPanelState {
   exportOptions: PromptExportOptions
   selectionSummary: {
     selectedFiles: number
+    selectedCommits: number
     selectedTokens: number
   }
   syncStatus: string

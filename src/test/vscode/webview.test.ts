@@ -46,7 +46,7 @@ test('webview script only references rendered element ids', () => {
       treeMode: 'selectedFilesOnly',
       outputMode: 'readable',
       exportOptions: normalizePromptExportOptions({}),
-      selectionSummary: { selectedFiles: 0, selectedTokens: 0 },
+      selectionSummary: { selectedFiles: 0, selectedCommits: 0, selectedTokens: 0 },
       syncStatus: 'idle',
     },
   })

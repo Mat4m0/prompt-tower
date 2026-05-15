@@ -1,12 +1,15 @@
 import * as vscode from 'vscode'
 import { FileIndex } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
+import { GitSelection } from '../../core/git/GitSelection'
 import { getTokenProfile, type TokenProfile } from '../../core/tokens/TokenProfiles'
 import { VsCodeClipboard } from '../VsCodeClipboard'
 import { VsCodeFileSystem } from '../VsCodeFileSystem'
+import { VsCodeGit } from '../VsCodeGit'
 import { VsCodeStorage } from '../VsCodeStorage'
 import { VsCodeWorkspace } from '../VsCodeWorkspace'
 import { ContextApplicationService } from '../../app/ContextApplicationService'
+import { GitApplicationService } from '../../app/GitApplicationService'
 import { DebugLogger } from './DebugLogger'
 import { PromptPresetApplicationService } from '../../app/PromptPresetApplicationService'
 import { WorkspaceStateService } from '../../app/WorkspaceStateService'
@@ -16,6 +19,8 @@ export interface ServiceContainer {
   fileSystem: VsCodeFileSystem
   fileIndex: FileIndex
   fileSelection: FileSelection
+  gitSelection: GitSelection
+  gitService: GitApplicationService
   contextService: ContextApplicationService
   promptPresets: PromptPresetApplicationService
   workspaceState: WorkspaceStateService
@@ -28,18 +33,22 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
   const workspace = new VsCodeWorkspace()
   const logger = new DebugLogger()
   const fileSystem = new VsCodeFileSystem(logger)
+  const gitHost = new VsCodeGit(logger)
   const clipboard = new VsCodeClipboard()
   let tokenProfile = getTokenProfile(
     context.globalState.get<string>('promptLupinum.selectedTokenProfile', 'claude'),
   )
   const fileIndex = new FileIndex(fileSystem, workspace.getWorkspaces(), tokenProfile, logger)
   const fileSelection = new FileSelection()
+  const gitSelection = new GitSelection()
+  const gitService = new GitApplicationService(gitHost, workspace, gitSelection)
   const contextService = new ContextApplicationService(
     fileIndex,
     fileSelection,
     fileSystem,
     clipboard,
     tokenProfile,
+    gitService,
   )
   const workspaceStorage = new VsCodeStorage(context.workspaceState)
   const promptPresets = new PromptPresetApplicationService(
@@ -53,6 +62,8 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
     fileSystem,
     fileIndex,
     fileSelection,
+    gitSelection,
+    gitService,
     contextService,
     promptPresets,
     workspaceState,

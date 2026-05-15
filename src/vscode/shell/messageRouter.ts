@@ -177,6 +177,7 @@ export class MessageRouter {
       exportOptions: this.exportOptions,
       selectionSummary: {
         selectedFiles: selection.selectedFiles.length,
+        selectedCommits: this.services.gitSelection.getSnapshot().selectedCommits.length,
         selectedTokens: selection.selectedTokenEstimate,
       },
       syncStatus: this.services.fileIndex.getRefreshState(),

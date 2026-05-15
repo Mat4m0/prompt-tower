@@ -17,6 +17,21 @@ export interface ContextFileSnapshot {
   content: string
 }
 
+export interface ContextGitCommit {
+  id: string
+  workspaceName: string
+  hash: string
+  shortHash: string
+  authorName: string
+  authorDate: string
+  subject: string
+}
+
+export interface ContextGitDiff {
+  commit: ContextGitCommit
+  patch: string
+}
+
 export interface ContextWarning {
   type: 'missingFile'
   fileId: string
@@ -31,11 +46,13 @@ export interface ContextBuildRequest {
   projectTree: string
   treeMode: ProjectTreeMode
   outputMode: ContextOutputMode
+  gitDiffs?: readonly ContextGitDiff[]
 }
 
 export interface ContextBuildResult {
   text: string
   fileCount: number
+  commitCount: number
   characterCount: number
   warnings: readonly ContextWarning[]
 }

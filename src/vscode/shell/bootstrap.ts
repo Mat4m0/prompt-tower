@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 import { getWebviewHtml } from '../webview/webviewHtml'
 import { FileTreeProvider } from '../views/FileTreeProvider'
+import { GitCommitsProvider } from '../views/GitCommitsProvider'
 import { SelectionFiltersProvider } from '../views/SelectionFiltersProvider'
 import { registerCommands } from './commandRegistry'
 import { createServiceContainer } from './serviceContainer'
@@ -28,6 +29,7 @@ export async function bootstrapPromptLupinum(
 
   const fileTreeProvider = new FileTreeProvider(services.fileIndex, services.fileSelection)
   const selectionFiltersProvider = new SelectionFiltersProvider(services.fileSelection)
+  const gitCommitsProvider = new GitCommitsProvider(services.gitSelection)
 
   const fileTree = vscode.window.createTreeView('promptLupinum.files', {
     treeDataProvider: fileTreeProvider,
@@ -39,10 +41,17 @@ export async function bootstrapPromptLupinum(
     treeDataProvider: selectionFiltersProvider,
     manageCheckboxStateManually: true,
   })
-  disposables.push(fileTree, filtersTree)
+  const gitTree = vscode.window.createTreeView('promptLupinum.gitCommits', {
+    treeDataProvider: gitCommitsProvider,
+    manageCheckboxStateManually: true,
+  })
+  disposables.push(fileTree, filtersTree, gitTree)
 
   services.fileSelection.onDidChange(() => {
     void services.workspaceState.setSelectionIntent(services.fileSelection.getPersistedIntent())
+    void router?.postState()
+  })
+  services.gitSelection.onDidChange(() => {
     void router?.postState()
   })
 
@@ -104,6 +113,11 @@ export async function bootstrapPromptLupinum(
         )
       }
     }),
+    gitTree.onDidChangeCheckboxState((event) => {
+      for (const [commit] of event.items) {
+        services.gitSelection.toggleCommit(commit.id)
+      }
+    }),
   )
 
   registerCommands({
@@ -111,12 +125,14 @@ export async function bootstrapPromptLupinum(
     services,
     fileTreeProvider,
     selectionFiltersProvider,
+    gitCommitsProvider,
     showPanel,
   })
 
   const session = new WorkspaceSession(context, services)
   session.start()
   void refreshIndex(services, 'startup')
+  void refreshCommits(services, 'startup')
 
   return new vscode.Disposable(() => {
     for (const disposable of disposables) {
@@ -124,6 +140,19 @@ export async function bootstrapPromptLupinum(
     }
     panel?.dispose()
   })
+}
+
+async function refreshCommits(
+  services: ReturnType<typeof createServiceContainer>,
+  reason: string,
+): Promise<void> {
+  try {
+    services.logger.info(`[git] refresh requested: ${reason}`)
+    await services.gitService.refreshCommits()
+    services.logger.info(`[git] refresh complete: ${reason}`)
+  } catch (error) {
+    services.logger.error(`[git] refresh failed: ${reason}`, error)
+  }
 }
 
 async function refreshIndex(

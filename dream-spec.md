@@ -198,8 +198,8 @@ prompt-lupinum
 
 ```ts
 export function activate(context: vscode.ExtensionContext) {
-  const app = bootstrapPromptLupinum(context);
-  context.subscriptions.push(app);
+  const app = bootstrapPromptLupinum(context)
+  context.subscriptions.push(app)
 }
 
 export function deactivate() {}
@@ -213,21 +213,21 @@ Target: under 80 lines.
 
 ```ts
 export interface IndexedFile {
-  id: FileId;
-  absolutePath: string;
-  relativePath: string;
-  workspaceId: WorkspaceId;
-  name: string;
-  extension: string | null;
-  sizeBytes: number;
-  mtimeMs: number;
-  kind: FileKind;
+  id: FileId
+  absolutePath: string
+  relativePath: string
+  workspaceId: WorkspaceId
+  name: string
+  extension: string | null
+  sizeBytes: number
+  mtimeMs: number
+  kind: FileKind
 }
 
 export type FileKind =
-  | { type: "extension"; extension: string | null }
-  | { type: "test" }
-  | { type: "declaration" };
+  | { type: 'extension'; extension: string | null }
+  | { type: 'test' }
+  | { type: 'declaration' }
 ```
 
 `kind` is computed once by core file classification logic. Selection filters consume it. UI does not re-classify paths.
@@ -240,9 +240,9 @@ Do not store selected files as the only source of truth. Store user intent.
 
 ```ts
 export interface SelectionIntent {
-  includeNodeIds: readonly FileTreeNodeId[];
-  excludeNodeIds: readonly FileTreeNodeId[];
-  excludedFileKindIds: readonly FileKindId[];
+  includeNodeIds: readonly FileTreeNodeId[]
+  excludeNodeIds: readonly FileTreeNodeId[]
+  excludedFileKindIds: readonly FileKindId[]
 }
 ```
 
@@ -268,14 +268,14 @@ Tree checkbox state is derived from effective selection and filter rules. The tr
 
 ```ts
 export interface SelectionFilterGroup {
-  id: FileKindId;
-  label: string;
-  iconHint: "file" | "test" | "type" | "other";
-  selectedFiles: number;
-  selectedTokenEstimate: number;
-  excludedFiles: number;
-  excludedTokenEstimate: number;
-  excluded: boolean;
+  id: FileKindId
+  label: string
+  iconHint: 'file' | 'test' | 'type' | 'other'
+  selectedFiles: number
+  selectedTokenEstimate: number
+  excludedFiles: number
+  excludedTokenEstimate: number
+  excluded: boolean
 }
 ```
 
@@ -290,22 +290,22 @@ Rules:
 
 ```ts
 export interface ContextBuildRequest {
-  files: readonly IndexedFile[];
-  snapshots: ReadonlyMap<FileId, FileSnapshot>;
-  prefix: string;
-  suffix?: string;
-  treeMode: ProjectTreeMode;
-  outputMode: "readable" | "compact";
-  tokenProfileId: TokenProfileId;
-  createdAt: string;
+  files: readonly IndexedFile[]
+  snapshots: ReadonlyMap<FileId, FileSnapshot>
+  prefix: string
+  suffix?: string
+  treeMode: ProjectTreeMode
+  outputMode: 'readable' | 'compact'
+  tokenProfileId: TokenProfileId
+  createdAt: string
 }
 
 export interface ContextBuildResult {
-  text: string;
-  fileCount: number;
-  characterCount: number;
-  estimatedTokens: number;
-  warnings: readonly ContextWarning[];
+  text: string
+  fileCount: number
+  characterCount: number
+  estimatedTokens: number
+  warnings: readonly ContextWarning[]
 }
 ```
 
@@ -334,9 +334,9 @@ Recommended interface:
 
 ```ts
 export interface FileIndex {
-  getSnapshot(): FileIndexSnapshot;
-  ensureFresh(): Promise<FileIndexSnapshot>;
-  markDirty(reason: FileIndexDirtyReason): void;
+  getSnapshot(): FileIndexSnapshot
+  ensureFresh(): Promise<FileIndexSnapshot>
+  markDirty(reason: FileIndexDirtyReason): void
 }
 ```
 
@@ -405,14 +405,14 @@ Each profile has content-aware ratios:
 
 ```ts
 export interface TokenProfile {
-  id: "claude" | "openai" | "gemini";
-  label: string;
-  inputPricePerMTok: number;
+  id: 'claude' | 'openai' | 'gemini'
+  label: string
+  inputPricePerMTok: number
   ratios: {
-    sourceCharsPerToken: number;
-    numericCharsPerToken: number;
-    proseCharsPerToken: number;
-  };
+    sourceCharsPerToken: number
+    numericCharsPerToken: number
+    proseCharsPerToken: number
+  }
 }
 ```
 
@@ -453,8 +453,8 @@ If a local tokenizer is kept later, it must be behind a single interface and mus
 
 ```ts
 export interface TokenCounter {
-  estimateText(text: string, profileId: TokenProfileId): TokenEstimate;
-  estimateFile(file: IndexedFile, profileId: TokenProfileId): TokenEstimate;
+  estimateText(text: string, profileId: TokenProfileId): TokenEstimate
+  estimateFile(file: IndexedFile, profileId: TokenProfileId): TokenEstimate
 }
 ```
 
@@ -499,10 +499,10 @@ Project tree modes:
 
 ```ts
 export type ProjectTreeMode =
-  | "none"
-  | "selectedFilesOnly"
-  | "fullFilesAndDirectories"
-  | "fullDirectoriesOnly";
+  | 'none'
+  | 'selectedFilesOnly'
+  | 'fullFilesAndDirectories'
+  | 'fullDirectoriesOnly'
 ```
 
 Every mode gets golden tests.
@@ -515,23 +515,23 @@ Replace prompt history with versioned prompt presets.
 
 ```ts
 export interface PromptPreset {
-  id: PromptPresetId;
-  name: string;
-  description?: string;
-  kind: "prefix";
-  currentVersionId: PromptPresetVersionId;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt?: string;
-  versions: readonly PromptPresetVersion[];
+  id: PromptPresetId
+  name: string
+  description?: string
+  kind: 'prefix'
+  currentVersionId: PromptPresetVersionId
+  createdAt: string
+  updatedAt: string
+  deletedAt?: string
+  versions: readonly PromptPresetVersion[]
 }
 
 export interface PromptPresetVersion {
-  id: PromptPresetVersionId;
-  text: string;
-  note?: string;
-  createdAt: string;
-  checksum: string;
+  id: PromptPresetVersionId
+  text: string
+  note?: string
+  createdAt: string
+  checksum: string
 }
 ```
 
@@ -659,21 +659,21 @@ The webview should use typed messages.
 
 ```ts
 export type WebviewToExtensionMessage =
-  | { type: "context.create" }
-  | { type: "context.copyPreview" }
-  | { type: "context.savePreview" }
-  | { type: "prefix.setInlineText"; text: string }
-  | { type: "prefix.selectPreset"; presetId: string | null }
-  | { type: "prefix.createPreset"; name: string; text: string }
-  | { type: "prefix.saveVersion"; presetId: string; text: string; note?: string }
-  | { type: "prefix.restoreVersion"; presetId: string; versionId: string }
-  | { type: "prefix.deletePreset"; presetId: string }
-  | { type: "ui.setOptions"; options: Partial<ContextUiOptions> };
+  | { type: 'context.create' }
+  | { type: 'context.copyPreview' }
+  | { type: 'context.savePreview' }
+  | { type: 'prefix.setInlineText'; text: string }
+  | { type: 'prefix.selectPreset'; presetId: string | null }
+  | { type: 'prefix.createPreset'; name: string; text: string }
+  | { type: 'prefix.saveVersion'; presetId: string; text: string; note?: string }
+  | { type: 'prefix.restoreVersion'; presetId: string; versionId: string }
+  | { type: 'prefix.deletePreset'; presetId: string }
+  | { type: 'ui.setOptions'; options: Partial<ContextUiOptions> }
 
 export type ExtensionToWebviewMessage =
-  | { type: "state.changed"; state: ContextPanelState }
-  | { type: "context.previewUpdated"; preview: ContextPreviewState }
-  | { type: "toast"; level: "info" | "warning" | "error"; message: string };
+  | { type: 'state.changed'; state: ContextPanelState }
+  | { type: 'context.previewUpdated'; preview: ContextPreviewState }
+  | { type: 'toast'; level: 'info' | 'warning' | 'error'; message: string }
 ```
 
 No loose `command` strings.
@@ -744,11 +744,11 @@ Export options:
 
 ```ts
 export interface ExportOptions {
-  baseName: string;
-  format: "md" | "txt";
-  location: "promptLupinum" | "workspaceRoot" | "customFolder";
-  customFolderPath?: string;
-  includeTimestamp: boolean;
+  baseName: string
+  format: 'md' | 'txt'
+  location: 'promptLupinum' | 'workspaceRoot' | 'customFolder'
+  customFolderPath?: string
+  includeTimestamp: boolean
 }
 ```
 
@@ -766,12 +766,12 @@ Use a small event bus in `app`, not ad hoc calls everywhere.
 
 ```ts
 export type AppEvent =
-  | { type: "fileIndex.changed"; snapshot: FileIndexSnapshot }
-  | { type: "selection.changed"; snapshot: EffectiveSelectionSnapshot }
-  | { type: "tokens.changed"; snapshot: TokenSummary }
-  | { type: "promptPresets.changed" }
-  | { type: "preview.invalidated"; reason: PreviewInvalidationReason }
-  | { type: "preview.updated"; preview: ContextPreviewState };
+  | { type: 'fileIndex.changed'; snapshot: FileIndexSnapshot }
+  | { type: 'selection.changed'; snapshot: EffectiveSelectionSnapshot }
+  | { type: 'tokens.changed'; snapshot: TokenSummary }
+  | { type: 'promptPresets.changed' }
+  | { type: 'preview.invalidated'; reason: PreviewInvalidationReason }
+  | { type: 'preview.updated'; preview: ContextPreviewState }
 ```
 
 Events update views. They do not contain business rules.

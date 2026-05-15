@@ -22,10 +22,13 @@ export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
   }
 
   getTreeItem(element: IndexedNode): vscode.TreeItem {
+    const isFirstRoot = this.fileIndex.getSnapshot().rootIds[0] === element.id
     const collapsibleState =
       element.kind === 'file'
         ? vscode.TreeItemCollapsibleState.None
-        : vscode.TreeItemCollapsibleState.Collapsed
+        : isFirstRoot
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.Collapsed
     const item = new vscode.TreeItem(element.name, collapsibleState)
     item.id = element.id
     item.resourceUri = element.kind === 'file' ? vscode.Uri.file(element.absolutePath) : undefined
