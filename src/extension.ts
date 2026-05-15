@@ -13,10 +13,20 @@ import { FileDiscoveryService } from "./services/FileDiscoveryService";
 import { TokenCountingService } from "./services/TokenCountingService";
 import { IgnorePatternService } from "./services/IgnorePatternService";
 import { ContextGenerationService } from "./services/ContextGenerationService";
+import { estimateContextCharacters } from "./services/contextTokenEstimate";
 import { PromptHistoryService, PromptType } from "./services/PromptHistoryService";
 import { PromptExportService } from "./services/PromptExportService";
 import { configureTokenizerCache } from "./services/tokenizer";
 import { FileSnapshotService } from "./services/FileSnapshotService";
+import {
+  DEFAULT_TOKEN_PROFILE_ID,
+  TOKEN_PROFILES,
+  estimateTokensFromText,
+  formatTokenCost,
+  getTokenProfile,
+  isTokenProfileId,
+  type TokenProfile,
+} from "./services/tokenProfiles";
 import { FileNode } from "./models/FileNode";
 import { TokenUpdatePayload, TreeSyncStatePayload } from "./models/Events";
 import { GitHubConfigManager } from "./utils/githubConfig";
@@ -41,10 +51,24 @@ let prsProviderInstance: GitHubPRsProvider | undefined;
 let mainTreeView: vscode.TreeView<FileNode>;
 let statusWebview: vscode.WebviewView | undefined;
 let fileSnapshotService: FileSnapshotService;
+let currentTokenProfile: TokenProfile = getTokenProfile(DEFAULT_TOKEN_PROFILE_ID);
 
 // --- Preview State ---
 let isPreviewValid = false;
 let isContextActionInFlight = false;
+let tokenPreviewTimeout: NodeJS.Timeout | undefined;
+let tokenPreviewSequence = 0;
+let tokenPreviewOptions: {
+  treeType:
+    | "fullFilesAndDirectories"
+    | "fullDirectoriesOnly"
+    | "selectedFilesOnly"
+    | "none";
+  minify: boolean;
+} = {
+  treeType: "fullFilesAndDirectories",
+  minify: false,
+};
 
 interface FreshContextInput {
   allRootNodes: FileNode[];
@@ -64,6 +88,93 @@ function invalidateWebviewPreview() {
     webviewPanel.webview.postMessage({ command: "invalidatePreview" });
     isPreviewValid = false;
   }
+}
+
+function createTokenUpdatePayload(
+  count: number,
+  isCounting: boolean = false
+): TokenUpdatePayload {
+  return {
+    count,
+    isCounting,
+    profileId: currentTokenProfile.id,
+    profileLabel: currentTokenProfile.label,
+    estimated: true,
+    cost: formatTokenCost(count, currentTokenProfile),
+    inputPricePerMTok: currentTokenProfile.inputPricePerMTok,
+  };
+}
+
+function postTokenUpdateForText(text: string): void {
+  if (!webviewPanel) {
+    return;
+  }
+
+  webviewPanel.webview.postMessage({
+    command: "tokenUpdate",
+    payload: createTokenUpdatePayload(
+      estimateTokensFromText(text, currentTokenProfile)
+    ),
+  });
+}
+
+function scheduleEstimatedTokenPreviewUpdate(delayMs: number = 120): void {
+  if (tokenPreviewTimeout) {
+    clearTimeout(tokenPreviewTimeout);
+  }
+
+  tokenPreviewTimeout = setTimeout(() => {
+    tokenPreviewTimeout = undefined;
+    void updateEstimatedTokenPreview();
+  }, delayMs);
+}
+
+async function updateEstimatedTokenPreview(): Promise<void> {
+  if (!webviewPanel || !multiRootProvider || !contextGenerationService) {
+    return;
+  }
+
+  const sequence = ++tokenPreviewSequence;
+  const allRootNodes = multiRootProvider.getRootNodes();
+  const checkedFiles = multiRootProvider.getCheckedFiles();
+  const selectedFileBlockChars =
+    multiRootProvider.getSelectedFileBlockCharacterEstimate(
+      tokenPreviewOptions.minify
+    );
+  const projectTree = await contextGenerationService.generateProjectTreePreview(
+    allRootNodes,
+    {
+      primaryWorkspaceRoot: workspaceManager.getPrimaryWorkspace()?.rootPath,
+      treeType: tokenPreviewOptions.treeType,
+    }
+  );
+
+  if (sequence !== tokenPreviewSequence || !webviewPanel) {
+    return;
+  }
+
+  const githubIssueChars = Math.ceil(
+    tokenCountingService.getGitHubIssueTokenCount() *
+      currentTokenProfile.charsPerToken
+  );
+  const estimatedChars = estimateContextCharacters({
+    prefix: multiRootProvider.getPromptPrefix(),
+    suffix: multiRootProvider.getPromptSuffix(),
+    selectedFileBlockChars,
+    selectedFileCount: checkedFiles.length,
+    projectTree,
+    treeType: tokenPreviewOptions.treeType,
+    minify: tokenPreviewOptions.minify,
+    githubIssueChars,
+  });
+
+  webviewPanel.webview.postMessage({
+    command: "tokenUpdate",
+    payload: createTokenUpdatePayload(
+      Math.ceil(estimatedChars / currentTokenProfile.charsPerToken),
+      tokenCountingService.getIsCounting()
+    ),
+  });
 }
 
 function setSyncStatus(text: string, busy: boolean = isContextActionInFlight) {
@@ -203,6 +314,8 @@ function getWebviewContent(
     initialIncludeTimestamp: exportOptions.includeTimestamp,
     prefixCollapsed,
     suffixCollapsed,
+    tokenProfiles: TOKEN_PROFILES,
+    selectedTokenProfileId: currentTokenProfile.id,
   };
 
   return getWebviewHtml(params);
@@ -240,6 +353,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
         "outputFormat.projectTreeFormat.type",
         "fullFilesAndDirectories"
       );
+  tokenPreviewOptions.treeType = initialTreeType;
 
   webviewPanel.webview.html = getWebviewContent(
     webviewPanel.webview,
@@ -262,6 +376,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           if (multiRootProvider && typeof message.text === "string") {
             multiRootProvider.setPromptPrefix(message.text);
             invalidateWebviewPreview();
+            scheduleEstimatedTokenPreviewUpdate();
           }
           break;
 
@@ -269,7 +384,32 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           if (multiRootProvider && typeof message.text === "string") {
             multiRootProvider.setPromptSuffix(message.text);
             invalidateWebviewPreview();
+            scheduleEstimatedTokenPreviewUpdate();
           }
+          break;
+
+        case "selectTokenProfile":
+          if (
+            multiRootProvider &&
+            typeof message.profileId === "string" &&
+            isTokenProfileId(message.profileId)
+          ) {
+            currentTokenProfile = getTokenProfile(message.profileId);
+            await context.globalState.update(
+              "promptTower.selectedTokenProfile",
+              currentTokenProfile.id
+            );
+            multiRootProvider.setTokenProfile(currentTokenProfile);
+            scheduleEstimatedTokenPreviewUpdate(0);
+          }
+          break;
+
+        case "tokenPreviewOptionsChanged":
+          tokenPreviewOptions = {
+            treeType: message.options?.treeType || tokenPreviewOptions.treeType,
+            minify: message.options?.minify ?? tokenPreviewOptions.minify,
+          };
+          scheduleEstimatedTokenPreviewUpdate();
           break;
 
         case "webviewReady":
@@ -286,10 +426,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
             });
             webviewPanel.webview.postMessage({
               command: "tokenUpdate",
-              payload: {
-                count: tokenCountingService.getCurrentTokenCount(),
-                isCounting: tokenCountingService.getIsCounting(),
-              },
+              payload: createTokenUpdatePayload(0, tokenCountingService.getIsCounting()),
             });
             // Send initial tree visibility state
             webviewPanel.webview.postMessage({
@@ -301,6 +438,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
               payload: exportOptions,
             });
             setSyncStatus(getSyncStatusText(multiRootProvider.getSyncState()));
+            scheduleEstimatedTokenPreviewUpdate(0);
           }
           break;
 
@@ -354,6 +492,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                   command: "updatePreview",
                   payload: { context: result.contextString },
                 });
+                postTokenUpdateForText(result.contextString);
                 isPreviewValid = true;
               });
             } catch (error) {
@@ -412,6 +551,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                   command: "updatePreview",
                   payload: { context: result.contextString },
                 });
+                postTokenUpdateForText(result.contextString);
                 panel.webview.postMessage({
                   command: "promptFileSaved",
                   payload: {
@@ -495,6 +635,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
                     command: "updatePreview",
                     payload: { context: result.contextString },
                   });
+                  postTokenUpdateForText(result.contextString);
                   isPreviewValid = true;
                 }
               });
@@ -507,6 +648,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
         case "clearSelections":
           if (multiRootProvider) {
             multiRootProvider.clearAllSelections();
+            scheduleEstimatedTokenPreviewUpdate();
           }
           break;
 
@@ -537,6 +679,7 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
 
             // Reset preview state
             isPreviewValid = false;
+            scheduleEstimatedTokenPreviewUpdate();
 
             // Show confirmation
             vscode.window.showInformationMessage(
@@ -734,6 +877,12 @@ class StatusTreeProvider implements vscode.WebviewViewProvider {
 
 // --- Extension Activation ---
 export function activate(context: vscode.ExtensionContext) {
+  const storedTokenProfileId = context.globalState.get<string>(
+    "promptTower.selectedTokenProfile",
+    DEFAULT_TOKEN_PROFILE_ID
+  );
+  currentTokenProfile = getTokenProfile(storedTokenProfileId);
+
   // Initialize services
   workspaceManager = new WorkspaceManager();
   ignorePatternService = new IgnorePatternService(context);
@@ -761,6 +910,7 @@ export function activate(context: vscode.ExtensionContext) {
     ignorePatternService,
     context
   );
+  multiRootProvider.setTokenProfile(currentTokenProfile);
 
   // Create tree view
   mainTreeView = vscode.window.createTreeView("promptTowerView", {
@@ -791,13 +941,14 @@ export function activate(context: vscode.ExtensionContext) {
   // Handle checkbox clicks (checkboxes are separate from row content)
   context.subscriptions.push(
     mainTreeView.onDidChangeCheckboxState(async (evt) => {
-      for (const [item, state] of evt.items) {
-        if (isFileNode(item)) {
-          await multiRootProvider.toggleNodeSelection(item);
+        for (const [item, state] of evt.items) {
+          if (isFileNode(item)) {
+            await multiRootProvider.toggleNodeSelection(item);
+          }
         }
-      }
-      invalidateWebviewPreview();
-    })
+        invalidateWebviewPreview();
+        scheduleEstimatedTokenPreviewUpdate();
+      })
   );
 
   // Row content clicks are handled via commands set on each TreeItem
@@ -829,6 +980,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
         // Invalidate preview when issue selections change
         invalidateWebviewPreview();
+        scheduleEstimatedTokenPreviewUpdate();
       })
     );
 
@@ -861,6 +1013,7 @@ export function activate(context: vscode.ExtensionContext) {
           }
         }
         invalidateWebviewPreview();
+        scheduleEstimatedTokenPreviewUpdate();
       })
     );
 
@@ -880,7 +1033,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     tokenCountingService.onDidChangeTokens((payload: TokenUpdatePayload) => {
       if (webviewPanel) {
-        webviewPanel.webview.postMessage({ command: "tokenUpdate", payload });
+        scheduleEstimatedTokenPreviewUpdate();
         invalidateWebviewPreview();
       }
     })
@@ -904,6 +1057,7 @@ export function activate(context: vscode.ExtensionContext) {
       const node = multiRootProvider.findNodeByPath(document.uri.fsPath);
       if (node?.isChecked) {
         invalidateWebviewPreview();
+        scheduleEstimatedTokenPreviewUpdate();
       }
     })
   );
@@ -918,18 +1072,34 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("promptTower.toggleFileSelection", async (fileNode: FileNode) => {
       await multiRootProvider.toggleNodeSelection(fileNode);
       invalidateWebviewPreview();
+      scheduleEstimatedTokenPreviewUpdate();
     }),
 
     vscode.commands.registerCommand("promptTower.refresh", async () => {
       await multiRootProvider.refresh();
+      scheduleEstimatedTokenPreviewUpdate();
     }),
 
     vscode.commands.registerCommand("promptTower.clearSelections", () => {
       multiRootProvider.clearAllSelections();
+      scheduleEstimatedTokenPreviewUpdate();
+    }),
+
+    vscode.commands.registerCommand("promptTower.hideTreeTokenCounts", async () => {
+      await vscode.workspace
+        .getConfiguration("promptTower")
+        .update("showTreeTokenCounts", false, vscode.ConfigurationTarget.Global);
+    }),
+
+    vscode.commands.registerCommand("promptTower.showTreeTokenCounts", async () => {
+      await vscode.workspace
+        .getConfiguration("promptTower")
+        .update("showTreeTokenCounts", true, vscode.ConfigurationTarget.Global);
     }),
 
     vscode.commands.registerCommand("promptTower.toggleAllFiles", async () => {
       await multiRootProvider.toggleAllFiles();
+      scheduleEstimatedTokenPreviewUpdate();
     }),
 
     vscode.commands.registerCommand("promptTower.copyToClipboard", async () => {
@@ -1105,6 +1275,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       // Select the file using the existing selection system
       await multiRootProvider.toggleNodeSelection(fileNode);
+      scheduleEstimatedTokenPreviewUpdate();
 
       vscode.window.showInformationMessage(
         `✅ Added "${fileNode.label}" to Prompt Tower selection.`
@@ -1126,6 +1297,12 @@ export function activate(context: vscode.ExtensionContext) {
     // Right-click file preview
     vscode.commands.registerCommand("promptTower.previewFile", async (fileNode: FileNode) => {
       await showFilePreview(fileNode);
+    }),
+
+    vscode.commands.registerCommand("promptTower.refineFolderSelection", async (fileNode: FileNode) => {
+      await multiRootProvider.refineFolderSelection(fileNode);
+      invalidateWebviewPreview();
+      scheduleEstimatedTokenPreviewUpdate();
     })
   );
 

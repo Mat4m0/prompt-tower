@@ -13,6 +13,21 @@ export interface TokenUpdatePayload {
   
   /** GitHub issues token count */
   issueTokens?: number;
+
+  /** Selected token profile id */
+  profileId?: string;
+
+  /** Human-readable token profile label */
+  profileLabel?: string;
+
+  /** Whether the displayed count is an estimate */
+  estimated?: boolean;
+
+  /** Formatted input cost estimate */
+  cost?: string;
+
+  /** Input price in USD per million tokens */
+  inputPricePerMTok?: number;
   
   /** Error message if token counting failed */
   error?: string;

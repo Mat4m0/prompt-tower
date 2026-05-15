@@ -3,6 +3,9 @@ import * as path from "path";
 import { Workspace } from "../models/Workspace";
 import { FileNode, FileNodeFactory, FileNodeUtils } from "../models/FileNode";
 import { IgnorePatternService } from "./IgnorePatternService";
+import { estimateTokenCountFromBytes } from "../utils/treeTokens";
+
+const FILE_STAT_BATCH_SIZE = 64;
 
 /**
  * Service for discovering files and building file trees across multiple workspaces
@@ -54,12 +57,21 @@ export class FileDiscoveryService {
       const fileNodeMap = new Map<string, FileNode>();
       fileNodeMap.set(workspace.rootPath, workspaceRoot);
 
-      for (const uri of fileUris) {
-        this.addFileToTree(
-          uri.fsPath,
-          workspace,
-          fileNodeMap,
-          preserveCheckedPaths
+      for (
+        let index = 0;
+        index < fileUris.length;
+        index += FILE_STAT_BATCH_SIZE
+      ) {
+        const batch = fileUris.slice(index, index + FILE_STAT_BATCH_SIZE);
+        await Promise.all(
+          batch.map((uri) =>
+            this.addFileToTree(
+              uri.fsPath,
+              workspace,
+              fileNodeMap,
+              preserveCheckedPaths
+            )
+          )
         );
       }
 
@@ -70,6 +82,8 @@ export class FileDiscoveryService {
       if (preserveCheckedPaths && preserveCheckedPaths.size > 0) {
         this.restoreParentChildCheckboxStates(workspaceRoot);
       }
+
+      FileNodeUtils.recomputeTokenCounts(workspaceRoot);
 
       return workspaceRoot;
     } catch (error) {
@@ -84,12 +98,12 @@ export class FileDiscoveryService {
   /**
    * Add a file and its parent directories to the tree
    */
-  private addFileToTree(
+  private async addFileToTree(
     filePath: string,
     workspace: Workspace,
     fileNodeMap: Map<string, FileNode>,
     preserveCheckedPaths?: Set<string>
-  ): void {
+  ): Promise<void> {
     // Skip if already processed
     if (fileNodeMap.has(filePath)) {
       return;
@@ -100,6 +114,8 @@ export class FileDiscoveryService {
       return;
     }
 
+    const metadata = await this.getFileMetadata(filePath);
+
     // Create file node
     const relativePath = path.relative(workspace.rootPath, filePath);
     // Use original path for consistent matching across platforms
@@ -108,7 +124,10 @@ export class FileDiscoveryService {
     const fileNode = FileNodeFactory.createFileNode(
       filePath,
       relativePath,
-      workspace
+      workspace,
+      undefined,
+      metadata.sizeBytes,
+      metadata.mtimeMs
     );
     fileNode.isChecked = isChecked;
 
@@ -288,6 +307,11 @@ export class FileDiscoveryService {
             vscode.Uri.file(node.absolutePath)
           );
           node.sizeBytes = stats.size;
+          node.mtimeMs = stats.mtime;
+          FileNodeUtils.updateFileTokenCounts(node, {
+            estimatedTokenCount: estimateTokenCountFromBytes(stats.size),
+            exactTokenCount: undefined,
+          });
         } catch (error) {
           console.warn(
             `Error getting file size for ${node.absolutePath}:`,
@@ -315,6 +339,22 @@ export class FileDiscoveryService {
       }
     }
     return allNodes;
+  }
+
+  private async getFileMetadata(
+    filePath: string
+  ): Promise<{ sizeBytes: number; mtimeMs?: number }> {
+    try {
+      const stats = await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+      if (stats.type !== vscode.FileType.File) {
+        return { sizeBytes: 0 };
+      }
+
+      return { sizeBytes: stats.size, mtimeMs: stats.mtime };
+    } catch (error) {
+      console.warn(`Error getting file size for ${filePath}:`, error);
+      return { sizeBytes: 0 };
+    }
   }
 
   /**

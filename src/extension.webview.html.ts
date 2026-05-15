@@ -1,4 +1,5 @@
 import { getWebviewStyles } from "./extension.webview.css";
+import type { TokenProfile, TokenProfileId } from "./services/tokenProfiles";
 
 export interface WebviewParams {
   nonce: string;
@@ -18,6 +19,8 @@ export interface WebviewParams {
   initialIncludeTimestamp: boolean;
   prefixCollapsed: boolean;
   suffixCollapsed: boolean;
+  tokenProfiles: readonly TokenProfile[];
+  selectedTokenProfileId: TokenProfileId;
 }
 
 export function getWebviewHtml(params: WebviewParams): string {
@@ -50,8 +53,20 @@ export function getWebviewHtml(params: WebviewParams): string {
               </div>
 
               <div id="token-info">
-                  <span>Selected Tokens:</span>
-                  <span id="token-count">0</span>
+                  <select id="tokenProfileSelect" aria-label="Token model">
+                    ${params.tokenProfiles
+                      .map(
+                        (profile) =>
+                          `<option value="${profile.id}"${
+                            profile.id === params.selectedTokenProfileId
+                              ? " selected"
+                              : ""
+                          }>${profile.label}</option>`
+                      )
+                      .join("")}
+                  </select>
+                  <span id="token-count">~0 tokens</span>
+                  <span id="token-cost"></span>
                   <div id="spinner" class="spinner"></div>
                   <span id="token-status"></span>
               </div>
@@ -192,8 +207,10 @@ export function getWebviewHtml(params: WebviewParams): string {
                     const vscode = acquireVsCodeApi();
 
                     const tokenCountElement = document.getElementById('token-count');
+                    const tokenCostElement = document.getElementById('token-cost');
                     const tokenStatusElement = document.getElementById('token-status');
                     const spinnerElement = document.getElementById('spinner');
+                    const tokenProfileSelect = document.getElementById('tokenProfileSelect');
                     const prefixTextArea = document.getElementById('prompt-prefix');
                     const suffixTextArea = document.getElementById('prompt-suffix');
                     const previewTextArea = document.getElementById('context-preview');
@@ -266,19 +283,25 @@ export function getWebviewHtml(params: WebviewParams): string {
                     window.addEventListener('message', event => {
                         const message = event.data;
                         switch (message.command) {
-                            case 'tokenUpdate':
-                                if (message.payload && tokenCountElement && tokenStatusElement && spinnerElement) {
-                                    const { count, isCounting } = message.payload;
-                                    tokenCountElement.textContent = count.toLocaleString();
-                                    if (isCounting) {
-                                        tokenStatusElement.textContent = '(Calculating...)';
-                                        spinnerElement.classList.add('visible');
-                                    } else {
+	                            case 'tokenUpdate':
+	                                if (message.payload && tokenCountElement && tokenStatusElement && spinnerElement) {
+	                                    const { count, isCounting, profileLabel, cost, inputPricePerMTok } = message.payload;
+	                                    const label = profileLabel ? profileLabel + ': ' : '';
+	                                    tokenCountElement.textContent = label + '~' + count.toLocaleString() + ' tokens';
+	                                    if (tokenCostElement) {
+	                                        tokenCostElement.textContent = cost
+	                                            ? '· ~' + cost + ' input' + (inputPricePerMTok ? ' @ $' + inputPricePerMTok + '/MTok' : '')
+	                                            : '';
+	                                    }
+	                                    if (isCounting) {
+	                                        tokenStatusElement.textContent = '(Updating...)';
+	                                        spinnerElement.classList.add('visible');
+	                                    } else {
                                         tokenStatusElement.textContent = '';
                                         spinnerElement.classList.remove('visible');
                                     }
-                                }
-                                break;
+	                                }
+	                                break;
                             case 'updatePrefix':
                                 if (prefixTextArea && typeof message.text === 'string') {
                                     prefixTextArea.value = message.text;
@@ -366,7 +389,31 @@ export function getWebviewHtml(params: WebviewParams): string {
                     exportLocationSelect?.addEventListener('change', syncExportOptions);
                     customExportPathModeSelect?.addEventListener('change', syncExportOptions);
                     customExportPathInput?.addEventListener('input', syncExportOptions);
-                    exportTimestampCheckbox?.addEventListener('change', syncExportOptions);
+	                    exportTimestampCheckbox?.addEventListener('change', syncExportOptions);
+	                    tokenProfileSelect?.addEventListener('change', (event) => {
+	                        vscode.postMessage({
+	                            command: 'selectTokenProfile',
+	                            profileId: event.target.value
+	                        });
+	                    });
+	                    treeTypeSelect?.addEventListener('change', () => {
+	                        vscode.postMessage({
+	                            command: 'tokenPreviewOptionsChanged',
+	                            options: {
+	                                treeType: treeTypeSelect?.value || 'fullFilesAndDirectories',
+	                                minify: minifyCheckbox?.checked ?? false
+	                            }
+	                        });
+	                    });
+	                    minifyCheckbox?.addEventListener('change', () => {
+	                        vscode.postMessage({
+	                            command: 'tokenPreviewOptionsChanged',
+	                            options: {
+	                                treeType: treeTypeSelect?.value || 'fullFilesAndDirectories',
+	                                minify: minifyCheckbox?.checked ?? false
+	                            }
+	                        });
+	                    });
 
                     createContextButton?.addEventListener('click', () => {
                         if (createContextButton.disabled) {

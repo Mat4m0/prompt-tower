@@ -59,14 +59,28 @@ export function getWebviewStyles(): string {
             gap: 8px;
             flex-shrink: 0;
         }
-        #token-count {
-            font-weight: bold;
-            font-size: 1.1em;
-            color: var(--vscode-charts-blue);
-        }
-        #token-status {
-            font-style: italic;
-            color: var(--vscode-descriptionForeground, #777);
+	        #token-count {
+	            font-weight: bold;
+	            font-size: 1.1em;
+	            color: var(--vscode-charts-blue);
+	        }
+	        #token-cost {
+	            color: var(--vscode-descriptionForeground, #777);
+	            font-size: 0.95em;
+	        }
+	        #tokenProfileSelect {
+	            background: var(--vscode-dropdown-background);
+	            color: var(--vscode-dropdown-foreground);
+	            border: 1px solid var(--vscode-dropdown-border);
+	            border-radius: 3px;
+	            padding: 3px 6px;
+	            font-size: 0.95em;
+	            cursor: pointer;
+	            max-width: 220px;
+	        }
+	        #token-status {
+	            font-style: italic;
+	            color: var(--vscode-descriptionForeground, #777);
             flex-grow: 1;
         }
         .spinner {

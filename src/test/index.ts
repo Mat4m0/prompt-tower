@@ -20,6 +20,38 @@ import {
   writeLatestReportFiles,
   type BenchmarkReport,
 } from "../bench/reporting";
+import {
+  estimateTokenCountFromBytes,
+  formatTreeTokenCount,
+  recomputeTreeTokenCounts,
+  updateLeafTreeTokenCounts,
+  type TreeTokenNode,
+} from "../utils/treeTokens";
+import {
+  estimateTokensFromText,
+  formatTokenCost,
+  getTokenProfile,
+} from "../services/tokenProfiles";
+import { estimateContextCharacters } from "../services/contextTokenEstimate";
+import { getSelectionRefinementDefinition } from "../services/selectionRefinement";
+
+interface TestTreeTokenNode extends TreeTokenNode<TestTreeTokenNode> {
+  name: string;
+}
+
+function createTokenNode(
+  name: string,
+  estimatedTokenCount: number,
+  exactTokenCount?: number
+): TestTreeTokenNode {
+  return {
+    name,
+    estimatedTokenCount,
+    exactTokenCount,
+    displayTokenCount: 0,
+    tokenCountStatus: "estimated",
+  };
+}
 
 test("countTextTokens matches legacy encode length for representative inputs", () => {
   const inputs = [
@@ -33,6 +65,173 @@ test("countTextTokens matches legacy encode length for representative inputs", (
   for (const input of inputs) {
     assert.equal(countTextTokens(input), countTextTokensLegacy(input));
   }
+});
+
+test("tree token helpers estimate and format compact labels", () => {
+  assert.equal(estimateTokenCountFromBytes(0), 0);
+  assert.equal(estimateTokenCountFromBytes(1), 1);
+  assert.equal(estimateTokenCountFromBytes(16), 10);
+  assert.equal(formatTreeTokenCount(842, "estimated"), "~842");
+  assert.equal(formatTreeTokenCount(842, "exact"), "842");
+  assert.equal(formatTreeTokenCount(1800, "estimated"), "~1.8k");
+  assert.equal(formatTreeTokenCount(1200000, "estimated"), "~1.2m");
+});
+
+test("token profiles estimate calibrated sample counts and input costs", () => {
+  const text = "x".repeat(67_469);
+
+  assert.equal(
+    estimateTokensFromText(text, getTokenProfile("claude")),
+    40_401
+  );
+  assert.equal(
+    estimateTokensFromText(text, getTokenProfile("openai")),
+    37_693
+  );
+  assert.equal(
+    estimateTokensFromText(text, getTokenProfile("gemini")),
+    60_241
+  );
+
+  assert.equal(formatTokenCost(40_406, getTokenProfile("claude")), "$0.6061");
+  assert.equal(formatTokenCost(60_401, getTokenProfile("gemini")), "$0.0181");
+});
+
+test("context token estimate includes tree modes and minified wrapper shape", () => {
+  const base = {
+    prefix: "",
+    suffix: "",
+    selectedFileBlockChars: 100,
+    selectedFileCount: 1,
+    projectTree: "clipper2-ts\n└─ bench/",
+    githubIssueChars: 0,
+  };
+
+  const fullTreeChars = estimateContextCharacters({
+    ...base,
+    treeType: "fullFilesAndDirectories",
+    minify: false,
+  });
+  const selectedTreeChars = estimateContextCharacters({
+    ...base,
+    treeType: "selectedFilesOnly",
+    minify: false,
+  });
+  const directoriesOnlyChars = estimateContextCharacters({
+    ...base,
+    treeType: "fullDirectoriesOnly",
+    minify: false,
+  });
+  const noTreeChars = estimateContextCharacters({
+    ...base,
+    treeType: "none",
+    minify: false,
+  });
+  const minifiedChars = estimateContextCharacters({
+    ...base,
+    treeType: "fullFilesAndDirectories",
+    minify: true,
+  });
+
+  assert.ok(fullTreeChars > noTreeChars);
+  assert.equal(selectedTreeChars, fullTreeChars);
+  assert.equal(directoriesOnlyChars, fullTreeChars);
+  assert.ok(minifiedChars < fullTreeChars);
+});
+
+test("folder selection refinement keeps tests and declarations separate", () => {
+  assert.deepEqual(getSelectionRefinementDefinition("Component.vue"), {
+    id: "extension:.vue",
+    label: ".vue files",
+    sortLabel: ".vue",
+  });
+  assert.deepEqual(getSelectionRefinementDefinition("worker.ts"), {
+    id: "extension:.ts",
+    label: ".ts files",
+    sortLabel: ".ts",
+  });
+  assert.deepEqual(getSelectionRefinementDefinition("worker.test.ts"), {
+    id: "pattern:test",
+    label: "Test files (*.test.*, *.spec.*)",
+    sortLabel: "zz-test",
+  });
+  assert.deepEqual(getSelectionRefinementDefinition("worker.spec.tsx"), {
+    id: "pattern:test",
+    label: "Test files (*.test.*, *.spec.*)",
+    sortLabel: "zz-test",
+  });
+  assert.deepEqual(getSelectionRefinementDefinition("types.d.ts"), {
+    id: "pattern:declaration",
+    label: "Declaration files (*.d.ts)",
+    sortLabel: "zz-declaration",
+  });
+  assert.deepEqual(getSelectionRefinementDefinition("Dockerfile"), {
+    id: "extension:(no extension)",
+    label: "No extension",
+    sortLabel: "(no extension)",
+  });
+});
+
+test("tree token aggregation sums nested folders and marks mixed counts estimated", () => {
+  const exactFile = createTokenNode("exact.ts", 40, 25);
+  const estimatedFile = createTokenNode("estimated.ts", 80);
+  const folder: TestTreeTokenNode = {
+    name: "src",
+    estimatedTokenCount: 0,
+    displayTokenCount: 0,
+    tokenCountStatus: "estimated",
+    children: [exactFile, estimatedFile],
+  };
+  const root: TestTreeTokenNode = {
+    name: "root",
+    estimatedTokenCount: 0,
+    displayTokenCount: 0,
+    tokenCountStatus: "estimated",
+    children: [folder],
+  };
+  exactFile.parent = folder;
+  estimatedFile.parent = folder;
+  folder.parent = root;
+
+  recomputeTreeTokenCounts(root);
+
+  assert.equal(folder.estimatedTokenCount, 120);
+  assert.equal(folder.displayTokenCount, 105);
+  assert.equal(folder.tokenCountStatus, "estimated");
+  assert.equal(root.displayTokenCount, 105);
+  assert.equal(root.tokenCountStatus, "estimated");
+});
+
+test("tree token exact replacement updates ancestor totals by delta", () => {
+  const file = createTokenNode("file.ts", 100);
+  const folder: TestTreeTokenNode = {
+    name: "src",
+    estimatedTokenCount: 0,
+    displayTokenCount: 0,
+    tokenCountStatus: "estimated",
+    children: [file],
+  };
+  file.parent = folder;
+  recomputeTreeTokenCounts(folder);
+
+  updateLeafTreeTokenCounts(file, { exactTokenCount: 70 });
+
+  assert.equal(file.displayTokenCount, 70);
+  assert.equal(file.tokenCountStatus, "exact");
+  assert.equal(folder.estimatedTokenCount, 100);
+  assert.equal(folder.displayTokenCount, 70);
+  assert.equal(folder.tokenCountStatus, "exact");
+
+  updateLeafTreeTokenCounts(file, {
+    estimatedTokenCount: 120,
+    exactTokenCount: undefined,
+  });
+
+  assert.equal(file.displayTokenCount, 120);
+  assert.equal(file.tokenCountStatus, "estimated");
+  assert.equal(folder.estimatedTokenCount, 120);
+  assert.equal(folder.displayTokenCount, 120);
+  assert.equal(folder.tokenCountStatus, "estimated");
 });
 
 test("FileSnapshotService invalidates cached content on file changes", async () => {
@@ -176,6 +375,28 @@ test("TokenSelectionState replaceSelection keeps exact totals across refresh", a
 
   selectionState.clearSelection();
   assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
+});
+
+test("TokenSelectionState invalidates selected paths and recounts them", async () => {
+  const counts = new Map([["a.ts", 10]]);
+  const selectionState = new TokenSelectionState(
+    async (filePath) => ({
+      tokenCount: counts.get(filePath) ?? 0,
+      cacheable: true,
+    })
+  );
+
+  selectionState.applySelectionDelta(["a.ts"], []);
+  await selectionState.waitForIdle();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 10);
+
+  counts.set("a.ts", 25);
+  selectionState.invalidatePath("a.ts");
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 0);
+  assert.equal(selectionState.getSnapshot().pendingTokenCount, 1);
+
+  await selectionState.waitForIdle();
+  assert.equal(selectionState.getSnapshot().selectedTokenTotal, 25);
 });
 
 test("minified context output compacts wrapper structure without mutating file content", () => {

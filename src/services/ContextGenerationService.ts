@@ -369,6 +369,17 @@ export class ContextGenerationService {
     }
   }
 
+  async generateProjectTreePreview(
+    fileNodes: FileNode[],
+    options?: Pick<GenerateContextOptions, "primaryWorkspaceRoot" | "treeType">
+  ): Promise<string> {
+    return this.generateProjectTree(
+      fileNodes,
+      options?.primaryWorkspaceRoot,
+      options?.treeType
+    );
+  }
+
   updateConfig(updates: Partial<ContextConfig>): void {
     this.config = { ...this.config, ...updates };
     this.fileBlockCache.clear();

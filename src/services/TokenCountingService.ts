@@ -10,12 +10,20 @@ interface CachedTokenCount {
   tokenCount: number;
 }
 
+export interface FileTokenCountUpdate {
+  filePath: string;
+  tokenCount: number;
+}
+
 /**
  * Service for counting tokens in selected files using selection deltas.
  */
 export class TokenCountingService {
   private _onDidChangeTokens = new vscode.EventEmitter<TokenUpdatePayload>();
   readonly onDidChangeTokens = this._onDidChangeTokens.event;
+  private _onDidResolveFileTokens =
+    new vscode.EventEmitter<FileTokenCountUpdate>();
+  readonly onDidResolveFileTokens = this._onDidResolveFileTokens.event;
 
   private githubIssueTokens = 0;
   private isCountingGitHubIssues = false;
@@ -62,6 +70,32 @@ export class TokenCountingService {
 
   clearSelection(): void {
     this.selectionState.clearSelection();
+  }
+
+  invalidateFile(filePath: string): void {
+    this.tokenCache.delete(filePath);
+    this.selectionState.invalidatePath(filePath);
+  }
+
+  getCachedFileTokenCount(
+    filePath: string,
+    sizeBytes?: number,
+    mtimeMs?: number
+  ): number | undefined {
+    const cachedValue = this.tokenCache.get(filePath);
+    if (!cachedValue) {
+      return undefined;
+    }
+
+    if (sizeBytes !== undefined && cachedValue.size !== sizeBytes) {
+      return undefined;
+    }
+
+    if (mtimeMs !== undefined && cachedValue.mtimeMs !== mtimeMs) {
+      return undefined;
+    }
+
+    return cachedValue.tokenCount;
   }
 
   async waitForIdle(): Promise<void> {
@@ -117,6 +151,10 @@ export class TokenCountingService {
         cachedValue.size === snapshot.size
       ) {
         this.selectionState.rememberTokenCount(filePath, cachedValue.tokenCount);
+        this._onDidResolveFileTokens.fire({
+          filePath,
+          tokenCount: cachedValue.tokenCount,
+        });
         return { tokenCount: cachedValue.tokenCount, cacheable: true };
       }
 
@@ -127,6 +165,7 @@ export class TokenCountingService {
         tokenCount,
       });
       this.selectionState.rememberTokenCount(filePath, tokenCount);
+      this._onDidResolveFileTokens.fire({ filePath, tokenCount });
       return { tokenCount, cacheable: true };
     } catch (error) {
       this.tokenCache.delete(filePath);
@@ -161,6 +200,7 @@ export class TokenCountingService {
   dispose(): void {
     this.tokenCache.clear();
     this._onDidChangeTokens.dispose();
+    this._onDidResolveFileTokens.dispose();
   }
 }
 

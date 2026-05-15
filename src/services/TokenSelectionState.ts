@@ -116,6 +116,33 @@ export class TokenSelectionState {
     this.knownTokenCounts.delete(filePath);
   }
 
+  invalidatePath(filePath: string): void {
+    const knownTokenCount = this.knownTokenCounts.get(filePath);
+    this.knownTokenCounts.delete(filePath);
+
+    if (!this.selectedPaths.has(filePath)) {
+      this.pendingPaths.delete(filePath);
+      return;
+    }
+
+    let didChange = false;
+    if (this.accountedPaths.delete(filePath)) {
+      this.selectedTokenTotal -= knownTokenCount ?? 0;
+      this.pendingPaths.add(filePath);
+      didChange = true;
+    } else if (!this.pendingPaths.has(filePath)) {
+      this.pendingPaths.add(filePath);
+      didChange = true;
+    }
+
+    if (!didChange) {
+      return;
+    }
+
+    this.notifyStateChange();
+    this.ensureProcessing();
+  }
+
   getSnapshot(): TokenSelectionSnapshot {
     return {
       selectedTokenTotal: this.selectedTokenTotal,

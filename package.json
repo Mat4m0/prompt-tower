@@ -40,6 +40,11 @@
           "default": 500,
           "description": "Show warning when selecting files larger than this size (in KB)"
         },
+        "promptTower.showTreeTokenCounts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show estimated token counts next to files and folders in the Prompt Tower file tree."
+        },
         "promptTower.outputFormat": {
           "type": "object",
           "description": "Customize the output format for generated context files.",
@@ -178,6 +183,18 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "promptTower.hideTreeTokenCounts",
+        "title": "Hide Tree Token Counts",
+        "category": "Prompt Tower",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "promptTower.showTreeTokenCounts",
+        "title": "Show Tree Token Counts",
+        "category": "Prompt Tower",
+        "icon": "$(eye)"
+      },
+      {
         "command": "promptTower.showTowerUI",
         "title": "Show Prompt Tower UI",
         "category": "Prompt Tower"
@@ -222,6 +239,12 @@
         "command": "promptTower.previewFile",
         "title": "Preview File",
         "category": "Prompt Tower"
+      },
+      {
+        "command": "promptTower.refineFolderSelection",
+        "title": "Select Folder Contents...",
+        "category": "Prompt Tower",
+        "icon": "$(filter)"
       }
     ],
     "menus": {
@@ -248,6 +271,14 @@
         },
         {
           "command": "promptTower.openPromptTower"
+        },
+        {
+          "command": "promptTower.hideTreeTokenCounts",
+          "when": "promptTower.treeTokenCountsVisible"
+        },
+        {
+          "command": "promptTower.showTreeTokenCounts",
+          "when": "!promptTower.treeTokenCountsVisible"
         }
       ],
       "view/title": [
@@ -270,6 +301,16 @@
           "command": "promptTower.clearSelections",
           "when": "view == promptTowerView",
           "group": "navigation@4"
+        },
+        {
+          "command": "promptTower.hideTreeTokenCounts",
+          "when": "view == promptTowerView && promptTower.treeTokenCountsVisible",
+          "group": "navigation@5"
+        },
+        {
+          "command": "promptTower.showTreeTokenCounts",
+          "when": "view == promptTowerView && !promptTower.treeTokenCountsVisible",
+          "group": "navigation@5"
         },
         {
           "command": "promptTower.refreshGitHubIssues",
@@ -298,6 +339,10 @@
         {
           "command": "promptTower.previewFile",
           "when": "view == promptTowerView && viewItem == file"
+        },
+        {
+          "command": "promptTower.refineFolderSelection",
+          "when": "view == promptTowerView && (viewItem == directory || viewItem == workspaceRoot)"
         }
       ]
     }

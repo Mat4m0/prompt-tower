@@ -12,11 +12,32 @@ import { WorkspaceManager } from "../services/WorkspaceManager";
 import { FileDiscoveryService } from "../services/FileDiscoveryService";
 import { TokenCountingService } from "../services/TokenCountingService";
 import { IgnorePatternService } from "../services/IgnorePatternService";
+import {
+  estimateTokenCountFromBytes,
+  formatTreeTokenCount,
+} from "../utils/treeTokens";
+import {
+  getTokenProfile,
+  type TokenProfile,
+} from "../services/tokenProfiles";
+import { getSelectionRefinementDefinition } from "../services/selectionRefinement";
 
 const REFRESH_DEBOUNCE_MS = 300;
 
 export interface EnsureFreshResult {
   removedSelections: string[];
+}
+
+interface SelectionRefinementGroup {
+  id: string;
+  label: string;
+  description: string;
+  sortLabel: string;
+  filePaths: Set<string>;
+}
+
+interface SelectionRefinementPick extends vscode.QuickPickItem {
+  group: SelectionRefinementGroup;
 }
 
 /**
@@ -56,6 +77,8 @@ export class MultiRootTreeProvider
   private promptPrefix: string = "";
   private promptSuffix: string = "";
   private maxFileSizeWarningKB: number = 500;
+  private showTreeTokenCounts: boolean = true;
+  private tokenProfile: TokenProfile = getTokenProfile(undefined);
 
   private gitHubIssuesProvider?: GitHubSelectionProvider;
 
@@ -107,7 +130,11 @@ export class MultiRootTreeProvider
 
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("promptTower")) {
+        const previousShowTreeTokenCounts = this.showTreeTokenCounts;
         this.loadConfiguration();
+        if (previousShowTreeTokenCounts !== this.showTreeTokenCounts) {
+          this._onDidChangeTreeData.fire();
+        }
         this.markDirty();
       }
     });
@@ -191,7 +218,7 @@ export class MultiRootTreeProvider
       const watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(workspace.rootPath, "**/*"),
         false,
-        true,
+        false,
         false
       );
 
@@ -200,6 +227,9 @@ export class MultiRootTreeProvider
       });
       watcher.onDidDelete(() => {
         this.markDirty();
+      });
+      watcher.onDidChange((uri) => {
+        void this.handleFileChanged(uri.fsPath);
       });
 
       this.workspaceWatchers.set(workspace.id, watcher);
@@ -222,6 +252,15 @@ export class MultiRootTreeProvider
   private loadConfiguration(): void {
     const config = vscode.workspace.getConfiguration("promptTower");
     this.maxFileSizeWarningKB = config.get<number>("maxFileSizeWarningKB", 500);
+    this.showTreeTokenCounts = config.get<boolean>(
+      "showTreeTokenCounts",
+      true
+    );
+    void vscode.commands.executeCommand(
+      "setContext",
+      "promptTower.treeTokenCountsVisible",
+      this.showTreeTokenCounts
+    );
   }
 
   /**
@@ -256,6 +295,7 @@ export class MultiRootTreeProvider
       workspaces,
       preserveCheckedPaths
     );
+    FileNodeUtils.recomputeEstimatedTokenCounts(this.rootNodes, this.tokenProfile);
 
     const checkedFilePathsAfterRefresh =
       FileNodeUtils.getCheckedFilePaths(this.rootNodes);
@@ -337,7 +377,8 @@ export class MultiRootTreeProvider
       element.collapsibleState
     );
 
-    treeItem.contextValue = element.type;
+    treeItem.contextValue =
+      element.type === "workspace-root" ? "workspaceRoot" : element.type;
     treeItem.checkboxState = element.checkable
       ? element.isChecked
         ? vscode.TreeItemCheckboxState.Checked
@@ -359,7 +400,40 @@ export class MultiRootTreeProvider
       treeItem.resourceUri = vscode.Uri.file(element.absolutePath);
     }
 
+    if (this.showTreeTokenCounts) {
+      treeItem.description = formatTreeTokenCount(
+        element.displayTokenCount,
+        element.tokenCountStatus
+      );
+    }
+
     return treeItem;
+  }
+
+  private async handleFileChanged(filePath: string): Promise<void> {
+    const node = this.findNodeByPath(filePath);
+    if (!node || node.type !== "file") {
+      return;
+    }
+
+    try {
+      const stats = await vscode.workspace.fs.stat(vscode.Uri.file(filePath));
+      if (stats.type !== vscode.FileType.File) {
+        return;
+      }
+
+      node.sizeBytes = stats.size;
+      node.mtimeMs = stats.mtime;
+      this.tokenCountingService.invalidateFile(filePath);
+      FileNodeUtils.updateFileTokenCounts(node, {
+        estimatedTokenCount: estimateTokenCountFromBytes(stats.size, this.tokenProfile),
+        exactTokenCount: undefined,
+      });
+      this._onDidChangeTreeData.fire();
+    } catch (error) {
+      console.warn(`Error refreshing token estimate for ${filePath}:`, error);
+      this.markDirty();
+    }
   }
 
   /**
@@ -427,6 +501,141 @@ export class MultiRootTreeProvider
 
       this._onDidChangeTreeData.fire(node);
     }
+  }
+
+  async refineFolderSelection(node: FileNode): Promise<void> {
+    if (node.type === "file") {
+      return;
+    }
+
+    const descendantFiles = FileNodeUtils.getDescendantFiles(node);
+    if (descendantFiles.length === 0) {
+      vscode.window.showInformationMessage("No files found in this folder.");
+      return;
+    }
+
+    const groups = this.buildSelectionRefinementGroups(descendantFiles);
+    if (groups.length === 0) {
+      vscode.window.showInformationMessage("No file groups found in this folder.");
+      return;
+    }
+
+    const picks = groups.map<SelectionRefinementPick>((group) => ({
+      label: group.label,
+      description: group.description,
+      picked: this.isGroupCurrentlySelected(group),
+      group,
+    }));
+    const selectedPicks = await vscode.window.showQuickPick(picks, {
+      title: `Select files in ${node.label}`,
+      placeHolder: "Choose file groups to include",
+      canPickMany: true,
+    });
+
+    if (!selectedPicks) {
+      return;
+    }
+
+    const selectedFilePaths = new Set<string>();
+    for (const pick of selectedPicks) {
+      for (const filePath of pick.group.filePaths) {
+        selectedFilePaths.add(filePath);
+      }
+    }
+
+    const addedFilePaths: string[] = [];
+    const removedFilePaths: string[] = [];
+
+    for (const file of descendantFiles) {
+      const shouldBeChecked = selectedFilePaths.has(file.absolutePath);
+      if (file.isChecked === shouldBeChecked) {
+        continue;
+      }
+
+      file.isChecked = shouldBeChecked;
+      if (shouldBeChecked) {
+        addedFilePaths.push(file.absolutePath);
+      } else {
+        removedFilePaths.push(file.absolutePath);
+      }
+    }
+
+    FileNodeUtils.updateCheckedStateFromChildren(node);
+
+    if (addedFilePaths.length === 0 && removedFilePaths.length === 0) {
+      return;
+    }
+
+    this._onDidChangeSelection.fire({
+      node,
+      isChecked: node.isChecked,
+      addedFilePaths,
+      removedFilePaths,
+    });
+    this.tokenCountingService.applySelectionDelta(
+      addedFilePaths,
+      removedFilePaths
+    );
+    this._onDidChangeTreeData.fire();
+  }
+
+  private buildSelectionRefinementGroups(
+    files: FileNode[]
+  ): SelectionRefinementGroup[] {
+    const groups = new Map<string, SelectionRefinementGroup>();
+
+    const addToGroup = (
+      definition: {
+        id: string;
+        label: string;
+        sortLabel: string;
+      },
+      file: FileNode
+    ) => {
+      const { id, label, sortLabel } = definition;
+      const group = groups.get(id) ?? {
+        id,
+        label,
+        description: "",
+        sortLabel,
+        filePaths: new Set<string>(),
+      };
+      group.filePaths.add(file.absolutePath);
+      groups.set(id, group);
+    };
+
+    for (const file of files) {
+      addToGroup(getSelectionRefinementDefinition(file.label), file);
+    }
+
+    return Array.from(groups.values())
+      .map((group) => ({
+        ...group,
+        description: `${group.filePaths.size} ${
+          group.filePaths.size === 1 ? "file" : "files"
+        }`,
+      }))
+      .sort((left, right) => {
+        if (left.id.startsWith("pattern:") !== right.id.startsWith("pattern:")) {
+          return left.id.startsWith("pattern:") ? 1 : -1;
+        }
+        return left.sortLabel.localeCompare(right.sortLabel);
+      });
+  }
+
+  private isGroupCurrentlySelected(group: SelectionRefinementGroup): boolean {
+    if (group.filePaths.size === 0) {
+      return false;
+    }
+
+    for (const filePath of group.filePaths) {
+      const node = this.findNodeByPath(filePath);
+      if (!node?.isChecked) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -552,6 +761,30 @@ export class MultiRootTreeProvider
     return this.rootNodes;
   }
 
+  setTokenProfile(profile: TokenProfile): void {
+    this.tokenProfile = profile;
+    FileNodeUtils.recomputeEstimatedTokenCounts(this.rootNodes, profile);
+    this._onDidChangeTreeData.fire();
+  }
+
+  getSelectedFileBlockCharacterEstimate(minify: boolean): number {
+    return FileNodeUtils.getCheckedFiles(this.rootNodes).reduce((total, node) => {
+      const sourcePath = "/" + node.relativePath.replace(/\\/g, "/");
+      const contentLength = node.sizeBytes ?? 0;
+
+      if (minify) {
+        return total + `<file path="${sourcePath}">`.length + contentLength + "</file>".length;
+      }
+
+      return (
+        total +
+        `<file name="${node.label}" path="${sourcePath}">\n`.length +
+        contentLength +
+        "\n</file>".length
+      );
+    }, 0);
+  }
+
   /**
    * Find a node by its absolute path
    */
@@ -637,6 +870,10 @@ export class MultiRootTreeProvider
    */
   getTokenCountingService(): TokenCountingService {
     return this.tokenCountingService;
+  }
+
+  areTreeTokenCountsVisible(): boolean {
+    return this.showTreeTokenCounts;
   }
 
   /**
