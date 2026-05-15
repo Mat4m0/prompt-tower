@@ -8,8 +8,7 @@ export function getWebviewScript(initialStateJson: string): string {
 
     function render(next) {
       state = next;
-      $("tokenProfile").innerHTML = state.tokenProfiles.map(p => '<option value="' + p.id + '"' + (p.id === state.tokenProfileId ? ' selected' : '') + '>' + p.label + '</option>').join('');
-      $("tokenMetric").textContent = '~' + state.estimatedTokens.toLocaleString() + ' tokens';
+      renderTokenSummary();
       $("presetSelect").innerHTML = '<option value="">Inline prefix</option>' + state.promptPresets.map(p => '<option value="' + p.id + '"' + (p.id === state.activePresetId ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>').join('');
       $("inlinePrefix").value = state.inlinePrefix || '';
       renderVersions();
@@ -22,6 +21,28 @@ export function getWebviewScript(initialStateJson: string): string {
 
     function currentTreeMode() { return $("treeMode").value; }
     function currentOutputMode() { return $("outputMode").checked ? "compact" : "readable"; }
+    function formatCompactNumber(value) {
+      if (value >= 1000000) return (Math.round(value / 10000) / 100).toLocaleString() + "M";
+      if (value >= 1000) return Math.round(value / 1000).toLocaleString() + "k";
+      return value.toLocaleString();
+    }
+    function renderTokenSummary() {
+      $("tokenSummary").innerHTML = state.tokenSummaries.map(summary =>
+        '<span class="token-chip"><span class="token-label">' + escapeHtml(summary.label) + '</span><span class="token-value">~' + formatCompactNumber(summary.tokens) + '</span></span>'
+      ).join('');
+      $("tokenProfileChecks").innerHTML = state.tokenProfiles.map(profile => {
+        const checked = state.visibleTokenProfileIds.includes(profile.id) ? ' checked' : '';
+        return '<label class="popover-check"><input type="checkbox" value="' + profile.id + '"' + checked + '> ' + escapeHtml(profile.label) + '</label>';
+      }).join('');
+      Array.from($("tokenProfileChecks").querySelectorAll("input")).forEach(input => {
+        input.addEventListener("change", () => {
+          const enabled = Array.from($("tokenProfileChecks").querySelectorAll("input"))
+            .filter(item => item.checked)
+            .map(item => item.value);
+          post({ type: "tokenSummary.setProfiles", profileIds: enabled });
+        });
+      });
+    }
     function exportOptions() {
       return {
         fileName: $("fileName").value || "prompt",
@@ -65,7 +86,14 @@ export function getWebviewScript(initialStateJson: string): string {
       return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
     }
 
-    $("tokenProfile").addEventListener("change", () => post({ type: "tokenProfile.select", profileId: $("tokenProfile").value }));
+    $("tokenSettings").addEventListener("click", () => {
+      $("tokenSettingsPopover").hidden = !$("tokenSettingsPopover").hidden;
+    });
+    window.addEventListener("click", event => {
+      if (!$("tokenSettingsPopover").hidden && !$("tokenSettingsPopover").contains(event.target) && event.target !== $("tokenSettings")) {
+        $("tokenSettingsPopover").hidden = true;
+      }
+    });
     $("presetSelect").addEventListener("change", () => post({ type: "prefix.selectPreset", presetId: $("presetSelect").value || null }));
     $("inlinePrefix").addEventListener("input", () => post({ type: "prefix.inlineChanged", text: $("inlinePrefix").value }));
     $("createPreset").addEventListener("click", () => {

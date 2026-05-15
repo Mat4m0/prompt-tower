@@ -20,9 +20,13 @@ export function getWebviewHtml(params: {
   <div id="app">
     <h1>prompt.lupinum</h1>
     <div class="bar">
-      <div class="row">
-        <select id="tokenProfile" aria-label="Token profile"></select>
-        <span id="tokenMetric" class="metric"></span>
+      <div class="token-summary">
+        <div id="tokenSummary" class="token-chips"></div>
+        <button id="tokenSettings" class="icon-button" title="Token summary settings" aria-label="Token summary settings">⚙</button>
+        <div id="tokenSettingsPopover" class="popover" hidden>
+          <div class="popover-title">Token summary</div>
+          <div id="tokenProfileChecks" class="check-list"></div>
+        </div>
       </div>
     </div>
 

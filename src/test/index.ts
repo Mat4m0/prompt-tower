@@ -537,6 +537,7 @@ test("WorkspaceState persists selection, context options, and export options", a
     format: "txt",
     location: "workspaceRoot",
   });
+  await state.setTokenSummaryProfileIds(["claude", "gemini"]);
 
   assert.deepEqual(state.getSelectionIntent()?.includedNodeIds, ["w:src"]);
   assert.equal(state.getTreeMode(), "fullDirectoriesOnly");
@@ -544,6 +545,7 @@ test("WorkspaceState persists selection, context options, and export options", a
   assert.equal(state.getExportOptions().fileName, "Audit");
   assert.equal(state.getExportOptions().format, "txt");
   assert.equal(state.getExportOptions().location, "workspaceRoot");
+  assert.deepEqual(state.getTokenSummaryProfileIds(), ["claude", "gemini"]);
 });
 
 test("webview message guard rejects unknown and malformed messages", () => {
@@ -554,6 +556,13 @@ test("webview message guard rejects unknown and malformed messages", () => {
     true
   );
   assert.equal(isWebviewMessage({ type: "context.copyPreview" }), false);
+  assert.equal(
+    isWebviewMessage({
+      type: "tokenSummary.setProfiles",
+      profileIds: ["openai", "gemini"],
+    }),
+    true
+  );
   assert.equal(
     isWebviewMessage({
       type: "prefix.restoreVersion",

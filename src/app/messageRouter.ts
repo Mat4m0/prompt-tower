@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import type { ContextOutputMode, ProjectTreeMode } from "../core/context/ContextFormat";
 import { normalizePromptExportOptions, type PromptExportOptions } from "../core/export/ExportOptions";
-import { TOKEN_PROFILES, formatTokenCost } from "../core/tokens/TokenProfiles";
+import { TOKEN_PROFILES, getTokenProfile } from "../core/tokens/TokenProfiles";
 import type { IndexedNode } from "../core/files/FileIndex";
 import { getCurrentPromptPresetVersion } from "../core/prompts/PromptPresetVersioning";
 import type { ServiceContainer } from "./serviceContainer";
@@ -33,8 +33,10 @@ export class MessageRouter {
       case "ready":
         await this.postState();
         return;
-      case "tokenProfile.select":
-        await this.services.setTokenProfile(message.profileId);
+      case "tokenSummary.setProfiles":
+        await this.services.workspaceState.setTokenSummaryProfileIds(
+          message.profileIds
+        );
         await this.postState();
         return;
       case "prefix.inlineChanged":
@@ -135,18 +137,26 @@ export class MessageRouter {
     const activePresetId = this.services.promptPresets.getActivePresetId();
     const presets = this.services.promptPresets.listPresets();
     const prefix = this.getDraftPrefix();
-    const estimate = await this.services.contextService.estimatePreview({
-      prefix,
-      treeMode: this.treeMode,
-      outputMode: this.outputMode,
-    });
-    const profile = this.services.getTokenProfile();
+    const visibleTokenProfileIds =
+      this.services.workspaceState.getTokenSummaryProfileIds();
+    const tokenSummaries = await this.services.contextService.estimatePreviewForProfiles(
+      {
+        prefix,
+        treeMode: this.treeMode,
+        outputMode: this.outputMode,
+      },
+      visibleTokenProfileIds.map(getTokenProfile)
+    );
     const selection = this.services.fileSelection.getSnapshot();
     return {
-      tokenProfileId: profile.id,
       tokenProfiles: TOKEN_PROFILES.map(({ id, label }) => ({ id, label })),
-      estimatedTokens: estimate.tokens,
-      estimatedCost: estimate.cost || formatTokenCost(0, profile),
+      visibleTokenProfileIds,
+      tokenSummaries: tokenSummaries.map(({ profile, tokens, cost }) => ({
+        id: profile.id,
+        label: profile.label,
+        tokens,
+        cost,
+      })),
       promptPresets: presets.map((preset) => ({
         id: preset.id,
         name: preset.name,

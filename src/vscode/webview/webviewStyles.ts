@@ -51,6 +51,74 @@ export function getWebviewStyles(): string {
     label { color: var(--vscode-descriptionForeground); font-weight: 600; }
     .metric { font-weight: 700; color: var(--vscode-textLink-foreground); }
     .muted { color: var(--vscode-descriptionForeground); }
+    .token-summary {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .token-chips {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .token-chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .token-label {
+      color: var(--vscode-descriptionForeground);
+      font-weight: 700;
+    }
+    .token-value {
+      color: var(--vscode-textLink-foreground);
+      font-weight: 800;
+    }
+    .icon-button {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      color: var(--vscode-descriptionForeground);
+      background: transparent;
+      border-color: transparent;
+    }
+    .popover {
+      position: absolute;
+      top: 34px;
+      right: 0;
+      z-index: 10;
+      min-width: 170px;
+      padding: 10px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      background: var(--vscode-menu-background);
+      box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+    }
+    .popover-title {
+      margin-bottom: 8px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .check-list {
+      display: grid;
+      gap: 8px;
+    }
+    .popover-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--vscode-foreground);
+      font-weight: 600;
+    }
     textarea {
       width: 100%;
       box-sizing: border-box;

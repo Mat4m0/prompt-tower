@@ -3,7 +3,7 @@ import type { PromptExportOptions } from "../../core/export/ExportOptions";
 
 export type WebviewToExtensionMessage =
   | { type: "ready" }
-  | { type: "tokenProfile.select"; profileId: string }
+  | { type: "tokenSummary.setProfiles"; profileIds: readonly string[] }
   | { type: "prefix.inlineChanged"; text: string }
   | { type: "prefix.selectPreset"; presetId: string | null }
   | { type: "prefix.createPreset"; name: string; text: string }
@@ -24,10 +24,14 @@ export type ExtensionToWebviewMessage =
   | { type: "toast"; level: "info" | "warning" | "error"; message: string };
 
 export interface ContextPanelState {
-  tokenProfileId: string;
   tokenProfiles: readonly { id: string; label: string }[];
-  estimatedTokens: number;
-  estimatedCost: string;
+  visibleTokenProfileIds: readonly string[];
+  tokenSummaries: readonly {
+    id: string;
+    label: string;
+    tokens: number;
+    cost: string;
+  }[];
   promptPresets: readonly {
     id: string;
     name: string;
@@ -64,8 +68,11 @@ export function isWebviewMessage(value: unknown): value is WebviewToExtensionMes
       return true;
     case "context.copyPreview":
       return typeof message.text === "string";
-    case "tokenProfile.select":
-      return typeof message.profileId === "string";
+    case "tokenSummary.setProfiles":
+      return (
+        Array.isArray(message.profileIds) &&
+        message.profileIds.every((id) => typeof id === "string")
+      );
     case "prefix.inlineChanged":
       return typeof message.text === "string";
     case "prefix.selectPreset":

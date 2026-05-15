@@ -108,13 +108,39 @@ export class ContextApplicationService {
     tokens: number;
     cost: string;
   }> {
+    const chars = await this.estimatePreviewCharacters(options);
+    const tokens = Math.ceil(chars / this.tokenProfile.charsPerToken);
+    return {
+      tokens,
+      cost: formatTokenCost(tokens, this.tokenProfile),
+    };
+  }
+
+  async estimatePreviewForProfiles(
+    options: ContextBuildOptions,
+    profiles: readonly TokenProfile[]
+  ): Promise<Array<{ profile: TokenProfile; tokens: number; cost: string }>> {
+    const chars = await this.estimatePreviewCharacters(options);
+    return profiles.map((profile) => {
+      const tokens = Math.ceil(chars / profile.charsPerToken);
+      return {
+        profile,
+        tokens,
+        cost: formatTokenCost(tokens, profile),
+      };
+    });
+  }
+
+  private async estimatePreviewCharacters(
+    options: ContextBuildOptions
+  ): Promise<number> {
     const selection = this.fileSelection.getSnapshot();
     const projectTree = await this.buildProjectTree(options.treeMode);
     const selectedFileBlockChars = selection.selectedFiles.reduce(
       (sum, file) => sum + estimateFileBlockChars(file, options.outputMode),
       0
     );
-    const chars = estimateContextCharacters({
+    return estimateContextCharacters({
       prefix: options.prefix,
       suffix: "",
       selectedFileBlockChars,
@@ -123,11 +149,6 @@ export class ContextApplicationService {
       treeType: options.treeMode,
       minify: options.outputMode === "compact",
     });
-    const tokens = Math.ceil(chars / this.tokenProfile.charsPerToken);
-    return {
-      tokens,
-      cost: formatTokenCost(tokens, this.tokenProfile),
-    };
   }
 
   private async loadSnapshots(
