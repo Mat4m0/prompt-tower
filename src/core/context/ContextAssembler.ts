@@ -52,42 +52,34 @@ function assembleReadableBody(
   request: ContextBuildRequest,
   fileBlocks: readonly string[]
 ): string {
-  if (fileBlocks.length === 0 && shouldIncludeTree(request)) {
-    return `<project_tree>\n${request.projectTree}\n</project_tree>`;
-  }
-
-  if (fileBlocks.length === 0) {
-    return "";
-  }
-
   const treeBlock = shouldIncludeTree(request)
     ? `<project_tree>\n${request.projectTree}\n</project_tree>\n`
     : "";
+  const filesBlock =
+    fileBlocks.length > 0
+      ? `<project_files>\n${fileBlocks.join("\n")}\n</project_files>\n`
+      : "";
 
-  return `<context>\n${treeBlock}<project_files>\n${fileBlocks.join(
-    "\n"
-  )}\n</project_files>\n</context>`;
+  if (!treeBlock && !filesBlock) {
+    return "";
+  }
+
+  return `<context>\n${treeBlock}${filesBlock}</context>`;
 }
 
 function assembleCompactBody(
   request: ContextBuildRequest,
   fileBlocks: readonly string[]
 ): string {
-  if (fileBlocks.length === 0 && shouldIncludeTree(request)) {
-    return `<project_tree>${request.projectTree}</project_tree>`;
-  }
-
-  if (fileBlocks.length === 0) {
-    return "";
-  }
-
   const treeBlock = shouldIncludeTree(request)
     ? `<project_tree>${trimGeneratedSection(request.projectTree)}</project_tree>`
     : "";
+  const filesBlock =
+    fileBlocks.length > 0
+      ? `<project_files>${fileBlocks.join("")}</project_files>`
+      : "";
 
-  return `<context>${treeBlock}<project_files>${fileBlocks.join(
-    ""
-  )}</project_files></context>`;
+  return treeBlock || filesBlock ? `<context>${treeBlock}${filesBlock}</context>` : "";
 }
 
 function formatReadableFileBlock(file: ContextFile, content: string): string {
@@ -95,13 +87,11 @@ function formatReadableFileBlock(file: ContextFile, content: string): string {
   const fileName = file.name || path.basename(file.relativePath);
   return `<file name="${escapeAttribute(fileName)}" path="${escapeAttribute(
     sourcePath
-  )}">\n${trimOuterBlankLines(content)}\n</file>`;
+  )}">\n${content}</file>`;
 }
 
 function formatCompactFileBlock(file: ContextFile, content: string): string {
-  return `<file path="${escapeAttribute(toSourcePath(file.relativePath))}">${trimOuterBlankLines(
-    content
-  )}</file>`;
+  return `<file path="${escapeAttribute(toSourcePath(file.relativePath))}">${content}</file>`;
 }
 
 function shouldIncludeTree(request: ContextBuildRequest): boolean {
@@ -128,12 +118,6 @@ function addPrefixAndSuffix(
 
 function toSourcePath(relativePath: string): string {
   return "/" + relativePath.replace(/\\/g, "/");
-}
-
-function trimOuterBlankLines(content: string): string {
-  return content
-    .replace(/^(\s*\r?\n)+/, "")
-    .replace(/(\r?\n\s*)+$/, "");
 }
 
 function trimGeneratedSection(content: string): string {

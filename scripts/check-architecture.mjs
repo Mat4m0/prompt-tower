@@ -3,6 +3,7 @@ import path from "path";
 
 const rootDir = process.cwd();
 const coreDir = path.join(rootDir, "src", "core");
+const appDir = path.join(rootDir, "src", "app");
 const sourceDir = path.join(rootDir, "src");
 const packageJsonPath = path.join(rootDir, "package.json");
 
@@ -30,6 +31,26 @@ if (await exists(coreDir)) {
 
     if (hasImportPathMatching(source, /['"][.]{1,2}\/(?:.*\/)?app(?:\/|['"])/)) {
       failures.push(`${relativePath} imports from the app layer`);
+    }
+  }
+}
+
+if (await exists(appDir)) {
+  const files = await listFiles(appDir);
+  for (const file of files) {
+    if (!/\.[cm]?tsx?$/.test(file)) {
+      continue;
+    }
+
+    const source = await readFile(file, "utf8");
+    const relativePath = path.relative(rootDir, file);
+
+    if (hasImportFrom(source, "vscode")) {
+      failures.push(`${relativePath} imports vscode`);
+    }
+
+    if (hasImportPathMatching(source, /['"][.]{1,2}\/(?:.*\/)?vscode(?:\/|['"])/)) {
+      failures.push(`${relativePath} imports from the VS Code adapter layer`);
     }
   }
 }

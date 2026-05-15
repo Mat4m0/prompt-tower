@@ -267,7 +267,7 @@
     "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); npx @vscode/vsce package && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "validate": "npm run check-types && npm run lint && npm run test:architecture"
+    "validate": "npm run check-types && npm run lint && npm test && npm run test:architecture"
   },
   "devDependencies": {
     "@types/node": "20.x",

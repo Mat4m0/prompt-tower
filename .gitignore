@@ -11,4 +11,5 @@ ignore
 ./ignore
 
 ROADMAP.md
+benchmarks/reports/latest-*
 benchmarks/reports/history/

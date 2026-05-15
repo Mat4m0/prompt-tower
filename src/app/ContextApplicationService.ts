@@ -7,13 +7,12 @@ import type {
   ProjectTreeMode,
 } from "../core/context/ContextFormat";
 import { generateFileStructureTree } from "../core/context/ProjectTreeBuilder";
-import type { FileIndex } from "../core/files/FileIndex";
+import type { FileIndex, IndexedNode } from "../core/files/FileIndex";
 import type { FileSelection } from "../core/files/FileSelection";
 import { estimateTokensFromText, formatTokenCost, type TokenProfile } from "../core/tokens/TokenProfiles";
-import type { VsCodeClipboard } from "../vscode/VsCodeClipboard";
-import type { VsCodeFileSystem } from "../vscode/VsCodeFileSystem";
 import { buildPromptExportTarget } from "../core/export/PromptFileWriter";
 import type { PromptExportOptions } from "../core/export/ExportOptions";
+import type { Clipboard, TextFileSystem } from "./ports";
 
 export interface ContextBuildOptions {
   prefix: string;
@@ -32,8 +31,8 @@ export class ContextApplicationService {
   constructor(
     private fileIndex: FileIndex,
     private fileSelection: FileSelection,
-    private fileSystem: VsCodeFileSystem,
-    private clipboard: VsCodeClipboard,
+    private fileSystem: TextFileSystem,
+    private clipboard: Clipboard,
     private tokenProfile: TokenProfile
   ) {}
 
@@ -90,29 +89,6 @@ export class ContextApplicationService {
       output,
       filePath: target.absolutePath,
       fileName: target.fileName,
-    };
-  }
-
-  estimateCurrentSelection(prefix: string): { tokens: number; cost: string } {
-    const chars = this.fileSelection
-      .getSnapshot()
-      .selectedFiles.reduce((sum, file) => sum + file.sizeBytes, prefix.length);
-    const tokens = Math.ceil(chars / this.tokenProfile.charsPerToken);
-    return {
-      tokens,
-      cost: formatTokenCost(tokens, this.tokenProfile),
-    };
-  }
-
-  async estimatePreview(options: ContextBuildOptions): Promise<{
-    tokens: number;
-    cost: string;
-  }> {
-    const chars = await this.estimatePreviewCharacters(options);
-    const tokens = Math.ceil(chars / this.tokenProfile.charsPerToken);
-    return {
-      tokens,
-      cost: formatTokenCost(tokens, this.tokenProfile),
     };
   }
 
@@ -178,17 +154,37 @@ export class ContextApplicationService {
         : treeMode === "fullDirectoriesOnly"
           ? [...snapshot.nodes.values()].filter((node) => node.kind !== "file")
           : snapshot.files;
-    const primaryRoot = snapshot.rootIds
+    const rootNodes = snapshot.rootIds
       .map((id) => snapshot.nodes.get(id))
-      .find(Boolean)?.absolutePath ?? "";
+      .filter((node): node is IndexedNode => node !== undefined);
+    const multiRoot = rootNodes.length > 1;
+    const workspaceNames = new Map(
+      rootNodes.map((node) => [node.workspaceId, node.name])
+    );
+    const primaryRoot = multiRoot
+      ? "workspace"
+      : rootNodes[0]?.absolutePath ?? "";
     return generateFileStructureTree(
       primaryRoot,
       entries.map((entry) => ({
         origin: entry.kind === "file" ? entry.absolutePath : `${entry.absolutePath}/`,
-        tree: entry.kind === "file" ? entry.relativePath : `${entry.relativePath}/`,
+        tree: toTreePath(
+          entry,
+          workspaceNames.get(entry.workspaceId) ?? entry.workspaceId,
+          multiRoot
+        ),
       }))
     );
   }
+}
+
+function toTreePath(
+  entry: IndexedNode,
+  workspaceName: string,
+  multiRoot: boolean
+): string {
+  const relativePath = entry.kind === "file" ? entry.relativePath : `${entry.relativePath}/`;
+  return multiRoot ? `${workspaceName}/${relativePath}` : relativePath;
 }
 
 function estimateFileBlockChars(

@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
 import type { ServiceContainer } from "./serviceContainer";
-import type { FileTreeProvider } from "../vscode/views/FileTreeProvider";
+import type { FileTreeProvider } from "../views/FileTreeProvider";
 import type {
   SelectionFilterNode,
   SelectionFiltersProvider,
-} from "../vscode/views/SelectionFiltersProvider";
+} from "../views/SelectionFiltersProvider";
 import { isIndexedNode } from "./messageRouter";
 
 export function registerCommands(options: {

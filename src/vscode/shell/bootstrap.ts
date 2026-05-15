@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
-import { getWebviewHtml } from "../vscode/webview/webviewHtml";
-import { FileTreeProvider } from "../vscode/views/FileTreeProvider";
-import { SelectionFiltersProvider } from "../vscode/views/SelectionFiltersProvider";
+import { getWebviewHtml } from "../webview/webviewHtml";
+import { FileTreeProvider } from "../views/FileTreeProvider";
+import { SelectionFiltersProvider } from "../views/SelectionFiltersProvider";
 import { registerCommands } from "./commandRegistry";
 import { createServiceContainer } from "./serviceContainer";
 import { MessageRouter } from "./messageRouter";
-import { isWebviewMessage } from "../vscode/webview/webviewMessages";
+import { isWebviewMessage } from "../webview/webviewMessages";
 import { WorkspaceSession } from "./workspaceSession";
 
 const VIEW_TYPE = "promptLupinum.context";

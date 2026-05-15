@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
-import type { ContextOutputMode, ProjectTreeMode } from "../core/context/ContextFormat";
-import { normalizePromptExportOptions, type PromptExportOptions } from "../core/export/ExportOptions";
-import { TOKEN_PROFILES, getTokenProfile } from "../core/tokens/TokenProfiles";
-import type { IndexedNode } from "../core/files/FileIndex";
-import { getCurrentPromptPresetVersion } from "../core/prompts/PromptPresetVersioning";
+import type { ContextOutputMode, ProjectTreeMode } from "../../core/context/ContextFormat";
+import { normalizePromptExportOptions, type PromptExportOptions } from "../../core/export/ExportOptions";
+import { TOKEN_PROFILES, getTokenProfile } from "../../core/tokens/TokenProfiles";
+import type { IndexedNode } from "../../core/files/FileIndex";
+import { getCurrentPromptPresetVersion } from "../../core/prompts/PromptPresetVersioning";
 import type { ServiceContainer } from "./serviceContainer";
 import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
   WebviewToExtensionMessage,
-} from "../vscode/webview/webviewMessages";
+} from "../webview/webviewMessages";
 
 export class MessageRouter {
   private treeMode: ProjectTreeMode;

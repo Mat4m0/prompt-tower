@@ -4,7 +4,7 @@ import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
 
-const tempDir = await mkdtemp(path.join(os.tmpdir(), "prompt-tower-test-bundle-"));
+const tempDir = await mkdtemp(path.join(os.tmpdir(), "prompt-lupinum-test-bundle-"));
 const outfile = path.join(tempDir, "tests.mjs");
 
 try {

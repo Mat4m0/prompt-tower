@@ -44,8 +44,12 @@ import {
   softDeletePromptPreset,
 } from "../core/prompts/PromptPresetVersioning";
 import { PromptPresetApplicationService } from "../app/PromptPresetApplicationService";
+import { ContextApplicationService } from "../app/ContextApplicationService";
 import { WorkspaceStateService } from "../app/WorkspaceStateService";
+import { parsePromptPresets } from "../core/prompts/promptPresetSchema";
 import { isWebviewMessage } from "../vscode/webview/webviewMessages";
+import { getWebviewHtml } from "../vscode/webview/webviewHtml";
+import { getWebviewScript } from "../vscode/webview/webviewScript";
 
 const FIXTURE_ROOT = path.join(process.cwd(), "src", "test", "fixtures");
 
@@ -522,6 +526,25 @@ test("PromptPreset application service duplicates, restores, and soft deletes", 
   assert.equal(getCurrentPromptPresetVersion(duplicated).text, "v1");
 });
 
+test("PromptPreset schema ignores corrupted stored presets", () => {
+  const valid = createPromptPreset(
+    "Audit",
+    "v1",
+    "2026-01-01T00:00:00.000Z",
+    "valid"
+  );
+
+  assert.deepEqual(
+    parsePromptPresets([
+      valid,
+      { ...valid, id: "missing-current", currentVersionId: "missing" },
+      { ...valid, id: "bad-version", versions: [{ id: "v1" }] },
+      { ...valid, id: "bad-deleted", deletedAt: 42 },
+    ]).map((preset) => preset.id),
+    ["valid"]
+  );
+});
+
 test("WorkspaceState persists selection, context options, and export options", async () => {
   const storage = createMemoryStorage({});
   const state = new WorkspaceStateService(storage);
@@ -575,6 +598,41 @@ test("webview message guard rejects unknown and malformed messages", () => {
     isWebviewMessage({ type: "prefix.restoreVersion", presetId: "p1" }),
     false
   );
+});
+
+test("webview script only references rendered element ids", () => {
+  const html = getWebviewHtml({
+    nonce: "test",
+    cspSource: "vscode-resource:",
+    state: {
+      tokenProfiles: [
+        { id: "claude", label: "Claude" },
+        { id: "openai", label: "OpenAI" },
+        { id: "gemini", label: "Gemini" },
+      ],
+      visibleTokenProfileIds: ["claude", "openai", "gemini"],
+      tokenSummaries: [],
+      promptPresets: [],
+      activePresetId: null,
+      inlinePrefix: "",
+      treeMode: "selectedFilesOnly",
+      outputMode: "readable",
+      exportOptions: normalizePromptExportOptions({}),
+      selectionSummary: { selectedFiles: 0, selectedTokens: 0 },
+      syncStatus: "idle",
+    },
+  });
+  const ids = new Set(
+    [...html.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1])
+  );
+  const script = getWebviewScript("{}");
+  const referencedIds = new Set(
+    [...script.matchAll(/\$\("([^"]+)"\)/g)].map((match) => match[1])
+  );
+
+  for (const id of referencedIds) {
+    assert.ok(ids.has(id), `missing webview element id: ${id}`);
+  }
 });
 
 test("ContextAssembler matches readable golden fixture", async () => {
@@ -659,6 +717,57 @@ test("ContextAssembler reports missing file snapshots", async () => {
       path: "src/example.ts",
     },
   ]);
+});
+
+test("ContextApplicationService prefixes multi-root tree paths", async () => {
+  const workspaces: IndexedWorkspace[] = [
+    { id: "front", name: "frontend", rootPath: "/repo/frontend" },
+    { id: "back", name: "backend", rootPath: "/repo/backend" },
+  ];
+  const paths = [
+    "/repo/frontend/src/index.ts",
+    "/repo/backend/src/index.ts",
+  ];
+  const index = new FileIndex(
+    {
+      async listFiles(workspace) {
+        return paths.filter((filePath) => filePath.startsWith(workspace.rootPath));
+      },
+      async statFile(absolutePath) {
+        return { sizeBytes: absolutePath.length, mtimeMs: 1 };
+      },
+    },
+    workspaces,
+    getTokenProfile("claude")
+  );
+  await index.ensureFresh();
+  const selection = new FileSelection();
+  selection.setNodeIncluded(index.getSnapshot(), "front:", true);
+  selection.setNodeIncluded(index.getSnapshot(), "back:", true);
+  const service = new ContextApplicationService(
+    index,
+    selection,
+    {
+      async readText(absolutePath) {
+        return absolutePath;
+      },
+      async writeText() {},
+    },
+    {
+      async writeText() {},
+    },
+    getTokenProfile("claude")
+  );
+
+  const output = await service.buildContext({
+    prefix: "",
+    treeMode: "selectedFilesOnly",
+    outputMode: "readable",
+  });
+
+  assert.match(output.text, /workspace\n/);
+  assert.match(output.text, /frontend\/\n.*src\/\n.*index\.ts/s);
+  assert.match(output.text, /backend\/\n.*src\/\n.*index\.ts/s);
 });
 
 test("folder selection refinement keeps tests and declarations separate", () => {

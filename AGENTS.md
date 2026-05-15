@@ -1,52 +1,60 @@
 # Development Guide
 
-## Architecture Overview
+## Product Focus
 
-Clean service-oriented architecture replacing monolithic god object. Each service has single responsibility.
+`prompt.lupinum` does one thing: select codebase files, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
 
-## Source Directory Structure
+Do not reintroduce GitHub views, GitHub API clients, PR/issue context, exact tokenizer adapters, React, or parallel legacy paths.
 
-### `/api`
+## Architecture
 
-- **GitHubApiClient.ts** - GitHub REST API wrapper for issues/comments fetching (PRs now also supported)
+The dependency direction is:
 
-### `/models`
+```txt
+vscode shell
+-> app
+-> core
+```
 
-- **FileNode.ts** - Multi-workspace tree node model with parent/child relationships
-- **Workspace.ts** - VS Code workspace representation, config interfaces
-- **Events.ts** - Event payload types for token updates, file selection changes
-- **EventEmitter.ts** - Token update event emitter (legacy, use VS Code EventEmitter)
+- `src/core`: pure TypeScript domain logic. No `vscode`, no app imports, no adapter imports.
+- `src/app`: application services and small ports. No `vscode` imports and no concrete `src/vscode` adapter imports.
+- `src/vscode`: VS Code adapters, tree providers, webview shell, command registration, and bootstrap.
+- `src/test`: node-based tests for core invariants, golden context output, storage behavior, and webview contracts.
 
-### `/providers`
+`src/extension.ts` should stay tiny and only activate/deactivate the VS Code shell.
 
-- **MultiRootTreeProvider.ts** - Main tree data provider supporting multi-folder workspaces
-- **GitHubIssuesProvider.ts** - GitHub issues tree with token counting, caching
+## Current Source Map
 
-### `/services`
+- `src/core/context`: context assembly, project tree rendering, and context-size estimation.
+- `src/core/files`: file indexing, ignore rules, file-kind grouping, and selection intent.
+- `src/core/prompts`: versioned prompt preset types, validation, store, and versioning.
+- `src/core/tokens`: estimate-only token profiles for Claude, OpenAI, and Gemini.
+- `src/core/export`: prompt file naming and export target rules.
+- `src/app`: context, prompt preset, and workspace-state application services.
+- `src/vscode/shell`: VS Code bootstrap, commands, message routing, service wiring, logging, and watcher session.
+- `src/vscode/views`: native file tree and selection filter tree providers.
+- `src/vscode/webview`: compact vanilla webview HTML, CSS, script, and typed messages.
 
-- **WorkspaceManager.ts** - Discovers/manages VS Code workspace folders, handles relative paths
-- **FileDiscoveryService.ts** - File discovery per workspace using RelativePattern
-- **IgnorePatternService.ts** - Per-workspace .gitignore/.towerignore handling
-- **TokenCountingService.ts** - Async token counting with cancellation support
-- **ContextGenerationService.ts** - Template-based context generation, includes GitHub issues
+## Implementation Rules
 
-### `/utils`
+- Prefer delete, simplify, replace, then add.
+- Keep every important concept to one source of truth.
+- Selection intent is canonical; selected files, folder checkbox state, filter groups, and token totals are derived.
+- Context generation is pure; update golden fixtures for intentional output changes.
+- Prompt preset edits create recoverable versions. Do not silently overwrite old prefix text.
+- Generated benchmark reports are local artifacts, not product documentation.
 
-- **fileTree.ts** - ASCII tree generation for project structure
-- **alwaysIgnore.ts** - Built-in ignore patterns array
-- **githubConfig.ts** - GitHub auth token management, repo detection
+## Verification
 
-### Root Files
+Before finishing meaningful changes, run:
 
-- **extension.ts** - Extension entry point, service initialization, command registration
+```sh
+npm run check-types
+npm run lint
+npm test
+npm run test:architecture
+npm run validate
+```
 
-### `/test`
+Run `npm run benchmark:smoke` for performance-sensitive changes and `npm run deploy:local` before manual VS Code smoke.
 
-- **extension.test.ts** - Basic test setup (needs expansion)
-
-## Key Architecture Changes
-
-1. **Multi-workspace support**: Each workspace folder is a tree root
-2. **Service injection**: Dependencies passed to constructors, not created internally
-3. **Event-driven**: Token updates via EventEmitter, file changes via VS Code events
-4. **Clean separation**: Business logic in services, UI in providers, activation in extension

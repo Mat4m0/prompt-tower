@@ -1,15 +1,15 @@
 import * as vscode from "vscode";
-import { FileIndex } from "../core/files/FileIndex";
-import { FileSelection } from "../core/files/FileSelection";
-import { getTokenProfile, type TokenProfile } from "../core/tokens/TokenProfiles";
-import { VsCodeClipboard } from "../vscode/VsCodeClipboard";
-import { VsCodeFileSystem } from "../vscode/VsCodeFileSystem";
-import { VsCodeStorage } from "../vscode/VsCodeStorage";
-import { VsCodeWorkspace } from "../vscode/VsCodeWorkspace";
-import { ContextApplicationService } from "./ContextApplicationService";
+import { FileIndex } from "../../core/files/FileIndex";
+import { FileSelection } from "../../core/files/FileSelection";
+import { getTokenProfile, type TokenProfile } from "../../core/tokens/TokenProfiles";
+import { VsCodeClipboard } from "../VsCodeClipboard";
+import { VsCodeFileSystem } from "../VsCodeFileSystem";
+import { VsCodeStorage } from "../VsCodeStorage";
+import { VsCodeWorkspace } from "../VsCodeWorkspace";
+import { ContextApplicationService } from "../../app/ContextApplicationService";
 import { DebugLogger } from "./DebugLogger";
-import { PromptPresetApplicationService } from "./PromptPresetApplicationService";
-import { WorkspaceStateService } from "./WorkspaceStateService";
+import { PromptPresetApplicationService } from "../../app/PromptPresetApplicationService";
+import { WorkspaceStateService } from "../../app/WorkspaceStateService";
 
 export interface ServiceContainer {
   workspace: VsCodeWorkspace;

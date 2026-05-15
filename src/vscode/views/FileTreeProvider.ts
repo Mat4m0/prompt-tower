@@ -30,12 +30,18 @@ export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
     item.id = element.id;
     item.resourceUri =
       element.kind === "file" ? vscode.Uri.file(element.absolutePath) : undefined;
-    item.description = formatTreeTokenCount(element.estimatedTokens, "estimated");
-    item.tooltip = element.absolutePath;
+    const selectionState =
+      this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? "unchecked";
+    item.description =
+      selectionState === "partial"
+        ? `partial · ${formatTreeTokenCount(element.estimatedTokens, "estimated")}`
+        : formatTreeTokenCount(element.estimatedTokens, "estimated");
+    item.tooltip =
+      selectionState === "partial"
+        ? `${element.absolutePath}\nPartially selected`
+        : element.absolutePath;
     item.contextValue = element.kind;
-    item.checkboxState = toVsCodeCheckboxState(
-      this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? "unchecked"
-    );
+    item.checkboxState = toVsCodeCheckboxState(selectionState);
     item.command = {
       command: "promptLupinum.toggleFileSelection",
       title: "Toggle Selection",
@@ -60,4 +66,3 @@ function toVsCodeCheckboxState(
     ? vscode.TreeItemCheckboxState.Checked
     : vscode.TreeItemCheckboxState.Unchecked;
 }
-
