@@ -426,7 +426,11 @@ export class MultiRootTreeProvider
       node.mtimeMs = stats.mtime;
       this.tokenCountingService.invalidateFile(filePath);
       FileNodeUtils.updateFileTokenCounts(node, {
-        estimatedTokenCount: estimateTokenCountFromBytes(stats.size, this.tokenProfile),
+        estimatedTokenCount: estimateTokenCountFromBytes(
+          stats.size,
+          this.tokenProfile,
+          node.label
+        ),
         exactTokenCount: undefined,
       });
       this._onDidChangeTreeData.fire();
@@ -579,6 +583,40 @@ export class MultiRootTreeProvider
     this._onDidChangeTreeData.fire();
   }
 
+  async refineSelectedFolderSelection(): Promise<void> {
+    const folders = this.getCheckedRefinableFolders();
+
+    if (folders.length === 0) {
+      vscode.window.showInformationMessage(
+        "Select a folder in the Prompt Tower tree first."
+      );
+      return;
+    }
+
+    if (folders.length === 1) {
+      await this.refineFolderSelection(folders[0]);
+      return;
+    }
+
+    const selectedFolder = await vscode.window.showQuickPick(
+      folders.map((folder) => ({
+        label: folder.label,
+        description: folder.relativePath || folder.workspace.name,
+        folder,
+      })),
+      {
+        title: "Refine selected folder",
+        placeHolder: "Choose which selected folder to refine",
+      }
+    );
+
+    if (!selectedFolder) {
+      return;
+    }
+
+    await this.refineFolderSelection(selectedFolder.folder);
+  }
+
   private buildSelectionRefinementGroups(
     files: FileNode[]
   ): SelectionRefinementGroup[] {
@@ -636,6 +674,31 @@ export class MultiRootTreeProvider
     }
 
     return true;
+  }
+
+  private getCheckedRefinableFolders(): FileNode[] {
+    const folders: FileNode[] = [];
+    const stack = [...this.rootNodes];
+
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      if (
+        node.type !== "file" &&
+        node.isChecked &&
+        FileNodeUtils.getDescendantFiles(node).length > 0
+      ) {
+        folders.push(node);
+        continue;
+      }
+
+      if (node.children) {
+        for (let index = node.children.length - 1; index >= 0; index--) {
+          stack.push(node.children[index]);
+        }
+      }
+    }
+
+    return folders;
   }
 
   /**

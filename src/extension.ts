@@ -652,6 +652,14 @@ function createOrShowWebviewPanel(context: vscode.ExtensionContext) {
           }
           break;
 
+        case "refineSelectedFolder":
+          if (multiRootProvider) {
+            await multiRootProvider.refineSelectedFolderSelection();
+            invalidateWebviewPreview();
+            scheduleEstimatedTokenPreviewUpdate();
+          }
+          break;
+
         case "resetAll":
           if (multiRootProvider && webviewPanel) {
             // Reset all selections (files and GitHub issues)

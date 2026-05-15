@@ -309,7 +309,11 @@ export class FileDiscoveryService {
           node.sizeBytes = stats.size;
           node.mtimeMs = stats.mtime;
           FileNodeUtils.updateFileTokenCounts(node, {
-            estimatedTokenCount: estimateTokenCountFromBytes(stats.size),
+            estimatedTokenCount: estimateTokenCountFromBytes(
+              stats.size,
+              undefined,
+              node.label
+            ),
             exactTokenCount: undefined,
           });
         } catch (error) {

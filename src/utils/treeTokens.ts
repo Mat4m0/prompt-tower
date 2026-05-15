@@ -17,9 +17,10 @@ export interface TreeTokenNode<TNode extends TreeTokenNode<TNode>> {
 
 export function estimateTokenCountFromBytes(
   byteSize: number,
-  profile: TokenProfile = getTokenProfile(undefined)
+  profile: TokenProfile = getTokenProfile(undefined),
+  fileName?: string
 ): number {
-  return estimateTokensFromBytes(byteSize, profile);
+  return estimateTokensFromBytes(byteSize, profile, fileName);
 }
 
 export function formatTreeTokenCount(

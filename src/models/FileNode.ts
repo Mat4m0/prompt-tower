@@ -110,7 +110,11 @@ export class FileNodeFactory {
     const labelBasename = path.basename(absolutePath);
     const label = labelBasename;
     const extension = label.includes(".") ? label.split(".").pop() : undefined;
-    const estimatedTokenCount = estimateTokenCountFromBytes(sizeBytes);
+    const estimatedTokenCount = estimateTokenCountFromBytes(
+      sizeBytes,
+      undefined,
+      label
+    );
 
     return {
       id: `file:${workspace.id}:${relativePath}`,
@@ -333,7 +337,8 @@ export class FileNodeUtils {
       if (node.type === "file") {
         node.estimatedTokenCount = estimateTokenCountFromBytes(
           node.sizeBytes ?? 0,
-          profile
+          profile,
+          node.label
         );
         node.exactTokenCount = undefined;
         node.displayTokenCount = node.estimatedTokenCount;

@@ -73,6 +73,7 @@ export function getWebviewHtml(params: WebviewParams): string {
 
               <div class="toolbar-row">
                   <button id="clearButton">Clear Selected</button>
+                  <button id="refineSelectedFolderButton">Refine Folder...</button>
                   <button id="resetAllButton">Reset All</button>
               </div>
 
@@ -468,6 +469,10 @@ export function getWebviewHtml(params: WebviewParams): string {
 
                     document.getElementById('clearButton')?.addEventListener('click', () => {
                         vscode.postMessage({ command: 'clearSelections' });
+                    });
+
+                    document.getElementById('refineSelectedFolderButton')?.addEventListener('click', () => {
+                        vscode.postMessage({ command: 'refineSelectedFolder' });
                     });
 
                     document.getElementById('resetAllButton')?.addEventListener('click', () => {
