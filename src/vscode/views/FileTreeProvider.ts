@@ -1,0 +1,63 @@
+import * as vscode from "vscode";
+import type { FileIndex, IndexedNode } from "../../core/files/FileIndex";
+import type { FileSelection } from "../../core/files/FileSelection";
+import { formatTreeTokenCount } from "../../core/tokens/TokenEstimator";
+
+export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
+  private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
+    IndexedNode | undefined | void
+  >();
+  readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
+
+  constructor(
+    private fileIndex: FileIndex,
+    private fileSelection: FileSelection
+  ) {
+    this.fileIndex.onDidChange(() => this.refresh());
+    this.fileSelection.onDidChange(() => this.refresh());
+  }
+
+  refresh(): void {
+    this.onDidChangeTreeDataEmitter.fire();
+  }
+
+  getTreeItem(element: IndexedNode): vscode.TreeItem {
+    const collapsibleState =
+      element.kind === "file"
+        ? vscode.TreeItemCollapsibleState.None
+        : vscode.TreeItemCollapsibleState.Collapsed;
+    const item = new vscode.TreeItem(element.name, collapsibleState);
+    item.id = element.id;
+    item.resourceUri =
+      element.kind === "file" ? vscode.Uri.file(element.absolutePath) : undefined;
+    item.description = formatTreeTokenCount(element.estimatedTokens, "estimated");
+    item.tooltip = element.absolutePath;
+    item.contextValue = element.kind;
+    item.checkboxState = toVsCodeCheckboxState(
+      this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? "unchecked"
+    );
+    item.command = {
+      command: "promptLupinum.toggleFileSelection",
+      title: "Toggle Selection",
+      arguments: [element],
+    };
+    return item;
+  }
+
+  getChildren(element?: IndexedNode): IndexedNode[] {
+    const snapshot = this.fileIndex.getSnapshot();
+    const ids = element ? element.kind === "file" ? [] : element.childIds : snapshot.rootIds;
+    return ids
+      .map((id) => snapshot.nodes.get(id))
+      .filter((node): node is IndexedNode => node !== undefined);
+  }
+}
+
+function toVsCodeCheckboxState(
+  state: "checked" | "unchecked" | "partial"
+): vscode.TreeItemCheckboxState {
+  return state === "checked"
+    ? vscode.TreeItemCheckboxState.Checked
+    : vscode.TreeItemCheckboxState.Unchecked;
+}
+

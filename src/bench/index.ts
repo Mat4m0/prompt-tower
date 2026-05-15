@@ -12,19 +12,14 @@ import {
   readLatestReport,
   writeLatestReportFiles,
 } from "./reporting";
-import {
-  applyContextWrapperTemplate,
-  ContextCoreConfig,
-  ContextFileEntry,
-  formatContextFileBlock,
-} from "../services/contextGenerationCore";
-import {
-  configureTokenizerCache,
-  countTextTokens,
-  countTextTokensLegacy,
-} from "../services/tokenizer";
-import { TokenSelectionState } from "../services/TokenSelectionState";
-import { generateFileStructureTree } from "../utils/fileTree";
+import { assembleContext } from "../core/context/ContextAssembler";
+import type {
+  ContextFile,
+  ContextFileSnapshot,
+  ContextOutputMode,
+  ProjectTreeMode,
+} from "../core/context/ContextFormat";
+import { generateFileStructureTree } from "../core/context/ProjectTreeBuilder";
 
 type ScaleName = "smoke" | "standard" | "large";
 
@@ -37,8 +32,8 @@ interface BenchmarkCase {
 
 interface FixtureSet {
   rootDir: string;
-  allFiles: ContextFileEntry[];
-  selectedFiles: ContextFileEntry[];
+  allFiles: ContextFile[];
+  selectedFiles: ContextFile[];
   totalBytes: number;
   selectedBytes: number;
   largestFileBytes: number;
@@ -49,19 +44,6 @@ interface TreeFileEntry {
   origin: string;
   tree: string;
 }
-
-const DEFAULT_CONFIG: ContextCoreConfig = {
-  blockTemplate:
-    '<file name="{fileNameWithExtension}" path="{rawFilePath}">\n{fileContent}\n</file>',
-  blockSeparator: "\n",
-  blockTrimLines: true,
-  wrapperTemplate:
-    "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>",
-  projectTree: {
-    type: "fullFilesAndDirectories",
-    template: "<project_tree>\n{projectTree}\n</project_tree>\n",
-  },
-};
 
 const SCALE_CONFIG: Record<
   ScaleName,
@@ -105,7 +87,6 @@ const SCALE_CONFIG: Record<
 };
 
 async function main(): Promise<void> {
-  configureTokenizerCache();
   const args = new Set(process.argv.slice(2));
   const scale = getScale(args);
   const jsonOutput = args.has("--json");
@@ -180,10 +161,10 @@ function getScale(args: Set<string>): ScaleName {
 async function createFixtureSet(scale: ScaleName): Promise<FixtureSet> {
   const config = SCALE_CONFIG[scale];
   const rootDir = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), "prompt-tower-bench-")
+    path.join(os.tmpdir(), "prompt-lupinum-bench-")
   );
-  const allFiles: ContextFileEntry[] = [];
-  const selectedFiles: ContextFileEntry[] = [];
+  const allFiles: ContextFile[] = [];
+  const selectedFiles: ContextFile[] = [];
   let totalBytes = 0;
   let selectedBytes = 0;
   let largestFileBytes = 0;
@@ -216,7 +197,12 @@ async function createFixtureSet(scale: ScaleName): Promise<FixtureSet> {
       totalBytes += contentBytes;
       largestFileBytes = Math.max(largestFileBytes, contentBytes);
 
-      const entry = { absolutePath, relativePath };
+      const entry = {
+        id: absolutePath,
+        absolutePath,
+        relativePath,
+        name: fileName,
+      };
       allFiles.push(entry);
 
       if ((directoryIndex * config.filesPerDirectory + fileIndex) % config.selectedEvery === 0) {
@@ -280,24 +266,12 @@ function createFixtureFileContent(
 }
 
 function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
-  const deltaSubtree = fixtureSet.selectedFiles.slice(
-    0,
-    Math.max(1, Math.floor(fixtureSet.selectedFiles.length / 2))
-  );
-  const deltaSubtreePaths = deltaSubtree.map((fileEntry) => fileEntry.absolutePath);
-  let cachedDeltaSelectionState: TokenSelectionState | undefined;
-  let mixedDeltaSelectionState: TokenSelectionState | undefined;
-
   return [
     {
       name: "file-blocks:selected",
       description: "Read and format selected file blocks",
       run: async () => {
-        await Promise.all(
-          fixtureSet.selectedFiles.map((fileEntry) =>
-            formatContextFileBlock(fileEntry, DEFAULT_CONFIG)
-          )
-        );
+        await loadSnapshots(fixtureSet.selectedFiles);
       },
     },
     {
@@ -321,114 +295,18 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       },
     },
     {
-      name: "tokens:legacy-full",
-      description: "Read and tokenize the full fixture with encode(...).length",
-      run: async () => {
-        const contents = await Promise.all(
-          fixtureSet.allFiles.map((fileEntry) =>
-            fs.promises.readFile(fileEntry.absolutePath, "utf8")
-          )
-        );
-        for (const content of contents) {
-          countTextTokensLegacy(content);
-        }
-      },
-    },
-    {
-      name: "tokens:selected",
-      description: "Read and tokenize selected files",
-      run: async () => {
-        const contents = await Promise.all(
-          fixtureSet.selectedFiles.map((fileEntry) =>
-            fs.promises.readFile(fileEntry.absolutePath, "utf8")
-          )
-        );
-        for (const content of contents) {
-          countTextTokens(content);
-        }
-      },
-    },
-    {
-      name: "tokens:full",
-      description: "Read and tokenize the full repository fixture",
-      run: async () => {
-        const contents = await Promise.all(
-          fixtureSet.allFiles.map((fileEntry) =>
-            fs.promises.readFile(fileEntry.absolutePath, "utf8")
-          )
-        );
-        for (const content of contents) {
-          countTextTokens(content);
-        }
-      },
-    },
-    {
-      name: "tokens:warm-full",
-      description: "Tokenize the full fixture after warming tokenizer merge cache",
-      beforeEachRun: async () => {
-        const contents = await loadFileContents(fixtureSet.allFiles);
-        for (const content of contents) {
-          countTextTokens(content);
-        }
-      },
-      run: async () => {
-        const contents = await loadFileContents(fixtureSet.allFiles);
-        for (const content of contents) {
-          countTextTokens(content);
-        }
-      },
-    },
-    {
-      name: "tokens:delta-cached-subtree",
-      description: "Toggle a cached subtree without rescanning the full selection",
-      beforeEachRun: async () => {
-        cachedDeltaSelectionState = await warmDeltaSelectionState(
-          fixtureSet.selectedFiles,
-          deltaSubtree
-        );
-      },
-      run: async () => {
-        cachedDeltaSelectionState!.applySelectionDelta([], deltaSubtreePaths);
-        cachedDeltaSelectionState!.applySelectionDelta(deltaSubtreePaths, []);
-        await cachedDeltaSelectionState!.waitForIdle();
-      },
-    },
-    {
-      name: "tokens:delta-mixed-subtree",
-      description: "Toggle a subtree with mixed cached and uncached file counts",
-      beforeEachRun: async () => {
-        mixedDeltaSelectionState = await warmDeltaSelectionState(
-          fixtureSet.selectedFiles,
-          deltaSubtree.slice(0, Math.max(1, Math.floor(deltaSubtree.length / 2)))
-        );
-      },
-      run: async () => {
-        mixedDeltaSelectionState!.applySelectionDelta([], deltaSubtreePaths);
-        mixedDeltaSelectionState!.applySelectionDelta(deltaSubtreePaths, []);
-        await mixedDeltaSelectionState!.waitForIdle();
-      },
-    },
-    {
       name: "context:selected-tree",
       description: "End-to-end context generation with selected-files tree",
       run: async () => {
-        const fileBlocks = await Promise.all(
-          fixtureSet.selectedFiles.map((fileEntry) =>
-            formatContextFileBlock(fileEntry, DEFAULT_CONFIG)
-          )
-        );
         const projectTree = await generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.selectedFiles)
         );
-        applyContextWrapperTemplate({
-          config: DEFAULT_CONFIG,
-          fileBlocks: fileBlocks.join(DEFAULT_CONFIG.blockSeparator),
-          githubIssues: "",
-          githubPRs: "",
+        await assembleBenchmarkContext({
+          files: fixtureSet.selectedFiles,
           projectTree,
-          includeProjectTree: true,
-          fileCount: fixtureSet.selectedFiles.length,
+          treeMode: "selectedFilesOnly",
+          outputMode: "readable",
         });
       },
     },
@@ -436,23 +314,15 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       name: "context:full-tree",
       description: "End-to-end context generation with full repository tree",
       run: async () => {
-        const fileBlocks = await Promise.all(
-          fixtureSet.selectedFiles.map((fileEntry) =>
-            formatContextFileBlock(fileEntry, DEFAULT_CONFIG)
-          )
-        );
         const projectTree = await generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.allFiles)
         );
-        applyContextWrapperTemplate({
-          config: DEFAULT_CONFIG,
-          fileBlocks: fileBlocks.join(DEFAULT_CONFIG.blockSeparator),
-          githubIssues: "",
-          githubPRs: "",
+        await assembleBenchmarkContext({
+          files: fixtureSet.selectedFiles,
           projectTree,
-          includeProjectTree: true,
-          fileCount: fixtureSet.selectedFiles.length,
+          treeMode: "fullFilesAndDirectories",
+          outputMode: "readable",
         });
       },
     },
@@ -460,24 +330,15 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       name: "context:minified-full-tree",
       description: "End-to-end context generation with minified wrapper output",
       run: async () => {
-        const fileBlocks = await Promise.all(
-          fixtureSet.selectedFiles.map((fileEntry) =>
-            formatContextFileBlock(fileEntry, DEFAULT_CONFIG, { minify: true })
-          )
-        );
         const projectTree = await generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.allFiles)
         );
-        applyContextWrapperTemplate({
-          config: DEFAULT_CONFIG,
-          fileBlocks: fileBlocks.join(""),
-          githubIssues: "",
-          githubPRs: "",
+        await assembleBenchmarkContext({
+          files: fixtureSet.selectedFiles,
           projectTree,
-          includeProjectTree: true,
-          fileCount: fixtureSet.selectedFiles.length,
-          minify: true,
+          treeMode: "fullFilesAndDirectories",
+          outputMode: "compact",
         });
       },
     },
@@ -501,11 +362,28 @@ function createNestedDirectorySegments(
   return segments;
 }
 
-function toTreeEntries(fileEntries: ContextFileEntry[]): TreeFileEntry[] {
+function toTreeEntries(fileEntries: ContextFile[]): TreeFileEntry[] {
   return fileEntries.map((fileEntry) => ({
     origin: fileEntry.absolutePath,
     tree: fileEntry.relativePath.replace(/\\/g, "/"),
   }));
+}
+
+async function assembleBenchmarkContext(options: {
+  files: ContextFile[];
+  projectTree: string;
+  treeMode: ProjectTreeMode;
+  outputMode: ContextOutputMode;
+}): Promise<void> {
+  const snapshots = await loadSnapshots(options.files);
+  assembleContext({
+    files: options.files,
+    snapshots,
+    prefix: "",
+    projectTree: options.projectTree,
+    treeMode: options.treeMode,
+    outputMode: options.outputMode,
+  });
 }
 
 async function measureBenchmark(
@@ -541,37 +419,18 @@ async function measureBenchmark(
   };
 }
 
-async function loadFileContents(
-  fileEntries: ContextFileEntry[]
-): Promise<string[]> {
-  return Promise.all(
-    fileEntries.map((fileEntry) =>
-      fs.promises.readFile(fileEntry.absolutePath, "utf8")
-    )
+async function loadSnapshots(
+  fileEntries: ContextFile[]
+): Promise<Map<string, ContextFileSnapshot>> {
+  const snapshots = new Map<string, ContextFileSnapshot>();
+  await Promise.all(
+    fileEntries.map(async (fileEntry) => {
+      snapshots.set(fileEntry.id, {
+        content: await fs.promises.readFile(fileEntry.absolutePath, "utf8"),
+      });
+    })
   );
-}
-
-async function warmDeltaSelectionState(
-  fileEntries: ContextFileEntry[],
-  warmEntries: ContextFileEntry[]
-): Promise<TokenSelectionState> {
-  const selectionState = new TokenSelectionState(async (filePath) => {
-    const content = await fs.promises.readFile(filePath, "utf8");
-    return {
-      tokenCount: countTextTokens(content),
-      cacheable: true,
-    };
-  });
-  const warmPaths = warmEntries.map((fileEntry) => fileEntry.absolutePath);
-  const selectionPaths = fileEntries.map((fileEntry) => fileEntry.absolutePath);
-
-  selectionState.applySelectionDelta(warmPaths, []);
-  await selectionState.waitForIdle();
-  selectionState.applySelectionDelta([], warmPaths);
-  selectionState.applySelectionDelta(selectionPaths, []);
-  await selectionState.waitForIdle();
-
-  return selectionState;
+  return snapshots;
 }
 
 function average(values: number[]): number {
@@ -585,7 +444,7 @@ function printResults(
     latestMd: string;
   }
 ): void {
-  console.log(`Prompt Tower benchmark suite (${report.scale})`);
+  console.log(`prompt.lupinum benchmark suite (${report.scale})`);
   console.log(
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`
   );

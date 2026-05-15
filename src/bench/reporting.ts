@@ -99,7 +99,7 @@ export function renderMarkdownReport<ScaleName extends string>(
   report: BenchmarkReport<ScaleName>
 ): string {
   const lines = [
-    `# Prompt Tower benchmark report (${report.scale})`,
+    `# prompt.lupinum benchmark report (${report.scale})`,
     "",
     `Generated: ${report.generatedAt}`,
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`,

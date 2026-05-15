@@ -1,19 +1,19 @@
 {
-  "name": "prompt-tower",
-  "displayName": "Prompt Tower",
+  "name": "prompt-lupinum",
+  "displayName": "prompt.lupinum",
   "version": "1.6.1",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/backnotprop/prompt-tower"
+    "url": "https://github.com/matthias/prompt-lupinum"
   },
   "author": {
     "name": "Michael Ramos",
     "url": "https://github.com/backnotprop"
   },
   "publisher": "backnotprop",
-  "icon": "assets/prompt-tower-icon.png",
-  "description": "Context creation and management tool for LLM coding agents. Build prompts with lots of code blocks in them, save templates, and dynamically manage context on your terms.",
+  "icon": "assets/prompt-lupinum-icon.png",
+  "description": "Select codebase files, manage reusable prompt prefixes, and create AI-ready context.",
   "categories": [
     "AI",
     "Machine Learning",
@@ -28,334 +28,173 @@
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "Prompt Tower",
+      "title": "prompt.lupinum",
       "properties": {
-        "promptTower.useGitignore": {
+        "promptLupinum.useGitignore": {
           "type": "boolean",
           "default": true,
           "description": "Use your .gitignore file to filter out files and folders available for context"
         },
-        "promptTower.maxFileSizeWarningKB": {
+        "promptLupinum.maxFileSizeWarningKB": {
           "type": "number",
           "default": 500,
           "description": "Show warning when selecting files larger than this size (in KB)"
         },
-        "promptTower.showTreeTokenCounts": {
+        "promptLupinum.showTreeTokenCounts": {
           "type": "boolean",
           "default": true,
-          "description": "Show estimated token counts next to files and folders in the Prompt Tower file tree."
-        },
-        "promptTower.outputFormat": {
-          "type": "object",
-          "description": "Customize the output format for generated context files.",
-          "default": {
-            "blockTemplate": "<file name=\"{fileNameWithExtension}\" path=\"{rawFilePath}\">\n{fileContent}\n</file>",
-            "blockSeparator": "\n",
-            "blockTrimLines": true,
-            "projectTreeFormat": {
-              "type": "fullFilesAndDirectories",
-              "showFileSize": false,
-              "template": "<project_tree>\n{projectTree}\n</project_tree>\n"
-            },
-            "wrapperFormat": {
-              "template": "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>"
-            }
-          },
-          "properties": {
-            "blockTemplate": {
-              "type": "string",
-              "description": "Template for wrapping each file's content. Placeholders: {fileNameWithExtension}, {filePath}(commented), {rawFilePath}(raw), {fileName}, {fileExtension}, {fullPath}, {fileContent}.",
-              "default": "<file name=\"{fileNameWithExtension}\" path=\"{rawFilePath}\">\n{fileContent}\n</file>"
-            },
-            "blockSeparator": {
-              "type": "string",
-              "description": "Separator placed *between* formatted file blocks in the final output.",
-              "default": "\n"
-            },
-            "blockTrimLines": {
-              "type": "boolean",
-              "description": "Trim leading and trailing blank lines from each file block.",
-              "default": true
-            },
-            "projectTreeFormat": {
-              "type": "object",
-              "description": "Settings for the project tree block.",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "description": "Type of project tree block to use.",
-                  "enum": [
-                    "fullFilesAndDirectories",
-                    "fullDirectoriesOnly",
-                    "selectedFilesOnly",
-                    "none"
-                  ],
-                  "default": "fullFilesAndDirectories"
-                },
-                "showFileSize": {
-                  "type": "boolean",
-                  "description": "Show each file's size in the project tree block.",
-                  "default": false
-                },
-                "template": {
-                  "type": "string",
-                  "description": "The template string for the project tree block. Use '{projectTree}' as the placeholder for where the tree block will be inserted.",
-                  "default": "<project_tree>\n{projectTree}\n</project_tree>\n"
-                }
-              }
-            },
-            "wrapperFormat": {
-              "type": [
-                "object",
-                "null"
-              ],
-              "description": "Settings for wrapping the entire generated output. Set to null to disable wrapping.",
-              "default": {
-                "template": "<context>\n{githubIssues}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>"
-              },
-              "properties": {
-                "template": {
-                  "type": "string",
-                  "description": "The template string for the entire output. Use '{blocks}' as the placeholder for where the combined file blocks will be inserted. Other available placeholders: {timestamp}, {fileCount}, {workspaceRoot}, {outputFileName}.",
-                  "default": "<context>\n{githubIssues}{githubPRs}{treeBlock}<project_files>\n{blocks}\n</project_files>\n</context>"
-                }
-              }
-            }
-          }
+          "description": "Show estimated token counts next to files and folders in the prompt.lupinum file tree."
         }
       }
     },
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "prompt-tower",
-          "title": "Prompt Tower",
-          "icon": "assets/prompt-tower.svg"
+          "id": "prompt-lupinum",
+          "title": "prompt.lupinum",
+          "icon": "assets/prompt-lupinum.svg"
         }
       ]
     },
     "views": {
-      "prompt-tower": [
+      "prompt-lupinum": [
         {
-          "id": "promptTowerStatus",
-          "name": "Status",
-          "type": "webview",
-          "when": "!promptTower.webviewVisible"
-        },
-        {
-          "icon": "assets/prompt-tower.svg",
-          "id": "promptTowerView",
+          "icon": "assets/prompt-lupinum.svg",
+          "id": "promptLupinum.files",
           "name": "Files",
           "type": "tree"
         },
         {
-          "id": "promptTowerSelectionFiltersView",
+          "id": "promptLupinum.selectionFilters",
           "name": "Selection Filters",
-          "type": "tree"
-        },
-        {
-          "id": "promptTowerPRsView",
-          "name": "GitHub PRs",
-          "type": "tree"
-        },
-        {
-          "id": "promptTowerIssuesView",
-          "name": "GitHub Issues",
           "type": "tree"
         }
       ]
     },
     "commands": [
       {
-        "command": "promptTower.copyContextToClipboard",
+        "command": "promptLupinum.copyContext",
         "title": "Copy Context to Clipboard",
         "icon": "$(clippy)"
       },
       {
-        "command": "promptTower.toggleAllFiles",
-        "title": "Toggle All Files",
-        "icon": "$(checklist)"
-      },
-      {
-        "command": "promptTower.refresh",
+        "command": "promptLupinum.refresh",
         "title": "Refresh File List",
         "icon": "$(refresh)"
       },
       {
-        "command": "promptTower.clearSelections",
+        "command": "promptLupinum.clearSelection",
         "title": "Clear All Selections",
-        "category": "Prompt Tower",
+        "category": "prompt.lupinum",
         "icon": "$(clear-all)"
       },
       {
-        "command": "promptTower.resetSelectionFilters",
-        "title": "Reset Selection Filters",
-        "category": "Prompt Tower",
-        "icon": "$(clear-all)"
+        "command": "promptLupinum.includeAllSelectionFilters",
+        "title": "Include All Selection Filters",
+        "category": "prompt.lupinum",
+        "icon": "$(checklist)"
       },
       {
-        "command": "promptTower.hideTreeTokenCounts",
-        "title": "Hide Tree Token Counts",
-        "category": "Prompt Tower",
-        "icon": "$(eye-closed)"
+        "command": "promptLupinum.excludeAllSelectionFilters",
+        "title": "Exclude All Selection Filters",
+        "category": "prompt.lupinum",
+        "icon": "$(list-selection)"
       },
       {
-        "command": "promptTower.showTreeTokenCounts",
-        "title": "Show Tree Token Counts",
-        "category": "Prompt Tower",
-        "icon": "$(eye)"
+        "command": "promptLupinum.open",
+        "title": "Open prompt.lupinum",
+        "category": "prompt.lupinum"
       },
       {
-        "command": "promptTower.showTowerUI",
-        "title": "Show Prompt Tower UI",
-        "category": "Prompt Tower"
+        "command": "promptLupinum.showLogs",
+        "title": "Show prompt.lupinum Logs",
+        "category": "prompt.lupinum",
+        "icon": "$(output)"
       },
       {
-        "command": "promptTower.addGitHubToken",
-        "title": "Add GitHub Token",
-        "category": "Prompt Tower",
-        "icon": "$(key)"
-      },
-      {
-        "command": "promptTower.refreshGitHubIssues",
-        "title": "Refresh GitHub Issues",
-        "category": "Prompt Tower",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "promptTower.refreshGitHubPRs",
-        "title": "Refresh GitHub PRs",
-        "category": "Prompt Tower",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "promptTower.removeGitHubToken",
-        "title": "Remove GitHub Token",
-        "category": "Prompt Tower",
-        "icon": "$(trash)"
-      },
-      {
-        "command": "promptTower.addCurrentFile",
-        "title": "Add to Prompt Tower",
-        "category": "Prompt Tower",
+        "command": "promptLupinum.addCurrentFile",
+        "title": "Add to prompt.lupinum",
+        "category": "prompt.lupinum",
         "icon": "$(add)"
-      },
-      {
-        "command": "promptTower.openPromptTower",
-        "title": "Open Prompt Tower",
-        "category": "Prompt Tower",
-        "icon": "$(window)"
-      },
-      {
-        "command": "promptTower.previewFile",
-        "title": "Preview File",
-        "category": "Prompt Tower"
       }
     ],
     "menus": {
       "commandPalette": [
         {
-          "command": "promptTower.copyContextToClipboard"
+          "command": "promptLupinum.copyContext"
         },
         {
-          "command": "promptTower.toggleAllFiles",
-          "when": "view == promptTowerView"
+          "command": "promptLupinum.refresh",
+          "when": "view == promptLupinum.files"
         },
         {
-          "command": "promptTower.refresh",
-          "when": "view == promptTowerView"
+          "command": "promptLupinum.open"
         },
         {
-          "command": "promptTower.showTowerUI"
+          "command": "promptLupinum.showLogs"
         },
         {
-          "command": "promptTower.clearSelections"
+          "command": "promptLupinum.clearSelection"
         },
         {
-          "command": "promptTower.addCurrentFile"
+          "command": "promptLupinum.includeAllSelectionFilters"
         },
         {
-          "command": "promptTower.openPromptTower"
+          "command": "promptLupinum.excludeAllSelectionFilters"
         },
         {
-          "command": "promptTower.hideTreeTokenCounts",
-          "when": "promptTower.treeTokenCountsVisible"
-        },
-        {
-          "command": "promptTower.showTreeTokenCounts",
-          "when": "!promptTower.treeTokenCountsVisible"
+          "command": "promptLupinum.addCurrentFile"
         }
       ],
       "view/title": [
         {
-          "command": "promptTower.copyContextToClipboard",
-          "when": "view == promptTowerView",
+          "command": "promptLupinum.copyContext",
+          "when": "view == promptLupinum.files",
           "group": "navigation@1"
         },
         {
-          "command": "promptTower.toggleAllFiles",
-          "when": "view == promptTowerView",
-          "group": "navigation@2"
-        },
-        {
-          "command": "promptTower.refresh",
-          "when": "view == promptTowerView",
+          "command": "promptLupinum.refresh",
+          "when": "view == promptLupinum.files",
           "group": "navigation@3"
         },
         {
-          "command": "promptTower.clearSelections",
-          "when": "view == promptTowerView",
+          "command": "promptLupinum.clearSelection",
+          "when": "view == promptLupinum.files",
           "group": "navigation@4"
         },
         {
-          "command": "promptTower.resetSelectionFilters",
-          "when": "view == promptTowerSelectionFiltersView",
-          "group": "navigation@1"
-        },
-        {
-          "command": "promptTower.hideTreeTokenCounts",
-          "when": "view == promptTowerView && promptTower.treeTokenCountsVisible",
+          "command": "promptLupinum.showLogs",
+          "when": "view == promptLupinum.files",
           "group": "navigation@5"
         },
         {
-          "command": "promptTower.showTreeTokenCounts",
-          "when": "view == promptTowerView && !promptTower.treeTokenCountsVisible",
-          "group": "navigation@5"
-        },
-        {
-          "command": "promptTower.refreshGitHubIssues",
-          "when": "view == promptTowerIssuesView",
+          "command": "promptLupinum.includeAllSelectionFilters",
+          "when": "view == promptLupinum.selectionFilters",
           "group": "navigation@1"
         },
         {
-          "command": "promptTower.refreshGitHubPRs",
-          "when": "view == promptTowerPRsView",
-          "group": "navigation@1"
+          "command": "promptLupinum.excludeAllSelectionFilters",
+          "when": "view == promptLupinum.selectionFilters",
+          "group": "navigation@2"
         }
       ],
       "editor/context": [
         {
-          "command": "promptTower.addCurrentFile",
+          "command": "promptLupinum.addCurrentFile",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste"
         },
         {
-          "command": "promptTower.openPromptTower",
+          "command": "promptLupinum.open",
           "when": "editorTextFocus",
           "group": "9_cutcopypaste"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "promptTower.previewFile",
-          "when": "view == promptTowerView && viewItem == file"
         }
       ]
     }
   },
-  "homepage": "https://github.com/backnotprop/prompt-tower",
+  "homepage": "https://github.com/matthias/prompt-lupinum",
   "bugs": {
-    "url": "https://github.com/backnotprop/prompt-tower/issues"
+    "url": "https://github.com/matthias/prompt-lupinum/issues"
   },
   "keywords": [
     "AI",
@@ -415,8 +254,10 @@
   "scripts": {
     "vscode:prepublish": "npm run package",
     "benchmark": "node scripts/benchmark.mjs",
+    "benchmark:smoke": "node scripts/benchmark.mjs --scale=smoke",
     "benchmark:json": "node scripts/benchmark.mjs --json",
     "test": "node scripts/test.mjs",
+    "test:architecture": "node scripts/check-architecture.mjs",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
@@ -426,7 +267,7 @@
     "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); npx @vscode/vsce package && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
-    "validate": "npm run check-types && npm run lint"
+    "validate": "npm run check-types && npm run lint && npm run test:architecture"
   },
   "devDependencies": {
     "@types/node": "20.x",
@@ -439,7 +280,6 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
-    "gpt-tokenizer": "^2.9.0",
     "ignore": "^7.0.3"
   }
 }
