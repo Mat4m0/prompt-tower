@@ -39,10 +39,10 @@ export const value = 1;
 ## Development
 
 ```bash
-npm install
-npm run validate
-npm test
-npm run deploy:local
+vp install
+vp run validate
+vp test
+vp run deploy:local
 ```
 
 Core modules live under `src/core` and must not import VS Code APIs. VS Code-specific code lives under `src/vscode`, and app orchestration lives under `src/app`.

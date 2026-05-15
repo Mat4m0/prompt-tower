@@ -1,8 +1,7 @@
-import * as vscode from "vscode";
+import * as vscode from 'vscode'
 
 export class VsCodeClipboard {
   writeText(text: string): Thenable<void> {
-    return vscode.env.clipboard.writeText(text);
+    return vscode.env.clipboard.writeText(text)
   }
 }
-

@@ -184,5 +184,5 @@ export function getWebviewStyles(): string {
       .button-group button { flex: 1 1 auto; }
       .prefix-editor { grid-template-columns: 1fr; }
     }
-  `;
+  `
 }

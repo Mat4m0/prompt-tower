@@ -1,68 +1,67 @@
-import * as vscode from "vscode";
-import type { FileIndex, IndexedNode } from "../../core/files/FileIndex";
-import type { FileSelection } from "../../core/files/FileSelection";
-import { formatTreeTokenCount } from "../../core/tokens/TokenEstimator";
+import * as vscode from 'vscode'
+import type { FileIndex, IndexedNode } from '../../core/files/FileIndex'
+import type { FileSelection } from '../../core/files/FileSelection'
+import { formatTreeTokenCount } from '../../core/tokens/TokenEstimator'
 
 export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
     IndexedNode | undefined | void
-  >();
-  readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
+  >()
+  readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event
 
   constructor(
     private fileIndex: FileIndex,
-    private fileSelection: FileSelection
+    private fileSelection: FileSelection,
   ) {
-    this.fileIndex.onDidChange(() => this.refresh());
-    this.fileSelection.onDidChange(() => this.refresh());
+    this.fileIndex.onDidChange(() => this.refresh())
+    this.fileSelection.onDidChange(() => this.refresh())
   }
 
   refresh(): void {
-    this.onDidChangeTreeDataEmitter.fire();
+    this.onDidChangeTreeDataEmitter.fire()
   }
 
   getTreeItem(element: IndexedNode): vscode.TreeItem {
     const collapsibleState =
-      element.kind === "file"
+      element.kind === 'file'
         ? vscode.TreeItemCollapsibleState.None
-        : vscode.TreeItemCollapsibleState.Collapsed;
-    const item = new vscode.TreeItem(element.name, collapsibleState);
-    item.id = element.id;
-    item.resourceUri =
-      element.kind === "file" ? vscode.Uri.file(element.absolutePath) : undefined;
+        : vscode.TreeItemCollapsibleState.Collapsed
+    const item = new vscode.TreeItem(element.name, collapsibleState)
+    item.id = element.id
+    item.resourceUri = element.kind === 'file' ? vscode.Uri.file(element.absolutePath) : undefined
     const selectionState =
-      this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? "unchecked";
+      this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? 'unchecked'
     item.description =
-      selectionState === "partial"
-        ? `partial · ${formatTreeTokenCount(element.estimatedTokens, "estimated")}`
-        : formatTreeTokenCount(element.estimatedTokens, "estimated");
+      selectionState === 'partial'
+        ? `partial · ${formatTreeTokenCount(element.estimatedTokens, 'estimated')}`
+        : formatTreeTokenCount(element.estimatedTokens, 'estimated')
     item.tooltip =
-      selectionState === "partial"
+      selectionState === 'partial'
         ? `${element.absolutePath}\nPartially selected`
-        : element.absolutePath;
-    item.contextValue = element.kind;
-    item.checkboxState = toVsCodeCheckboxState(selectionState);
+        : element.absolutePath
+    item.contextValue = element.kind
+    item.checkboxState = toVsCodeCheckboxState(selectionState)
     item.command = {
-      command: "promptLupinum.toggleFileSelection",
-      title: "Toggle Selection",
+      command: 'promptLupinum.toggleFileSelection',
+      title: 'Toggle Selection',
       arguments: [element],
-    };
-    return item;
+    }
+    return item
   }
 
   getChildren(element?: IndexedNode): IndexedNode[] {
-    const snapshot = this.fileIndex.getSnapshot();
-    const ids = element ? element.kind === "file" ? [] : element.childIds : snapshot.rootIds;
+    const snapshot = this.fileIndex.getSnapshot()
+    const ids = element ? (element.kind === 'file' ? [] : element.childIds) : snapshot.rootIds
     return ids
       .map((id) => snapshot.nodes.get(id))
-      .filter((node): node is IndexedNode => node !== undefined);
+      .filter((node): node is IndexedNode => node !== undefined)
   }
 }
 
 function toVsCodeCheckboxState(
-  state: "checked" | "unchecked" | "partial"
+  state: 'checked' | 'unchecked' | 'partial',
 ): vscode.TreeItemCheckboxState {
-  return state === "checked"
+  return state === 'checked'
     ? vscode.TreeItemCheckboxState.Checked
-    : vscode.TreeItemCheckboxState.Unchecked;
+    : vscode.TreeItemCheckboxState.Unchecked
 }

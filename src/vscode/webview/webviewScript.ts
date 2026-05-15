@@ -137,5 +137,5 @@ export function getWebviewScript(initialStateJson: string): string {
 
     render(state);
     post({ type: "ready" });
-  `;
+  `
 }

@@ -1,97 +1,82 @@
-import type { ContextOutputMode, ProjectTreeMode } from "../core/context/ContextFormat";
+import type { ContextOutputMode, ProjectTreeMode } from '../core/context/ContextFormat'
 import {
   DEFAULT_EXPORT_OPTIONS,
   normalizePromptExportOptions,
   type PromptExportOptions,
-} from "../core/export/ExportOptions";
-import type { PersistedSelectionIntent } from "../core/files/FileSelection";
-import { isTokenProfileId, type TokenProfileId } from "../core/tokens/TokenProfiles";
-import type { AppStorage } from "./PromptPresetApplicationService";
+} from '../core/export/ExportOptions'
+import type { PersistedSelectionIntent } from '../core/files/FileSelection'
+import { isTokenProfileId, type TokenProfileId } from '../core/tokens/TokenProfiles'
+import type { AppStorage } from './PromptPresetApplicationService'
 
-const SELECTION_INTENT_KEY = "promptLupinum.selectionIntent";
-const TREE_MODE_KEY = "promptLupinum.treeMode";
-const OUTPUT_MODE_KEY = "promptLupinum.outputMode";
-const EXPORT_OPTIONS_KEY = "promptLupinum.exportOptions";
-const TOKEN_SUMMARY_PROFILE_IDS_KEY = "promptLupinum.tokenSummaryProfileIds";
-const DEFAULT_TOKEN_SUMMARY_PROFILE_IDS: readonly TokenProfileId[] = [
-  "openai",
-  "gemini",
-];
+const SELECTION_INTENT_KEY = 'promptLupinum.selectionIntent'
+const TREE_MODE_KEY = 'promptLupinum.treeMode'
+const OUTPUT_MODE_KEY = 'promptLupinum.outputMode'
+const EXPORT_OPTIONS_KEY = 'promptLupinum.exportOptions'
+const TOKEN_SUMMARY_PROFILE_IDS_KEY = 'promptLupinum.tokenSummaryProfileIds'
+const DEFAULT_TOKEN_SUMMARY_PROFILE_IDS: readonly TokenProfileId[] = ['openai', 'gemini']
 
 export class WorkspaceStateService {
   constructor(private storage: AppStorage) {}
 
   getSelectionIntent(): PersistedSelectionIntent | undefined {
-    return this.storage.get<PersistedSelectionIntent | undefined>(
-      SELECTION_INTENT_KEY,
-      undefined
-    );
+    return this.storage.get<PersistedSelectionIntent | undefined>(SELECTION_INTENT_KEY, undefined)
   }
 
   async setSelectionIntent(intent: PersistedSelectionIntent): Promise<void> {
-    await this.storage.update(SELECTION_INTENT_KEY, intent);
+    await this.storage.update(SELECTION_INTENT_KEY, intent)
   }
 
   getTreeMode(): ProjectTreeMode {
-    const value = this.storage.get<ProjectTreeMode>(
-      TREE_MODE_KEY,
-      "selectedFilesOnly"
-    );
-    return isProjectTreeMode(value) ? value : "selectedFilesOnly";
+    const value = this.storage.get<ProjectTreeMode>(TREE_MODE_KEY, 'selectedFilesOnly')
+    return isProjectTreeMode(value) ? value : 'selectedFilesOnly'
   }
 
   async setTreeMode(treeMode: ProjectTreeMode): Promise<void> {
-    await this.storage.update(TREE_MODE_KEY, treeMode);
+    await this.storage.update(TREE_MODE_KEY, treeMode)
   }
 
   getOutputMode(): ContextOutputMode {
-    const value = this.storage.get<ContextOutputMode>(OUTPUT_MODE_KEY, "readable");
-    return value === "compact" ? "compact" : "readable";
+    const value = this.storage.get<ContextOutputMode>(OUTPUT_MODE_KEY, 'readable')
+    return value === 'compact' ? 'compact' : 'readable'
   }
 
   async setOutputMode(outputMode: ContextOutputMode): Promise<void> {
-    await this.storage.update(OUTPUT_MODE_KEY, outputMode);
+    await this.storage.update(OUTPUT_MODE_KEY, outputMode)
   }
 
   getExportOptions(): PromptExportOptions {
     return normalizePromptExportOptions(
-      this.storage.get<Partial<PromptExportOptions>>(
-        EXPORT_OPTIONS_KEY,
-        DEFAULT_EXPORT_OPTIONS
-      )
-    );
+      this.storage.get<Partial<PromptExportOptions>>(EXPORT_OPTIONS_KEY, DEFAULT_EXPORT_OPTIONS),
+    )
   }
 
   async setExportOptions(options: Partial<PromptExportOptions>): Promise<void> {
-    await this.storage.update(
-      EXPORT_OPTIONS_KEY,
-      normalizePromptExportOptions(options)
-    );
+    await this.storage.update(EXPORT_OPTIONS_KEY, normalizePromptExportOptions(options))
   }
 
   getTokenSummaryProfileIds(): readonly TokenProfileId[] {
     const ids = this.storage.get<readonly string[]>(
       TOKEN_SUMMARY_PROFILE_IDS_KEY,
-      DEFAULT_TOKEN_SUMMARY_PROFILE_IDS
-    );
-    const normalized = ids.filter(isTokenProfileId);
-    return normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS;
+      DEFAULT_TOKEN_SUMMARY_PROFILE_IDS,
+    )
+    const normalized = ids.filter(isTokenProfileId)
+    return normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS
   }
 
   async setTokenSummaryProfileIds(ids: readonly string[]): Promise<void> {
-    const normalized = ids.filter(isTokenProfileId);
+    const normalized = ids.filter(isTokenProfileId)
     await this.storage.update(
       TOKEN_SUMMARY_PROFILE_IDS_KEY,
-      normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS
-    );
+      normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS,
+    )
   }
 }
 
 function isProjectTreeMode(value: string): value is ProjectTreeMode {
   return (
-    value === "selectedFilesOnly" ||
-    value === "fullFilesAndDirectories" ||
-    value === "fullDirectoriesOnly" ||
-    value === "none"
-  );
+    value === 'selectedFilesOnly' ||
+    value === 'fullFilesAndDirectories' ||
+    value === 'fullDirectoriesOnly' ||
+    value === 'none'
+  )
 }

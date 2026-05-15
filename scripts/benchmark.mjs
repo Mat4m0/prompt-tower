@@ -1,25 +1,25 @@
-import * as esbuild from "esbuild";
-import { mkdtemp, rm } from "fs/promises";
-import os from "os";
-import path from "path";
-import { pathToFileURL } from "url";
+import * as esbuild from 'esbuild'
+import { mkdtemp, rm } from 'fs/promises'
+import os from 'os'
+import path from 'path'
+import { pathToFileURL } from 'url'
 
-const tempDir = await mkdtemp(path.join(os.tmpdir(), "prompt-lupinum-bundle-"));
-const outfile = path.join(tempDir, "benchmark.mjs");
+const tempDir = await mkdtemp(path.join(os.tmpdir(), 'prompt-lupinum-bundle-'))
+const outfile = path.join(tempDir, 'benchmark.mjs')
 
 try {
   await esbuild.build({
-    entryPoints: ["src/bench/index.ts"],
+    entryPoints: ['src/bench/index.ts'],
     bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node22",
+    format: 'esm',
+    platform: 'node',
+    target: 'node22',
     outfile,
-    logLevel: "silent",
+    logLevel: 'silent',
     sourcemap: false,
-  });
+  })
 
-  await import(pathToFileURL(outfile).href);
+  await import(pathToFileURL(outfile).href)
 } finally {
-  await rm(tempDir, { recursive: true, force: true });
+  await rm(tempDir, { recursive: true, force: true })
 }

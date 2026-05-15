@@ -1,117 +1,127 @@
-import * as path from "path";
+import * as path from 'path'
 
-export type PromptExportFormat = "md" | "txt";
-export type PromptExportCustomPathMode = "relative" | "absolute";
-export type PromptExportLocation =
-  | "promptFolder"
-  | "workspaceRoot"
-  | "customFolder";
+export type PromptExportFormat = 'md' | 'txt'
+export type PromptExportCustomPathMode = 'relative' | 'absolute'
+export type PromptExportLocation = 'promptFolder' | 'workspaceRoot' | 'customFolder'
 
 export interface PromptExportOptions {
-  fileName: string;
-  format: PromptExportFormat;
-  location: PromptExportLocation;
-  customFolderPath: string;
-  customFolderPathMode: PromptExportCustomPathMode;
-  includeTimestamp: boolean;
+  fileName: string
+  format: PromptExportFormat
+  location: PromptExportLocation
+  customFolderPath: string
+  customFolderPathMode: PromptExportCustomPathMode
+  includeTimestamp: boolean
 }
 
 export const DEFAULT_EXPORT_OPTIONS: PromptExportOptions = {
-  fileName: "prompt",
-  format: "md",
-  location: "promptFolder",
-  customFolderPath: "prompts",
-  customFolderPathMode: "relative",
+  fileName: 'prompt',
+  format: 'md',
+  location: 'promptFolder',
+  customFolderPath: 'prompts',
+  customFolderPathMode: 'relative',
   includeTimestamp: true,
-};
+}
 
 export function normalizePromptExportOptions(
-  options: Partial<PromptExportOptions> | undefined
+  options: Partial<PromptExportOptions> | undefined,
 ): PromptExportOptions {
-  const mode = normalizeCustomFolderPathMode(options?.customFolderPathMode);
+  const mode = normalizeCustomFolderPathMode(options?.customFolderPathMode)
   return {
     fileName: sanitizeExportFileName(options?.fileName),
     format: normalizeExportFormat(options?.format),
     location: normalizeExportLocation(options?.location),
     customFolderPathMode: mode,
     customFolderPath: normalizeCustomFolderPath(options?.customFolderPath, mode),
-    includeTimestamp:
-      options?.includeTimestamp ?? DEFAULT_EXPORT_OPTIONS.includeTimestamp,
-  };
+    includeTimestamp: options?.includeTimestamp ?? DEFAULT_EXPORT_OPTIONS.includeTimestamp,
+  }
 }
 
 export function sanitizeExportFileName(fileName: string | undefined): string {
-  const fallback = DEFAULT_EXPORT_OPTIONS.fileName;
+  const fallback = DEFAULT_EXPORT_OPTIONS.fileName
   if (!fileName) {
-    return fallback;
+    return fallback
   }
 
-  const trimmed = fileName.trim();
+  const trimmed = fileName.trim()
   if (!trimmed) {
-    return fallback;
+    return fallback
   }
 
-  const withoutExtension = trimmed.replace(/\.(md|txt)$/i, "");
-  const sanitized = withoutExtension
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[.-]+|[.-]+$/g, "");
+  const withoutExtension = trimmed.replace(/\.(md|txt)$/i, '')
+  const sanitized = replaceInvalidFileNameCharacters(withoutExtension)
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[.-]+|[.-]+$/g, '')
 
-  return sanitized || fallback;
+  return sanitized || fallback
 }
 
-export function normalizeExportFormat(
-  format: PromptExportFormat | string | undefined
-): PromptExportFormat {
-  return format === "txt" ? "txt" : DEFAULT_EXPORT_OPTIONS.format;
+export function normalizeExportFormat(format: string | undefined): PromptExportFormat {
+  return format === 'txt' ? 'txt' : DEFAULT_EXPORT_OPTIONS.format
 }
 
-export function normalizeExportLocation(
-  location: PromptExportLocation | string | undefined
-): PromptExportLocation {
-  if (
-    location === "promptFolder" ||
-    location === "workspaceRoot" ||
-    location === "customFolder"
-  ) {
-    return location;
+export function normalizeExportLocation(location: string | undefined): PromptExportLocation {
+  if (location === 'promptFolder' || location === 'workspaceRoot' || location === 'customFolder') {
+    return location
   }
 
-  return DEFAULT_EXPORT_OPTIONS.location;
+  return DEFAULT_EXPORT_OPTIONS.location
 }
 
 export function normalizeCustomFolderPathMode(
-  mode: PromptExportCustomPathMode | string | undefined
+  mode: string | undefined,
 ): PromptExportCustomPathMode {
-  return mode === "absolute" ? "absolute" : "relative";
+  return mode === 'absolute' ? 'absolute' : 'relative'
 }
 
 export function normalizeCustomFolderPath(
   customFolderPath: string | undefined,
-  mode: PromptExportCustomPathMode
+  mode: PromptExportCustomPathMode,
 ): string {
-  const fallback =
-    mode === "relative" ? DEFAULT_EXPORT_OPTIONS.customFolderPath : "";
+  const fallback = mode === 'relative' ? DEFAULT_EXPORT_OPTIONS.customFolderPath : ''
   if (!customFolderPath) {
-    return fallback;
+    return fallback
   }
 
-  const trimmed = customFolderPath.trim();
+  const trimmed = customFolderPath.trim()
   if (!trimmed) {
-    return fallback;
+    return fallback
   }
 
-  if (mode === "absolute") {
-    return path.normalize(trimmed);
+  if (mode === 'absolute') {
+    return path.normalize(trimmed)
   }
 
   const normalized = trimmed
-    .replace(/\\/g, "/")
-    .replace(/^\.\/+/, "")
-    .replace(/^\/+/, "")
-    .replace(/\/+/g, "/")
-    .replace(/\/$/, "");
+    .replace(/\\/g, '/')
+    .replace(/^\.\/+/, '')
+    .replace(/^\/+/, '')
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '')
 
-  return normalized || fallback;
+  return normalized || fallback
+}
+
+function replaceInvalidFileNameCharacters(value: string): string {
+  let result = ''
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    result += isInvalidFileNameCharacter(character) ? '-' : character
+  }
+  return result
+}
+
+function isInvalidFileNameCharacter(character: string): boolean {
+  return (
+    character.charCodeAt(0) < 32 ||
+    character === '<' ||
+    character === '>' ||
+    character === ':' ||
+    character === '"' ||
+    character === '/' ||
+    character === '\\' ||
+    character === '|' ||
+    character === '?' ||
+    character === '*'
+  )
 }

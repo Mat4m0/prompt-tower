@@ -58,7 +58,6 @@
 New feature added: "Prompt Push" ideated by @arthurwolf in [#19](https://github.com/backnotprop/prompt-tower/issues/19)
 
 - **Automated Prompt Pushing (macOS):** One-click automation to send prompts directly to AI providers
-
   - Supports ChatGPT, Claude, Gemini, AI Studio with browser automation
   - Auto-submit toggle: paste-only mode for unreliable scenarios
   - First-time onboarding modal with permissions guidance
@@ -66,14 +65,12 @@ New feature added: "Prompt Push" ideated by @arthurwolf in [#19](https://github.
   - _Note: macOS only for now, requires Accessibility permissions_
 
 - **Enhanced Action Groups UI:** Modern card-based layout for better organization
-
   - Side-by-side Create Context and Push Prompt groups
   - Tree type selector: Full repo / Selected files only / Directories only
   - Copy to clipboard controls and future "Remove comments" option
   - Professional VS Code theme integration
 
 - **Advanced Context Options:** More control over context generation
-
   - Tree type selection affects project structure in output
   - Copy to clipboard behavior can be controlled per action
   - Modal help system with configuration guidance and troubleshooting

@@ -1,17 +1,20 @@
 .vscode/**
 .vscode-test/**
+.vite-hooks/**
 out/**
 node_modules/**
 src/**
+scripts/**
 benchmarks/reports/**
 .gitignore
 .yarnrc
-esbuild.js
+package-lock.json
+vite.config.*
 vsc-extension-quickstart.md
 **/tsconfig.json
-**/eslint.config.mjs
 **/*.map
 **/*.ts
+**/*.mts
 **/.vscode-test.*
 
 README_Future.md

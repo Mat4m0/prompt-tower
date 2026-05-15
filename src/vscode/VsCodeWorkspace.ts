@@ -1,5 +1,5 @@
-import * as vscode from "vscode";
-import type { IndexedWorkspace } from "../core/files/FileIndex";
+import * as vscode from 'vscode'
+import type { IndexedWorkspace } from '../core/files/FileIndex'
 
 export class VsCodeWorkspace {
   getWorkspaces(): IndexedWorkspace[] {
@@ -7,11 +7,10 @@ export class VsCodeWorkspace {
       id: String(index),
       name: folder.name,
       rootPath: folder.uri.fsPath,
-    }));
+    }))
   }
 
   getPrimaryWorkspaceRoot(): string | undefined {
-    return this.getWorkspaces()[0]?.rootPath;
+    return this.getWorkspaces()[0]?.rootPath
   }
 }
-

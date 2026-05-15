@@ -1,11 +1,11 @@
-import type { ContextPanelState } from "./webviewMessages";
-import { getWebviewScript } from "./webviewScript";
-import { getWebviewStyles } from "./webviewStyles";
+import type { ContextPanelState } from './webviewMessages'
+import { getWebviewScript } from './webviewScript'
+import { getWebviewStyles } from './webviewStyles'
 
 export function getWebviewHtml(params: {
-  nonce: string;
-  cspSource: string;
-  state: ContextPanelState;
+  nonce: string
+  cspSource: string
+  state: ContextPanelState
 }): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -90,7 +90,7 @@ export function getWebviewHtml(params: {
       <textarea id="preview" spellcheck="false"></textarea>
     </div>
   </div>
-  <script nonce="${params.nonce}">${getWebviewScript(JSON.stringify(params.state).replace(/</g, "\\u003c"))}</script>
+  <script nonce="${params.nonce}">${getWebviewScript(JSON.stringify(params.state).replace(/</g, '\\u003c'))}</script>
 </body>
-</html>`;
+</html>`
 }

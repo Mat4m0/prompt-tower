@@ -49,12 +49,11 @@ vscode shell
 Before finishing meaningful changes, run:
 
 ```sh
-npm run check-types
-npm run lint
-npm test
-npm run test:architecture
-npm run validate
+vp check
+vp test
+vp run test:architecture
+vp build
+vp run validate
 ```
 
-Run `npm run benchmark:smoke` for performance-sensitive changes and `npm run deploy:local` before manual VS Code smoke.
-
+Run `vp run benchmark:smoke` for performance-sensitive changes and `vp run deploy:local` before manual VS Code smoke.
