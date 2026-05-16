@@ -20,49 +20,49 @@ export function registerCommands(options: {
   const { context, services, showPanel } = options
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('promptLupinum.open', showPanel),
-    vscode.commands.registerCommand('promptLupinum.refresh', async () => {
+    vscode.commands.registerCommand('lupinumContext.open', showPanel),
+    vscode.commands.registerCommand('lupinumContext.refresh', async () => {
       services.logger.info('[command] manual refresh requested')
       services.fileIndex.markDirty()
       await services.fileIndex.ensureFresh()
       services.fileSelection.reconcile(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('promptLupinum.showLogs', () => {
+    vscode.commands.registerCommand('lupinumContext.showLogs', () => {
       services.logger.show()
     }),
-    vscode.commands.registerCommand('promptLupinum.clearSelection', () => {
+    vscode.commands.registerCommand('lupinumContext.clearSelection', () => {
       services.fileSelection.clear(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('promptLupinum.includeAllSelectionFilters', () => {
+    vscode.commands.registerCommand('lupinumContext.includeAllSelectionFilters', () => {
       services.fileSelection.resetFilters(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('promptLupinum.excludeAllSelectionFilters', () => {
+    vscode.commands.registerCommand('lupinumContext.excludeAllSelectionFilters', () => {
       services.fileSelection.excludeAllFilters(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('promptLupinum.refreshGitCommits', async () => {
+    vscode.commands.registerCommand('lupinumContext.refreshGitCommits', async () => {
       await services.gitService.refreshCommits()
     }),
-    vscode.commands.registerCommand('promptLupinum.clearGitCommits', () => {
+    vscode.commands.registerCommand('lupinumContext.clearGitCommits', () => {
       services.gitSelection.clear()
     }),
-    vscode.commands.registerCommand('promptLupinum.selectLatestGitCommit', () => {
+    vscode.commands.registerCommand('lupinumContext.selectLatestGitCommit', () => {
       services.gitSelection.selectLatest(1)
     }),
-    vscode.commands.registerCommand('promptLupinum.selectLatestThreeGitCommits', () => {
+    vscode.commands.registerCommand('lupinumContext.selectLatestThreeGitCommits', () => {
       services.gitSelection.selectLatest(3)
     }),
-    vscode.commands.registerCommand('promptLupinum.toggleGitCommit', (commit: GitCommit) => {
+    vscode.commands.registerCommand('lupinumContext.toggleGitCommit', (commit: GitCommit) => {
       if (commit?.id) {
         services.gitSelection.toggleCommit(commit.id)
       }
     }),
-    vscode.commands.registerCommand('promptLupinum.toggleFileSelection', async (node: unknown) => {
+    vscode.commands.registerCommand('lupinumContext.toggleFileSelection', async (node: unknown) => {
       if (isIndexedNode(node)) {
         services.fileSelection.toggleNode(services.fileIndex.getSnapshot(), node.id)
       }
     }),
     vscode.commands.registerCommand(
-      'promptLupinum.toggleSelectionFilter',
+      'lupinumContext.toggleSelectionFilter',
       (node: SelectionFilterNode) => {
         services.fileSelection.setFileKindExcluded(
           services.fileIndex.getSnapshot(),
@@ -71,7 +71,7 @@ export function registerCommands(options: {
         )
       },
     ),
-    vscode.commands.registerCommand('promptLupinum.addCurrentFile', async () => {
+    vscode.commands.registerCommand('lupinumContext.addCurrentFile', async () => {
       const editor = vscode.window.activeTextEditor
       if (!editor) {
         vscode.window.showWarningMessage('No active file.')
@@ -85,7 +85,7 @@ export function registerCommands(options: {
       }
       services.fileSelection.setNodeIncluded(services.fileIndex.getSnapshot(), file.id, true)
     }),
-    vscode.commands.registerCommand('promptLupinum.copyContext', async () => {
+    vscode.commands.registerCommand('lupinumContext.copyContext', async () => {
       const output = await services.contextService.copyContext({
         prefix: services.promptPresets.getEffectivePrefix(),
         treeMode: services.workspaceState.getTreeMode(),

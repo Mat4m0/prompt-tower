@@ -97,7 +97,7 @@ export function renderMarkdownReport<ScaleName extends string>(
   report: BenchmarkReport<ScaleName>,
 ): string {
   const lines = [
-    `# prompt.lupinum benchmark report (${report.scale})`,
+    `# Lupinum Context benchmark report (${report.scale})`,
     '',
     `Generated: ${report.generatedAt}`,
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`,

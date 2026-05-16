@@ -9,10 +9,10 @@ import {
   softDeletePromptPreset,
 } from '../core/prompts/PromptPresetVersioning'
 
-const PRESETS_KEY = 'promptLupinum.promptPresets'
-const ACTIVE_PRESET_KEY = 'promptLupinum.activePromptPresetId'
-const INLINE_PREFIX_KEY = 'promptLupinum.inlinePrefixText'
-const MIGRATION_KEY = 'promptLupinum.promptPresetMigrationComplete'
+const PRESETS_KEY = 'lupinumContext.promptPresets'
+const ACTIVE_PRESET_KEY = 'lupinumContext.activePromptPresetId'
+const INLINE_PREFIX_KEY = 'lupinumContext.inlinePrefixText'
+const MIGRATION_KEY = 'lupinumContext.promptPresetMigrationComplete'
 const OLD_PREFIX_HISTORY_KEY = 'promptTower.prefixHistory'
 
 export interface AppStorage {

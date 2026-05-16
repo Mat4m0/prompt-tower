@@ -11,7 +11,7 @@ export const ALWAYS_IGNORE = [
   '.vscode/',
   '.idea/',
   '.vs/',
-  '.prompt-lupinum/',
+  '.lupinum-context/',
   '.vscode-test/',
   '.sublime-project',
   '.sublime-workspace',

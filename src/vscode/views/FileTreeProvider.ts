@@ -45,7 +45,7 @@ export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
     item.contextValue = element.kind
     item.checkboxState = toVsCodeCheckboxState(selectionState)
     item.command = {
-      command: 'promptLupinum.toggleFileSelection',
+      command: 'lupinumContext.toggleFileSelection',
       title: 'Toggle Selection',
       arguments: [element],
     }

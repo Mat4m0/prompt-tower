@@ -59,7 +59,7 @@ export class VsCodeFileSystem implements FileIndexHost {
     const matcher = ignore()
     matcher.add(ALWAYS_IGNORE)
 
-    if (vscode.workspace.getConfiguration('promptLupinum').get<boolean>('useGitignore', true)) {
+    if (vscode.workspace.getConfiguration('lupinumContext').get<boolean>('useGitignore', true)) {
       matcher.add(await this.readIgnoreFile(path.join(workspace.rootPath, '.gitignore')))
     }
     matcher.add(await this.readIgnoreFile(path.join(workspace.rootPath, '.contextignore')))

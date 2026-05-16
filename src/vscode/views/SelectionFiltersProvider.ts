@@ -34,7 +34,7 @@ export class SelectionFiltersProvider implements vscode.TreeDataProvider<Selecti
       : `${group.label} included`
     item.contextValue = 'selectionFilter'
     item.command = {
-      command: 'promptLupinum.toggleSelectionFilter',
+      command: 'lupinumContext.toggleSelectionFilter',
       title: 'Toggle Selection Filter',
       arguments: [element],
     }
@@ -69,5 +69,5 @@ function getFilterResourceUri(group: SelectionFilterGroup): vscode.Uri | undefin
   if (!extension || extension === '(no extension)') {
     return undefined
   }
-  return vscode.Uri.file(`/__prompt_lupinum_filter__/filter${extension}`)
+  return vscode.Uri.file(`/__lupinum_context_filter__/filter${extension}`)
 }

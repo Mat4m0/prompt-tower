@@ -8,11 +8,11 @@ import type { PersistedSelectionIntent } from '../core/files/FileSelection'
 import { isTokenProfileId, type TokenProfileId } from '../core/tokens/TokenProfiles'
 import type { AppStorage } from './PromptPresetApplicationService'
 
-const SELECTION_INTENT_KEY = 'promptLupinum.selectionIntent'
-const TREE_MODE_KEY = 'promptLupinum.treeMode'
-const OUTPUT_MODE_KEY = 'promptLupinum.outputMode'
-const EXPORT_OPTIONS_KEY = 'promptLupinum.exportOptions'
-const TOKEN_SUMMARY_PROFILE_IDS_KEY = 'promptLupinum.tokenSummaryProfileIds'
+const SELECTION_INTENT_KEY = 'lupinumContext.selectionIntent'
+const TREE_MODE_KEY = 'lupinumContext.treeMode'
+const OUTPUT_MODE_KEY = 'lupinumContext.outputMode'
+const EXPORT_OPTIONS_KEY = 'lupinumContext.exportOptions'
+const TOKEN_SUMMARY_PROFILE_IDS_KEY = 'lupinumContext.tokenSummaryProfileIds'
 const DEFAULT_TOKEN_SUMMARY_PROFILE_IDS: readonly TokenProfileId[] = ['openai', 'gemini']
 
 export class WorkspaceStateService {

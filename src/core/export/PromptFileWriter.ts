@@ -57,7 +57,7 @@ export function resolvePromptExportDirectoryPath(
     return resolveCustomDirectoryPath(workspaceRoot, customFolderPath, customFolderPathMode)
   }
 
-  return path.join(workspaceRoot, '.prompt-lupinum', 'prompts')
+  return path.join(workspaceRoot, '.lupinum-context', 'prompts')
 }
 
 export function resolveCustomDirectoryPath(

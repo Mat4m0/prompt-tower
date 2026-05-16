@@ -1,12 +1,12 @@
-# Lupinum Kontext
+# Lupinum Context
 
 **Turn your codebase into AI-ready context in seconds. Then go talk to your LLM about it.**
 
-[![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-0078d4?style=flat-square&logo=visual-studio-code&logoColor=white)](https://kontext.lupinum.com)
+[![VS Code Extension](https://img.shields.io/badge/VS%20Code-Extension-0078d4?style=flat-square&logo=visual-studio-code&logoColor=white)](https://context.lupinum.com)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
-[![Built by Lupinum](https://img.shields.io/badge/Lupinum-Kontext-1d8a4e?style=flat-square)](https://lupinum.com)
+[![Built by Lupinum](https://img.shields.io/badge/Lupinum-Context-1d8a4e?style=flat-square)](https://lupinum.com)
 
-_Kontext_ is the German word for context. Part of the Lupinum dev toolkit at [lupinum.com](https://lupinum.com). Lives at [kontext.lupinum.com](https://kontext.lupinum.com).
+Part of the Lupinum dev toolkit at [lupinum.com](https://lupinum.com). Lives at [context.lupinum.com](https://context.lupinum.com).
 
 ---
 
@@ -47,7 +47,7 @@ But sometimes you want a thinking partner, not a worker. You want to:
 
 For that, you don't want an agent reading what _it_ thinks is interesting. You want the model to see exactly what you put in front of it — no more, no less.
 
-That's what Kontext is for.
+That's what Context is for.
 
 ---
 
@@ -122,8 +122,8 @@ Dump the module + adjacent code + the types it touches → "How would you split 
 
 ## Quick start
 
-1. Install **Lupinum Kontext** from the VS Code Marketplace.
-2. Click the Kontext icon in the Activity Bar.
+1. Install **Lupinum Context** from the VS Code Marketplace.
+2. Click the Context icon in the Activity Bar.
 3. Check files in the tree, optionally pick Git commits.
 4. Hit **Copy Context**.
 5. Paste into your chat of choice.
@@ -158,7 +158,7 @@ Set `promptLupinum.maxFileSizeWarningKB` in your settings to flag oversized file
 
 ## Credits
 
-Lupinum Kontext is a hard fork of **[prompt-tower](https://github.com/backnotprop/prompt-tower)** by **Michael Ramos** ([@backnotprop](https://github.com/backnotprop)). The original idea — a focused VS Code tool for building LLM context — is his, and the early architecture and selection model came from there. Real respect.
+Lupinum Context is a hard fork of **[prompt-tower](https://github.com/backnotprop/prompt-tower)** by **Michael Ramos** ([@backnotprop](https://github.com/backnotprop)). The original idea — a focused VS Code tool for building LLM context — is his, and the early architecture and selection model came from there. Real respect.
 
 ### Why a fork, not a contribution?
 
@@ -172,10 +172,10 @@ We rebuilt the internals for speed on large codebases, added Git commit selectio
 
 ## Contributing
 
-Found a bug? Want a feature? [Open an issue](https://github.com/lupinum/kontext/issues).
+Found a bug? Want a feature? [Open an issue](https://github.com/lupinum-dev/context/issues).
 
 ```bash
-git clone https://github.com/lupinum/kontext.git
+git clone https://github.com/lupinum-dev/context.git
 npm install
 vp build
 vp run deploy:local   # installs the .vsix into your local VS Code
@@ -183,6 +183,6 @@ vp run deploy:local   # installs the .vsix into your local VS Code
 
 ---
 
-**[AGPL-3.0](LICENSE)** • **[kontext.lupinum.com](https://kontext.lupinum.com)** • Built by [Lupinum](https://lupinum.com) • Originally [@backnotprop](https://github.com/backnotprop)
+**[AGPL-3.0](LICENSE)** • **[context.lupinum.com](https://context.lupinum.com)** • Built by [Lupinum](https://lupinum.com) • Originally [@backnotprop](https://github.com/backnotprop)
 
 <sub>For the moments when you want to talk to your codebase, not just have an agent operate on it.</sub>

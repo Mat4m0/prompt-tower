@@ -1,6 +1,6 @@
-# Releasing prompt.lupinum
+# Releasing Lupinum Context
 
-This is the internal runbook for shipping a new version of `prompt.lupinum`
+This is the internal runbook for shipping a new version of `Lupinum Context`
 to both **VS Code Marketplace** (stock VS Code) and **Open VSX Registry**
 (Cursor, VSCodium, Windsurf, Gitpod, etc.). They are independent registries —
 every release goes to both.
@@ -89,13 +89,13 @@ Do NOT push yet — we push after a successful publish.
 npm run package:vsix
 ```
 
-Produces `prompt-lupinum-<version>.vsix` at the repo root. The `vscode:prepublish`
+Produces `lupinum-context-<version>.vsix` at the repo root. The `vscode:prepublish`
 hook chains to `vp run package` → `vp run build`, so the bundle is rebuilt fresh.
 
 Sanity-check the contents:
 
 ```sh
-unzip -l prompt-lupinum-<version>.vsix | head -40
+unzip -l lupinum-context-<version>.vsix | head -40
 ```
 
 Expect to see `extension/dist/extension.js`, `extension/assets/*.png`,
@@ -106,7 +106,7 @@ are excluded by [.vscodeignore](../.vscodeignore)).
 ### 4. Publish to VS Code Marketplace
 
 ```sh
-npx vsce publish --packagePath prompt-lupinum-<version>.vsix
+npx vsce publish --packagePath lupinum-context-<version>.vsix
 ```
 
 `--packagePath` republishes the exact VSIX from step 3 instead of rebuilding,
@@ -115,14 +115,14 @@ so both marketplaces hold byte-identical artifacts.
 ### 5. Publish to Open VSX
 
 ```sh
-npx ovsx publish prompt-lupinum-<version>.vsix -p "$OVSX_PAT"
+npx ovsx publish lupinum-context-<version>.vsix -p "$OVSX_PAT"
 ```
 
 ### 6. Push tag + GitHub release
 
 ```sh
 git push origin main --follow-tags
-gh release create v<version> prompt-lupinum-<version>.vsix \
+gh release create v<version> lupinum-context-<version>.vsix \
     --title "v<version>" --notes-from-tag
 ```
 
@@ -134,11 +134,11 @@ either marketplace is down or slow to index.
 Wait 2–10 minutes for indexing, then:
 
 - [ ] **VS Code Marketplace** page shows new version:
-      <https://marketplace.visualstudio.com/items?itemName=lupinum-dev.prompt-lupinum>
+      <https://marketplace.visualstudio.com/items?itemName=lupinum-dev.lupinum-context>
 - [ ] **Open VSX** page shows new version:
-      <https://open-vsx.org/extension/lupinum-dev/prompt-lupinum>
+      <https://open-vsx.org/extension/lupinum-dev/lupinum-context>
 - [ ] In a **clean VS Code window**: uninstall any dev build, install from
-      the marketplace UI, open the `prompt.lupinum` view, check a couple of
+      the marketplace UI, open the `Lupinum Context` view, check a couple of
       files, run **Copy Context to Clipboard**, paste — confirm
       `<context>…</context>` XML.
 - [ ] Repeat the same smoke test in **Cursor** (queries Open VSX).
@@ -150,7 +150,7 @@ Wait 2–10 minutes for indexing, then:
 You **cannot delete a published version** on either marketplace. The fix is
 always: bump patch version, publish a corrected release.
 
-- `npx vsce unpublish lupinum-dev.prompt-lupinum` removes the **entire**
+- `npx vsce unpublish lupinum-dev.lupinum-context` removes the **entire**
   extension from the VS Code Marketplace. Nuclear option — avoid.
 - For deprecation without nuking, use the web UI on each marketplace's
   publisher dashboard to **unlist** a specific version.
@@ -159,14 +159,14 @@ always: bump patch version, publish a corrected release.
 
 ## Troubleshooting
 
-| Symptom                                         | Cause / fix                                                                                                                                                                          |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `vsce publish` returns `403`                    | PAT expired, or scoped to a single Azure org instead of _All accessible organizations_. Recreate it.                                                                                 |
-| `vsce publish` returns `409 conflict`           | Version already published. Bump `package.json` version and retry.                                                                                                                    |
-| `ovsx publish` says namespace doesn't exist     | Claim it at <https://open-vsx.org/user-settings/namespaces> first.                                                                                                                   |
-| Marketplace listing shows broken icon           | The path in `package.json` `icon` is excluded by [.vscodeignore](../.vscodeignore). Currently `assets/prompt-lupinum-icon.png` — make sure `assets/**` stays out of `.vscodeignore`. |
-| `vsce` warns about missing repository / LICENSE | Check the identity fields in [package.json](../package.json) and that `LICENSE` is at repo root (it is).                                                                             |
-| Listing description is stale                    | First paragraphs of [README.md](../README.md) drive the description. Edit, bump patch, republish.                                                                                    |
+| Symptom                                         | Cause / fix                                                                                                                                                                           |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `vsce publish` returns `403`                    | PAT expired, or scoped to a single Azure org instead of _All accessible organizations_. Recreate it.                                                                                  |
+| `vsce publish` returns `409 conflict`           | Version already published. Bump `package.json` version and retry.                                                                                                                     |
+| `ovsx publish` says namespace doesn't exist     | Claim it at <https://open-vsx.org/user-settings/namespaces> first.                                                                                                                    |
+| Marketplace listing shows broken icon           | The path in `package.json` `icon` is excluded by [.vscodeignore](../.vscodeignore). Currently `assets/lupinum-context-icon.png` — make sure `assets/**` stays out of `.vscodeignore`. |
+| `vsce` warns about missing repository / LICENSE | Check the identity fields in [package.json](../package.json) and that `LICENSE` is at repo root (it is).                                                                              |
+| Listing description is stale                    | First paragraphs of [README.md](../README.md) drive the description. Edit, bump patch, republish.                                                                                     |
 
 ---
 
@@ -174,11 +174,11 @@ always: bump patch version, publish a corrected release.
 
 | Field               | Value                                    |
 | ------------------- | ---------------------------------------- |
-| Extension `name`    | `prompt-lupinum`                         |
-| `displayName`       | `prompt.lupinum`                         |
+| Extension `name`    | `lupinum-context`                        |
+| `displayName`       | `Lupinum Context`                        |
 | VS Code publisher   | `lupinum-dev`                            |
 | Open VSX namespace  | `lupinum-dev`                            |
-| Full marketplace ID | `lupinum-dev.prompt-lupinum`             |
+| Full marketplace ID | `lupinum-dev.lupinum-context`            |
 | Repository          | <https://github.com/lupinum-dev/context> |
 
 Changing `name` or `publisher` after the first publish creates a **separate

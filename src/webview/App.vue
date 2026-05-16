@@ -39,7 +39,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <h1>prompt.lupinum</h1>
+  <h1>Lupinum Context</h1>
   <TokenBar :state="state" :send="send" />
   <PromptPanel :state="state" :send="send" />
   <ContextOptionsPanel :state="state" :send="send" @copy-preview="onCopyPreview" />

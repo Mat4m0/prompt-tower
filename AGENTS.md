@@ -2,7 +2,7 @@
 
 ## Product Focus
 
-`prompt.lupinum` does one thing: select codebase files, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
+`Lupinum Context` does one thing: select codebase files, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
 
 Do not reintroduce GitHub views, GitHub API clients, PR/issue context, exact tokenizer adapters, React, or parallel legacy paths.
 

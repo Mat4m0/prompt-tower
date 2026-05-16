@@ -20,7 +20,7 @@ test('prompt export core normalizes names, formats, and timestamps', () => {
   assert.equal(options.format, 'txt')
   assert.equal(options.location, 'promptFolder')
   assert.equal(target.fileName, 'Audit-Run-2026-05-15_20-55-07.txt')
-  assert.equal(target.directoryPath, path.join('/workspace/project', '.prompt-lupinum', 'prompts'))
+  assert.equal(target.directoryPath, path.join('/workspace/project', '.lupinum-context', 'prompts'))
   assert.equal(createWrapperTimestamp(date), date.toISOString())
 })
 

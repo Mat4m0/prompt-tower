@@ -9,14 +9,14 @@ import { MessageRouter } from './messageRouter'
 import { isWebviewMessage } from '../../shared/messages'
 import { WorkspaceSession } from './workspaceSession'
 
-const VIEW_TYPE = 'promptLupinum.context'
+const VIEW_TYPE = 'lupinumContext.context'
 
-export async function bootstrapPromptLupinum(
+export async function bootstrapLupinumContext(
   context: vscode.ExtensionContext,
 ): Promise<vscode.Disposable> {
   const services = createServiceContainer(context)
   context.subscriptions.push(services.logger)
-  services.logger.info('[bootstrap] activating prompt.lupinum')
+  services.logger.info('[bootstrap] activating Lupinum Context')
   await services.promptPresets.migrateOldPrefixHistory()
   services.fileSelection.restoreIntent(
     services.fileIndex.getSnapshot(),
@@ -31,17 +31,17 @@ export async function bootstrapPromptLupinum(
   const selectionFiltersProvider = new SelectionFiltersProvider(services.fileSelection)
   const gitCommitsProvider = new GitCommitsProvider(services.gitSelection)
 
-  const fileTree = vscode.window.createTreeView('promptLupinum.files', {
+  const fileTree = vscode.window.createTreeView('lupinumContext.files', {
     treeDataProvider: fileTreeProvider,
     canSelectMany: true,
     showCollapseAll: true,
     manageCheckboxStateManually: true,
   })
-  const filtersTree = vscode.window.createTreeView('promptLupinum.selectionFilters', {
+  const filtersTree = vscode.window.createTreeView('lupinumContext.selectionFilters', {
     treeDataProvider: selectionFiltersProvider,
     manageCheckboxStateManually: true,
   })
-  const gitTree = vscode.window.createTreeView('promptLupinum.gitCommits', {
+  const gitTree = vscode.window.createTreeView('lupinumContext.gitCommits', {
     treeDataProvider: gitCommitsProvider,
     manageCheckboxStateManually: true,
   })
@@ -62,7 +62,7 @@ export async function bootstrapPromptLupinum(
     }
     panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
-      'prompt.lupinum',
+      'Lupinum Context',
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
@@ -180,7 +180,7 @@ async function refreshIndex(
     services.logger.info(`[refresh] complete: ${reason}`)
   } catch (error) {
     services.logger.error(`[refresh] failed: ${reason}`, error)
-    vscode.window.showErrorMessage(`prompt.lupinum refresh failed: ${String(error)}`)
+    vscode.window.showErrorMessage(`Lupinum Context refresh failed: ${String(error)}`)
   }
 }
 

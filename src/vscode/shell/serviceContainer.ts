@@ -36,7 +36,7 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
   const gitHost = new VsCodeGit(logger)
   const clipboard = new VsCodeClipboard()
   let tokenProfile = getTokenProfile(
-    context.globalState.get<string>('promptLupinum.selectedTokenProfile', 'claude'),
+    context.globalState.get<string>('lupinumContext.selectedTokenProfile', 'claude'),
   )
   const fileIndex = new FileIndex(fileSystem, workspace.getWorkspaces(), tokenProfile, logger)
   const fileSelection = new FileSelection()
@@ -73,7 +73,7 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
     },
     async setTokenProfile(profileId: string): Promise<TokenProfile> {
       const profile = getTokenProfile(profileId)
-      await context.globalState.update('promptLupinum.selectedTokenProfile', profile.id)
+      await context.globalState.update('lupinumContext.selectedTokenProfile', profile.id)
       tokenProfile = profile
       contextService.setTokenProfile(profile)
       return profile

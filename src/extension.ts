@@ -1,8 +1,8 @@
 import * as vscode from 'vscode'
-import { bootstrapPromptLupinum } from './vscode/shell/bootstrap'
+import { bootstrapLupinumContext } from './vscode/shell/bootstrap'
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const app = await bootstrapPromptLupinum(context)
+  const app = await bootstrapLupinumContext(context)
   context.subscriptions.push(app)
 }
 

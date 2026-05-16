@@ -160,7 +160,7 @@ function getScale(args: Set<string>): ScaleName {
 
 async function createFixtureSet(scale: ScaleName): Promise<FixtureSet> {
   const config = SCALE_CONFIG[scale]
-  const rootDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'prompt-lupinum-bench-'))
+  const rootDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lupinum-context-bench-'))
   const allFiles: ContextFile[] = []
   const selectedFiles: ContextFile[] = []
   let totalBytes = 0
@@ -423,7 +423,7 @@ function printResults(
     latestMd: string
   },
 ): void {
-  console.log(`prompt.lupinum benchmark suite (${report.scale})`)
+  console.log(`Lupinum Context benchmark suite (${report.scale})`)
   console.log(
     `Fixture: ${report.fixture.totalFiles} total files, ${report.fixture.selectedFiles} selected files`,
   )

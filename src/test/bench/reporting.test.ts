@@ -13,7 +13,7 @@ import { fileExists } from '../helpers'
 
 test('benchmark reporting writes latest files only', async () => {
   const reportsRoot = await fs.promises.mkdtemp(
-    path.join(os.tmpdir(), 'prompt-lupinum-report-test-'),
+    path.join(os.tmpdir(), 'lupinum-context-report-test-'),
   )
 
   try {
@@ -50,7 +50,7 @@ test('benchmark reporting writes latest files only', async () => {
     assert.ok(await fileExists(paths.latestJson))
     assert.ok(await fileExists(paths.latestMd))
     assert.equal(latestReport?.scale, 'smoke')
-    assert.match(markdown, /prompt\.lupinum benchmark report/)
+    assert.match(markdown, /Lupinum Context benchmark report/)
     assert.match(markdown, /Fixture bytes:/)
     assert.equal(await fileExists(path.join(reportsRoot, 'history')), false)
   } finally {

@@ -15,7 +15,7 @@ export function getWebviewHtml(params: {
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${params.cspSource} 'unsafe-inline'; script-src 'nonce-${params.nonce}' ${params.cspSource}; img-src ${params.cspSource} data:; font-src ${params.cspSource};">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>prompt.lupinum</title>
+  <title>Lupinum Context</title>
   <link rel="stylesheet" href="${params.styleUri}">
 </head>
 <body>

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 
 export class DebugLogger {
-  private readonly output = vscode.window.createOutputChannel('prompt.lupinum')
+  private readonly output = vscode.window.createOutputChannel('Lupinum Context')
 
   info(message: string): void {
     this.output.appendLine(`${new Date().toISOString()} ${message}`)
