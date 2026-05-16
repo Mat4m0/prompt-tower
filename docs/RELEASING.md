@@ -27,7 +27,7 @@ These steps are required exactly once per developer machine. Skip to
    - **Display name**: `Lupinum`.
 5. Cache the PAT locally so future publishes don't prompt:
    ```sh
-   npx vsce login lupinum-dev
+   pnpm exec vsce login lupinum-dev
    # paste PAT when prompted
    ```
 
@@ -59,7 +59,7 @@ Needed only for the release-tag step at the end.
 ## Release flow
 
 Every release runs the steps below in order. Replace `<version>` with the
-new version string (e.g. `1.6.2`).
+new version string (e.g. `1.0.1`).
 
 ### 1. Pre-flight checks
 
@@ -77,7 +77,7 @@ Confirm:
 ### 2. Bump the version
 
 ```sh
-npm version patch    # or: minor / major / 1.6.2
+pnpm version patch    # or: minor / major / 1.0.1
 ```
 
 This rewrites `package.json`, makes a commit `v<version>`, and creates tag `v<version>`.
@@ -86,7 +86,7 @@ Do NOT push yet — we push after a successful publish.
 ### 3. Package the VSIX
 
 ```sh
-npm run package:vsix
+pnpm run package:vsix
 ```
 
 Produces `lupinum-context-<version>.vsix` at the repo root. The `vscode:prepublish`
@@ -106,7 +106,7 @@ are excluded by [.vscodeignore](../.vscodeignore)).
 ### 4. Publish to VS Code Marketplace
 
 ```sh
-npx vsce publish --packagePath lupinum-context-<version>.vsix
+pnpm exec vsce publish --packagePath lupinum-context-<version>.vsix
 ```
 
 `--packagePath` republishes the exact VSIX from step 3 instead of rebuilding,
@@ -115,7 +115,7 @@ so both marketplaces hold byte-identical artifacts.
 ### 5. Publish to Open VSX
 
 ```sh
-npx ovsx publish lupinum-context-<version>.vsix -p "$OVSX_PAT"
+pnpm exec ovsx publish lupinum-context-<version>.vsix -p "$OVSX_PAT"
 ```
 
 ### 6. Push tag + GitHub release
@@ -150,7 +150,7 @@ Wait 2–10 minutes for indexing, then:
 You **cannot delete a published version** on either marketplace. The fix is
 always: bump patch version, publish a corrected release.
 
-- `npx vsce unpublish lupinum-dev.lupinum-context` removes the **entire**
+- `pnpm exec vsce unpublish lupinum-dev.lupinum-context` removes the **entire**
   extension from the VS Code Marketplace. Nuclear option — avoid.
 - For deprecation without nuking, use the web UI on each marketplace's
   publisher dashboard to **unlist** a specific version.

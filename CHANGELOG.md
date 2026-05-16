@@ -1,189 +1,27 @@
-# Change Log
+# Changelog
 
-## [Version 1.6.1] -
+All notable changes to **Lupinum Context** are documented in this file.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Improved
+## [Unreleased]
 
-- **Automation Section Layout:** Moved collapsible Automation section inline (to the right of Create Context) to preserve vertical space for the context preview
+## [1.0.0] - 2026-05-16
 
-## [Version 1.6.0] -
-
-### Added
-
-- **Prompt History:** Automatically saves your prefix/suffix prompts for easy reuse
-  - Click "Select Previous..." to browse saved prompts
-  - History organized by workspace (current workspace first, others below)
-  - Shows relative timestamps ("2h ago", "3d ago")
-  - Separate histories for prefix and suffix
-  - Auto-deduplicates entries
-
-- **Collapsible UI Sections:** Cleaner interface with expandable sections
-  - Prefix/Suffix: Prefix expanded by default, suffix collapsed
-  - Automation: "Send to Chat" and "Push Prompt" grouped under collapsible "Automation" header (collapsed by default)
-  - All collapse states persist across sessions
-
-## [Version 1.5.0] -
+First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https://github.com/backnotprop/prompt-tower) reshaped into a sharper, narrower tool for building LLM context inside VS Code. See [README › Why a fork, not a contribution?](README.md#why-a-fork-not-a-contribution) for the scope rationale.
 
 ### Added
 
-- **GitHub Pull Requests Integration:** Include PR diffs directly in your context
-  - New "GitHub PRs" panel in sidebar (above GitHub Issues)
-  - Select open PRs to include their raw diff in generated context
-  - Fetches diffs directly from GitHub's `.diff` endpoint
-  - Token counting for PR diffs
-  - Works with same authentication as GitHub Issues
+- **Visual file selection** in a native VS Code tree with live token counts per file and total.
+- **Multi-provider token estimates** for Claude, OpenAI, and Gemini side by side.
+- **Git commit selection** — pick recent commits and include their diffs as a structured block in the generated context.
+- **Versioned prompt prefixes** — save reusable prompt prefixes, version them as you edit, restore older versions.
+- **Compact output mode** — strips whitespace to save tokens when the chat window is tight.
+- **Smart ignores** — honors `.gitignore`, `.contextignore`, `.towerignore`, plus sensible built-in rules.
+- **Clean XML output format** (`<context>` / `<project_tree>` / `<project_files>` / `<git_diffs>`) — structured, parseable, model-friendly.
 
-### Housekeeping
+### Project
 
-- Consolidated `media/` folder into `assets/`
-- Removed unused test infrastructure
-
-## [Version 1.4.1] -
-
-### Improved
-
-- **Tree Interaction:** Whole file tree rows are now clickable for selection (not just checkboxes)
-- **Workspace Selection:** Fixed workspace root folders being unresponsive to row clicks
-- **File Preview:** Right-click any file in the tree to quickly preview its contents
-- **Navigation:** Added bidirectional navigation with status tree - "Open UI Panel" button appears when main UI is closed or hidden behind other tabs
-
-## [Version 1.4.0] -
-
-### Fixed
-
-- **Reset All Button:** Fixed regression where "Reset All" only cleared file selections instead of resetting everything (selections, prompt prefix/suffix, context preview, error states)
-
-### Added (Mac only)
-
-New feature added: "Prompt Push" ideated by @arthurwolf in [#19](https://github.com/backnotprop/prompt-tower/issues/19)
-
-- **Automated Prompt Pushing (macOS):** One-click automation to send prompts directly to AI providers
-  - Supports ChatGPT, Claude, Gemini, AI Studio with browser automation
-  - Auto-submit toggle: paste-only mode for unreliable scenarios
-  - First-time onboarding modal with permissions guidance
-  - Configurable browser choice and automation timing delays
-  - _Note: macOS only for now, requires Accessibility permissions_
-
-- **Enhanced Action Groups UI:** Modern card-based layout for better organization
-  - Side-by-side Create Context and Push Prompt groups
-  - Tree type selector: Full repo / Selected files only / Directories only
-  - Copy to clipboard controls and future "Remove comments" option
-  - Professional VS Code theme integration
-
-- **Advanced Context Options:** More control over context generation
-  - Tree type selection affects project structure in output
-  - Copy to clipboard behavior can be controlled per action
-  - Modal help system with configuration guidance and troubleshooting
-
-- **Send to Editor Features:** Direct integration with code editors
-  - Cursor logo button with agent/ask targeting options
-  - Chat targeting: new vs current session selection
-  - Full context generation → animation → send workflow
-  - Platform-aware UX (macOS working, Windows preview, Linux hidden)
-
-### Technical Improvements
-
-- **EditorAutomationService:** Clean service architecture for cross-platform editor automation
-- **Platform Detection:** Smart OS-based UX preventing Windows user frustration
-- **Service Architecture:** Added PromptPushService for browser automation logic
-- **Settings Integration:** New promptTower.automation.\* configuration options
-- **Modal System:** Reusable modal infrastructure for onboarding and help
-- **Usage Tracking:** globalState integration for first-time user experience
-
-### Changed
-
-- **Code Organization:** Extracted webview HTML/CSS into separate modular files for better maintainability
-  - `src/extension.webview.html.ts`
-  - `src/extension.webview.css.ts`
-
-## [Version 1.3.2] - Unreleased
-
-### Fixed
-
-- **Windows path display:** Fixed issue where Windows users were seeing full paths in the tree view instead of just file names. The issue was caused by path normalization logic introduced during file selection preservation work. Removed problematic `path.resolve()` calls while maintaining selection preservation functionality
-- **File size display:** Fixed multiple locations where file sizes were showing by default despite package.json setting `showFileSize: false`. Updated defaults in package.json configuration object, fileTree utility function parameters, and generateFileStructureTree options to consistently default to false for cleaner tree output
-
-## [Version 1.3.1] - Unreleased
-
-### Fixed
-
-- **Activity bar click:** Fixed regression where clicking the Prompt Tower activity bar icon only opened the tree view but not the webview UI
-
-## [Version 1.3.0] - Unreleased
-
-### Added
-
-- **Right-click context menu:** "Add to Prompt Tower" and "Open Prompt Tower" options when right-clicking in any file editor - quickly select files and open the interface without navigating to the tree view. Thanks to @arthurwolf for the suggestion
-
-### Fixed
-
-- **File selection preservation:** Refresh no longer deselects files - selections now persist unless files are actually removed. Thanks to @K2adir for reporting (#27)
-- **Toggle All Files command:** Fixed "command not found" error when using the Toggle All Files button
-- **GitHub Issues refresh:** Added missing refresh button to GitHub Issues view for consistency with Files view
-
-## [Version 1.2.1] - 2025-01-22
-
-### Fixed
-
-- **Better built-in ignores:** Enhanced default ignore patterns for improved file filtering
-
-## [Version 1.2.0] - 2025-01-21
-
-### Fixed
-
-- **Multi-workspace support:** Files from all workspace folders now appear in the tree view, not just the first folder. Thanks to @majdalsado and @jskulski for reporting (#28)
-
-### Changed
-
-- **Complete architecture refactor:** Replaced 1,448-line monolithic provider with clean service-oriented architecture
-- **Improved maintainability:** Each service now has single responsibility with proper separation of concerns
-- **Better performance:** Services can be optimized independently, token counting has proper cancellation
-
-### Added
-
-- **DEVELOPMENT.md:** Concise architecture documentation for contributors
-- **Per-workspace ignore handling:** Each workspace folder has its own .gitignore/.towerignore processing
-- **Relative path support:** Properly handles workspace configurations with relative paths like `"../other-project"`
-
-## [Version 1.1.0] - 2025-05-27
-
-### Added
-
-- **GitHub Issues Integration:** Select and include GitHub issues directly in your context, with automatic token counting
-- **Issue Comments:** Full issue threads including all comments are included in generated context
-- **GitHub Authentication:** Support for GitHub PAT tokens for private repositories and higher rate limits
-- **Auto-detection:** Automatically detects GitHub repository from git remote URL
-
-## [Version 1.0.0] - 2025-03-30
-
-This release focuses on significantly enhancing the context-building workflow by refining the Prompt Tower functionality based on user feedback.
-
-### Added
-
-- **Native File Tree Integration:** Select files and folders directly from the VS Code explorer to build context.
-- **Flexible Template Syntax:** Customizable prompt and context templating, now defaulting to an XML-style structure (e.g., `<context>...</context>`).
-- **Directory Tree Injection:** Option to automatically include a representation of selected directory structures within the context. This is customizable:
-  - Full tree (files and directories)
-  - Full tree (directories only)
-  - Selected items only
-- **Enhanced Ignore Capabilities:** More robust file/folder ignoring, including support for a project-level `.towerignore` file (similar to `.gitignore`).
-
-### Changed
-
-- **Prompt Tower Re-architecture:** Overhauled the core functionality to align more closely with tools like CodeIngest, emphasizing flexibility and integration with the native VS Code UI. The ability to add a prompt above or below the generated context remains.
-
-### Removed
-
-- **Visual Tower Interface:** The graphical representation of the "tower" has been removed in favor of the new file-tree-based workflow.
-- **Direct Selection-to-Tower:** The command to send selected text directly to the visual tower has been removed.
-  - _Note: If the Visual Tower or direct selection sending were valuable parts of your workflow, please provide feedback. They could potentially be re-introduced in future updates._
-
-### Acknowledgements
-
-- Special thanks to **@arthurwolf** for the detailed feedback that heavily influenced this update.
-
----
-
-_Documentation for these new features is currently being prepared and will be released soon._
-
-**Issues resolved:** [#24](https://github.com/backnotprop/prompt-tower/issues/24) [#27](https://github.com/backnotprop/prompt-tower/issues/27) [#28](https://github.com/backnotprop/prompt-tower/issues/28) [#30](https://github.com/backnotprop/prompt-tower/issues/30)
+- Clean `core / app / vscode` architecture; dependency direction enforced by `scripts/check-architecture.mjs`.
+- Webview rebuilt on Vue 3.
+- `vp` (vite-plus) handles build, lint, format, and test in one toolchain.
+- Project ships pinned to pnpm 10 via the `packageManager` field.

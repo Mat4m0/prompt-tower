@@ -148,11 +148,11 @@ data/
 
 ### Token warnings
 
-Set `promptLupinum.maxFileSizeWarningKB` in your settings to flag oversized files before they bloat your context.
+Set `lupinumContext.maxFileSizeWarningKB` in your settings to flag oversized files before they bloat your context.
 
 ### Tree display
 
-`promptLupinum.showTreeTokenCounts` toggles inline token counts in the file tree.
+`lupinumContext.showTreeTokenCounts` toggles inline token counts in the file tree.
 
 ---
 
@@ -172,13 +172,14 @@ We rebuilt the internals for speed on large codebases, added Git commit selectio
 
 ## Contributing
 
-Found a bug? Want a feature? [Open an issue](https://github.com/lupinum-dev/context/issues).
+Found a bug? Want a feature? [Open an issue](https://github.com/lupinum-dev/context/issues). For setup, conventions, and the architecture rules contributors are expected to follow, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 git clone https://github.com/lupinum-dev/context.git
-npm install
-vp build
-vp run deploy:local   # installs the .vsix into your local VS Code
+corepack enable           # picks up pnpm@10 pinned in package.json
+pnpm install
+pnpm build
+pnpm run deploy:local     # installs the .vsix into your local VS Code
 ```
 
 ---

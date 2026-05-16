@@ -5,8 +5,8 @@
   "tasks": [
     {
       "label": "watch",
-      "type": "npm",
-      "script": "watch",
+      "type": "shell",
+      "command": "pnpm run watch",
       "problemMatcher": [],
       "isBackground": true,
       "presentation": {
@@ -16,6 +16,13 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "compile",
+      "type": "shell",
+      "command": "pnpm run compile",
+      "problemMatcher": [],
+      "group": "build"
     }
   ]
 }

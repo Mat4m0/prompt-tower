@@ -1,7 +1,7 @@
 {
   "name": "lupinum-context",
   "displayName": "Lupinum Context",
-  "version": "1.6.1",
+  "version": "1.0.0",
   "description": "Pick files, shape context, copy a clean LLM-ready bundle. A sharp VS Code tool for building AI chat context.",
   "categories": [
     "AI",
@@ -323,7 +323,9 @@
   ],
   "icon": "assets/lupinum-context-icon.png",
   "engines": {
+    "node": ">=20",
+    "pnpm": ">=10",
     "vscode": "^1.96.0"
   },
-  "packageManager": "npm@11.14.1"
+  "packageManager": "pnpm@10.0.0"
 }
