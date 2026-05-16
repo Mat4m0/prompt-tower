@@ -107,9 +107,15 @@ export class FileSelection {
     if (included) {
       this.includedNodeIds.add(nodeId)
       this.excludedNodeIds.delete(nodeId)
+      for (const descendantId of collectDescendantIds(index, nodeId)) {
+        this.excludedNodeIds.delete(descendantId)
+      }
     } else {
       this.includedNodeIds.delete(nodeId)
       this.excludedNodeIds.add(nodeId)
+      for (const descendantId of collectDescendantIds(index, nodeId)) {
+        this.includedNodeIds.delete(descendantId)
+      }
     }
     this.rebuild(index)
   }
@@ -195,6 +201,24 @@ export function deriveSelectionSnapshot(
       left.sortLabel.localeCompare(right.sortLabel),
     ),
   }
+}
+
+function collectDescendantIds(index: FileIndexSnapshot, nodeId: string): string[] {
+  const node = index.nodes.get(nodeId)
+  if (!node || node.kind === 'file') {
+    return []
+  }
+  const out: string[] = []
+  const stack = [...node.childIds]
+  while (stack.length > 0) {
+    const id = stack.pop() as string
+    out.push(id)
+    const child = index.nodes.get(id)
+    if (child && child.kind !== 'file') {
+      stack.push(...child.childIds)
+    }
+  }
+  return out
 }
 
 function isSelectedByIntent(

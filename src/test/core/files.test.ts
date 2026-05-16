@@ -109,6 +109,43 @@ test('FileSelection restores tests after excluded test filter is re-enabled', as
   )
 })
 
+test('FileSelection toggling a partial parent re-includes a deselected child folder', async () => {
+  const index = await createSelectionFixtureIndex(['src/sub/inner.ts', 'src/app.ts'])
+  const selection = new FileSelection()
+  const snap = index.getSnapshot()
+  selection.setNodeIncluded(snap, 'w:src', true)
+  selection.setNodeIncluded(snap, 'w:src/sub', false)
+  assert.equal(selection.getSnapshot().checkboxStates.get('w:src'), 'partial')
+
+  selection.toggleNode(snap, 'w:src')
+
+  assert.deepEqual(
+    selection
+      .getSnapshot()
+      .selectedFiles.map((file) => file.relativePath)
+      .sort(),
+    ['src/app.ts', 'src/sub/inner.ts'],
+  )
+})
+
+test('FileSelection toggling a partial parent re-includes a deeply-nested deselected file', async () => {
+  const index = await createSelectionFixtureIndex(['src/sub/inner.ts', 'src/app.ts'])
+  const selection = new FileSelection()
+  const snap = index.getSnapshot()
+  selection.setNodeIncluded(snap, 'w:src', true)
+  selection.setNodeIncluded(snap, 'w:src/sub/inner.ts', false)
+
+  selection.toggleNode(snap, 'w:src')
+
+  assert.deepEqual(
+    selection
+      .getSnapshot()
+      .selectedFiles.map((file) => file.relativePath)
+      .sort(),
+    ['src/app.ts', 'src/sub/inner.ts'],
+  )
+})
+
 test('FileSelection keeps explicit child excludes across filter changes', async () => {
   const index = await createSelectionFixtureIndex(['src/app.ts', 'src/app.test.ts'])
   const selection = new FileSelection()
