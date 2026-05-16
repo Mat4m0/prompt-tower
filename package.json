@@ -41,10 +41,10 @@
   "main": "./dist/extension.js",
   "scripts": {
     "vscode:prepublish": "vp run package",
-    "compile": "vp check && vp build",
-    "watch": "vp build --watch",
-    "build": "vp build",
-    "package": "vp build",
+    "compile": "vp check && vp run build",
+    "watch": "vp build --watch & vp build --config vite.webview.config.mts --watch",
+    "build": "vp build && vp build --config vite.webview.config.mts",
+    "package": "vp run build",
     "package:vsix": "vp exec vsce package",
     "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); vp run package:vsix && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
     "check": "vp check",
@@ -59,14 +59,18 @@
     "prepare": "vp config"
   },
   "dependencies": {
-    "ignore": "7.0.5"
+    "ignore": "7.0.5",
+    "vue": "3.5.34"
   },
   "devDependencies": {
     "@types/node": "20.19.24",
     "@types/vscode": "1.96.0",
+    "@vitejs/plugin-vue": "6.0.7",
     "@vscode/vsce": "3.9.1",
+    "@vue/tsconfig": "0.9.1",
     "esbuild": "0.25.12",
     "typescript": "5.9.3",
+    "vite": "8.0.11",
     "vite-plus": "0.1.21"
   },
   "contributes": {

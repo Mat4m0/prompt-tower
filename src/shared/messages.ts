@@ -1,5 +1,5 @@
-import type { ProjectTreeMode, ContextOutputMode } from '../../core/context/ContextFormat'
-import type { PromptExportOptions } from '../../core/export/ExportOptions'
+import type { ProjectTreeMode, ContextOutputMode } from '../core/context/ContextFormat'
+import type { PromptExportOptions } from '../core/export/ExportOptions'
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }

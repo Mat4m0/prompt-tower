@@ -12,7 +12,7 @@ import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
   WebviewToExtensionMessage,
-} from '../webview/webviewMessages'
+} from '../../shared/messages'
 
 export class MessageRouter {
   private treeMode: ProjectTreeMode

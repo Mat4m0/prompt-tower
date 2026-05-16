@@ -1,12 +1,12 @@
 import * as vscode from 'vscode'
-import { getWebviewHtml } from '../webview/webviewHtml'
+import { getWebviewHtml } from '../webview/webviewHost'
 import { FileTreeProvider } from '../views/FileTreeProvider'
 import { GitCommitsProvider } from '../views/GitCommitsProvider'
 import { SelectionFiltersProvider } from '../views/SelectionFiltersProvider'
 import { registerCommands } from './commandRegistry'
 import { createServiceContainer } from './serviceContainer'
 import { MessageRouter } from './messageRouter'
-import { isWebviewMessage } from '../webview/webviewMessages'
+import { isWebviewMessage } from '../../shared/messages'
 import { WorkspaceSession } from './workspaceSession'
 
 const VIEW_TYPE = 'promptLupinum.context'
@@ -64,7 +64,11 @@ export async function bootstrapPromptLupinum(
       VIEW_TYPE,
       'prompt.lupinum',
       vscode.ViewColumn.Beside,
-      { enableScripts: true, retainContextWhenHidden: true },
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')],
+      },
     )
     const currentRouter = new MessageRouter(
       services,
@@ -72,9 +76,18 @@ export async function bootstrapPromptLupinum(
       services.workspace.getPrimaryWorkspaceRoot() ?? process.cwd(),
     )
     router = currentRouter
+    const webviewDir = vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')
+    const scriptUri = panel.webview
+      .asWebviewUri(vscode.Uri.joinPath(webviewDir, 'main.js'))
+      .toString()
+    const styleUri = panel.webview
+      .asWebviewUri(vscode.Uri.joinPath(webviewDir, 'main.css'))
+      .toString()
     panel.webview.html = getWebviewHtml({
-      nonce: createNonce(),
+      scriptUri,
+      styleUri,
       cspSource: panel.webview.cspSource,
+      nonce: createNonce(),
       state: await currentRouter.createState(),
     })
     panel.webview.onDidReceiveMessage(async (message) => {
