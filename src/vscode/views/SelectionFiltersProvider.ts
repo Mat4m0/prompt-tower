@@ -33,11 +33,6 @@ export class SelectionFiltersProvider implements vscode.TreeDataProvider<Selecti
       ? `${group.label} excluded from folder selections`
       : `${group.label} included`
     item.contextValue = 'selectionFilter'
-    item.command = {
-      command: 'lupinumContext.toggleSelectionFilter',
-      title: 'Toggle Selection Filter',
-      arguments: [element],
-    }
     const resourceUri = getFilterResourceUri(group)
     if (resourceUri) {
       item.resourceUri = resourceUri

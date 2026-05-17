@@ -27,11 +27,6 @@ export class GitCommitsProvider implements vscode.TreeDataProvider<GitCommit> {
     item.checkboxState = selected
       ? vscode.TreeItemCheckboxState.Checked
       : vscode.TreeItemCheckboxState.Unchecked
-    item.command = {
-      command: 'lupinumContext.toggleGitCommit',
-      title: 'Toggle Commit',
-      arguments: [commit],
-    }
     return item
   }
 

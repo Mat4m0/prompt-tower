@@ -1,20 +1,9 @@
 import * as vscode from 'vscode'
 import type { ServiceContainer } from './serviceContainer'
-import type { FileTreeProvider } from '../views/FileTreeProvider'
-import type { GitCommitsProvider } from '../views/GitCommitsProvider'
-import type {
-  SelectionFilterNode,
-  SelectionFiltersProvider,
-} from '../views/SelectionFiltersProvider'
-import { isIndexedNode } from './messageRouter'
-import type { GitCommit } from '../../core/git/GitTypes'
 
 export function registerCommands(options: {
   context: vscode.ExtensionContext
   services: ServiceContainer
-  fileTreeProvider: FileTreeProvider
-  selectionFiltersProvider: SelectionFiltersProvider
-  gitCommitsProvider: GitCommitsProvider
   showPanel: () => void | Promise<void>
 }): void {
   const { context, services, showPanel } = options
@@ -51,26 +40,6 @@ export function registerCommands(options: {
     vscode.commands.registerCommand('lupinumContext.selectLatestThreeGitCommits', () => {
       services.gitSelection.selectLatest(3)
     }),
-    vscode.commands.registerCommand('lupinumContext.toggleGitCommit', (commit: GitCommit) => {
-      if (commit?.id) {
-        services.gitSelection.toggleCommit(commit.id)
-      }
-    }),
-    vscode.commands.registerCommand('lupinumContext.toggleFileSelection', async (node: unknown) => {
-      if (isIndexedNode(node)) {
-        services.fileSelection.toggleNode(services.fileIndex.getSnapshot(), node.id)
-      }
-    }),
-    vscode.commands.registerCommand(
-      'lupinumContext.toggleSelectionFilter',
-      (node: SelectionFilterNode) => {
-        services.fileSelection.setFileKindExcluded(
-          services.fileIndex.getSnapshot(),
-          node.group.id,
-          !node.group.excluded,
-        )
-      },
-    ),
     vscode.commands.registerCommand('lupinumContext.addCurrentFile', async () => {
       const editor = vscode.window.activeTextEditor
       if (!editor) {

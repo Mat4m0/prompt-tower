@@ -113,22 +113,29 @@ export async function bootstrapLupinumContext(
       }
     }),
     fileTree.onDidChangeCheckboxState((event) => {
-      for (const [node] of event.items) {
-        services.fileSelection.toggleNode(services.fileIndex.getSnapshot(), node.id)
+      for (const [node, state] of event.items) {
+        services.fileSelection.setNodeIncluded(
+          services.fileIndex.getSnapshot(),
+          node.id,
+          state === vscode.TreeItemCheckboxState.Checked,
+        )
       }
     }),
     filtersTree.onDidChangeCheckboxState((event) => {
-      for (const [node] of event.items) {
+      for (const [node, state] of event.items) {
         services.fileSelection.setFileKindExcluded(
           services.fileIndex.getSnapshot(),
           node.group.id,
-          !node.group.excluded,
+          state === vscode.TreeItemCheckboxState.Unchecked,
         )
       }
     }),
     gitTree.onDidChangeCheckboxState((event) => {
-      for (const [commit] of event.items) {
-        services.gitSelection.toggleCommit(commit.id)
+      for (const [commit, state] of event.items) {
+        services.gitSelection.setCommitSelected(
+          commit.id,
+          state === vscode.TreeItemCheckboxState.Checked,
+        )
       }
     }),
   )
@@ -136,9 +143,6 @@ export async function bootstrapLupinumContext(
   registerCommands({
     context,
     services,
-    fileTreeProvider,
-    selectionFiltersProvider,
-    gitCommitsProvider,
     showPanel,
   })
 

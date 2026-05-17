@@ -45,7 +45,7 @@
     "watch": "vp build --watch & vp build --config vite.webview.config.mts --watch",
     "build": "vp build && vp build --config vite.webview.config.mts",
     "package": "vp run build",
-    "package:vsix": "vp exec vsce package",
+    "package:vsix": "vp exec vsce package --no-dependencies",
     "deploy:local": "sh -c 'VSIX=$(node -p \"const p=require(\\\"./package.json\\\"); p.name + \\\"-\\\" + p.version + \\\".vsix\\\"\"); vp run package:vsix && \"${VSCODE_CLI:-/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code}\" --install-extension \"$VSIX\" --force'",
     "check": "vp check",
     "check-types": "vp check --no-fmt --no-lint",
