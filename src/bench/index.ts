@@ -20,6 +20,8 @@ import type {
   ProjectTreeMode,
 } from '../core/context/ContextFormat'
 import { generateFileStructureTree } from '../core/context/ProjectTreeBuilder'
+import { FileIndex, type IndexedWorkspace } from '../core/files/FileIndex'
+import { getTokenEstimateProfile } from '../core/tokens/TokenEstimateProfiles'
 
 type ScaleName = 'smoke' | 'standard' | 'large'
 
@@ -260,6 +262,13 @@ function createFixtureFileContent(
 function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
   return [
     {
+      name: 'index:refresh',
+      description: 'Refresh file index with real fixture files and stats',
+      run: async () => {
+        await refreshFixtureIndex(fixtureSet)
+      },
+    },
+    {
       name: 'file-blocks:selected',
       description: 'Read and format selected file blocks',
       run: async () => {
@@ -329,6 +338,31 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       },
     },
   ]
+}
+
+async function refreshFixtureIndex(fixtureSet: FixtureSet): Promise<void> {
+  const workspace: IndexedWorkspace = {
+    id: 'fixture',
+    name: path.basename(fixtureSet.rootDir),
+    rootPath: fixtureSet.rootDir,
+  }
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return fixtureSet.allFiles.map((file) => file.absolutePath)
+      },
+      async statFile(absolutePath) {
+        const stat = await fs.promises.stat(absolutePath)
+        return {
+          sizeBytes: stat.size,
+          mtimeMs: stat.mtimeMs,
+        }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+  await index.ensureFresh()
 }
 
 function createNestedDirectorySegments(directoryIndex: number, nestingDepth: number): string[] {

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { FileIndex, type IndexedWorkspace } from '../core/files/FileIndex'
-import { getTokenProfile } from '../core/tokens/TokenProfiles'
+import { getTokenEstimateProfile } from '../core/tokens/TokenEstimateProfiles'
 
 const FIXTURE_ROOT = path.join(process.cwd(), 'src', 'test', 'fixtures')
 
@@ -47,7 +47,7 @@ export async function createSelectionFixtureIndex(relativePaths: string[]): Prom
       },
     },
     [workspace],
-    getTokenProfile('claude'),
+    getTokenEstimateProfile('claude'),
   )
   await index.ensureFresh()
   return index

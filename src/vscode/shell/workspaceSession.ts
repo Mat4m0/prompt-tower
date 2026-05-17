@@ -10,7 +10,7 @@ export class WorkspaceSession {
   ) {}
 
   start(): void {
-    for (const workspace of this.services.workspace.getWorkspaces()) {
+    for (const workspace of this.services.getWorkspaces()) {
       const watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(workspace.rootPath, '**/*'),
       )

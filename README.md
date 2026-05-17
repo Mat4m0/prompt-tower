@@ -25,7 +25,7 @@ Click checkboxes. Get clean, token-efficient context. Paste into any chat. Talk 
 ```
 1. Pick files in the native VS Code tree
 2. Optionally select Git commits / diffs you care about
-3. See live token counts for Claude, OpenAI, Gemini
+3. See rough size estimates for Claude, OpenAI, Gemini
 4. Hit "Copy Context"
 5. Paste into ChatGPT, Claude, Gemini, Cursor, whatever
 ```
@@ -55,11 +55,11 @@ That's what Context is for.
 
 ### Visual file selection
 
-Native VS Code tree with checkboxes. Live token counts per file and total. Folder selection that respects your filters. No terminal commands, no path typing.
+Native VS Code tree with checkboxes. Live estimated size per file and total. Folder selection that respects your filters. No terminal commands, no path typing.
 
-### Multi-provider token estimates
+### Rough multi-provider estimates
 
-See estimated token count and cost for Claude, OpenAI, and Gemini side by side. Pick which providers you care about; the chip bar updates live.
+See rough token and input-cost estimates for Claude, OpenAI, and Gemini side by side. These are character-based estimates, not exact tokenizer counts. Pick which profiles you care about; the chip bar updates live.
 
 ### Git commit selection
 
@@ -100,7 +100,7 @@ diff --git a/src/foo.ts ...
 </context>
 ```
 
-Structured, parseable, model-friendly. Same shape every time.
+Structured, XML-like, model-friendly. Same shape every time.
 
 ---
 

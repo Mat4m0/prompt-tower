@@ -1,5 +1,5 @@
-import { estimateTokensFromBytes } from '../tokens/TokenProfiles'
-import type { TokenProfile } from '../tokens/TokenProfiles'
+import { estimateTokenCountFromBytes } from '../tokens/TokenEstimateProfiles'
+import type { TokenEstimateProfile } from '../tokens/TokenEstimateProfiles'
 import { getBaseName, getDirName, getExtension, joinPath, toPosixPath } from './pathUtils'
 
 export type IndexedNodeKind = 'workspace' | 'directory' | 'file'
@@ -22,7 +22,7 @@ export interface IndexedFile {
   sizeBytes: number
   mtimeMs: number
   parentId: string
-  estimatedTokens: number
+  estimatedTokenCount: number
 }
 
 export interface IndexedDirectory {
@@ -33,8 +33,8 @@ export interface IndexedDirectory {
   relativePath: string
   name: string
   parentId: string | null
-  childIds: string[]
-  estimatedTokens: number
+  childIds: readonly string[]
+  estimatedTokenCount: number
 }
 
 export type IndexedNode = IndexedFile | IndexedDirectory
@@ -77,7 +77,7 @@ export class FileIndex {
   constructor(
     private host: FileIndexHost,
     private workspaces: readonly IndexedWorkspace[],
-    private tokenProfile: TokenProfile,
+    private tokenProfile: TokenEstimateProfile,
     private logger?: FileIndexLogger,
   ) {
     this.initializeWorkspaceRoots()
@@ -94,7 +94,7 @@ export class FileIndex {
     this.markDirty()
   }
 
-  setTokenProfile(profile: TokenProfile): void {
+  setTokenEstimateProfile(profile: TokenEstimateProfile): void {
     this.tokenProfile = profile
     this.recomputeEstimates()
     this.emit()
@@ -112,10 +112,21 @@ export class FileIndex {
   }
 
   getSnapshot(): FileIndexSnapshot {
+    const nodes = new Map<string, IndexedNode>()
+    const files: IndexedFile[] = []
+
+    for (const [id, node] of this.nodes) {
+      const cloned = cloneIndexedNode(node)
+      nodes.set(id, cloned)
+      if (cloned.kind === 'file') {
+        files.push(cloned)
+      }
+    }
+
     return {
-      nodes: this.nodes,
-      rootIds: this.rootIds,
-      files: this.files,
+      nodes,
+      rootIds: [...this.rootIds],
+      files,
       version: this.snapshotVersion,
     }
   }
@@ -177,7 +188,7 @@ export class FileIndex {
         name: workspace.name,
         parentId: null,
         childIds: [],
-        estimatedTokens: 0,
+        estimatedTokenCount: 0,
       })
 
       const workspaceStartedAt = Date.now()
@@ -238,7 +249,7 @@ export class FileIndex {
         name: workspace.name,
         parentId: null,
         childIds: [],
-        estimatedTokens: 0,
+        estimatedTokenCount: 0,
       })
     }
     this.nodes = nodes
@@ -273,7 +284,7 @@ export class FileIndex {
           name: segment,
           parentId,
           childIds: [],
-          estimatedTokens: 0,
+          estimatedTokenCount: 0,
         })
         appendChild(nodes, parentId, id)
       }
@@ -288,10 +299,14 @@ export class FileIndex {
       if (node.kind === 'file') {
         nodes.set(id, {
           ...node,
-          estimatedTokens: estimateTokensFromBytes(node.sizeBytes, this.tokenProfile, node.name),
+          estimatedTokenCount: estimateTokenCountFromBytes(
+            node.sizeBytes,
+            this.tokenProfile,
+            node.name,
+          ),
         })
       } else {
-        nodes.set(id, { ...node, estimatedTokens: 0 })
+        nodes.set(id, { ...node, childIds: [...node.childIds], estimatedTokenCount: 0 })
       }
     }
     recomputeDirectoryEstimates(nodes, this.rootIds)
@@ -308,13 +323,17 @@ export class FileIndex {
   }
 }
 
+function cloneIndexedNode(node: IndexedNode): IndexedNode {
+  return node.kind === 'file' ? { ...node } : { ...node, childIds: [...node.childIds] }
+}
+
 function createIndexedFile(
   workspace: IndexedWorkspace,
   absolutePath: string,
   relativePath: string,
   parentId: string,
   stat: FileStat,
-  profile: TokenProfile,
+  profile: TokenEstimateProfile,
 ): IndexedFile {
   const name = getBaseName(relativePath)
   return {
@@ -328,7 +347,7 @@ function createIndexedFile(
     sizeBytes: stat.sizeBytes,
     mtimeMs: stat.mtimeMs,
     parentId,
-    estimatedTokens: estimateTokensFromBytes(stat.sizeBytes, profile, name),
+    estimatedTokenCount: estimateTokenCountFromBytes(stat.sizeBytes, profile, name),
   }
 }
 
@@ -349,7 +368,7 @@ function appendChild(nodes: Map<string, IndexedNode>, parentId: string, childId:
   if (!parent || parent.kind === 'file' || parent.childIds.includes(childId)) {
     return
   }
-  parent.childIds.push(childId)
+  ;(parent.childIds as string[]).push(childId)
 }
 
 function sortDirectoryChildren(nodes: Map<string, IndexedNode>): void {
@@ -357,7 +376,7 @@ function sortDirectoryChildren(nodes: Map<string, IndexedNode>): void {
     if (node.kind === 'file') {
       continue
     }
-    node.childIds.sort((leftId, rightId) => {
+    ;(node.childIds as string[]).sort((leftId, rightId) => {
       const left = nodes.get(leftId)!
       const right = nodes.get(rightId)!
       if (left.kind !== right.kind) {
@@ -378,10 +397,10 @@ function recomputeDirectoryEstimates(
       return 0
     }
     if (node.kind === 'file') {
-      return node.estimatedTokens
+      return node.estimatedTokenCount
     }
     const total = node.childIds.reduce((sum, childId) => sum + visit(childId), 0)
-    node.estimatedTokens = total
+    node.estimatedTokenCount = total
     return total
   }
 

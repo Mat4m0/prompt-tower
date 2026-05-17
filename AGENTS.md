@@ -2,9 +2,9 @@
 
 ## Product Focus
 
-`Lupinum Context` does one thing: select codebase files, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
+`Lupinum Context` does one thing: select codebase files and optional recent Git diffs, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
 
-Do not reintroduce GitHub views, GitHub API clients, PR/issue context, exact tokenizer adapters, React, or parallel legacy paths.
+Do not reintroduce GitHub API clients, PR/issue context, exact tokenizer adapters, React, or parallel legacy paths. Git diff selection is in scope only as local `git` history read from the current workspace.
 
 ## Architecture
 
@@ -27,13 +27,14 @@ vscode shell
 
 - `src/core/context`: context assembly, project tree rendering, and context-size estimation.
 - `src/core/files`: file indexing, ignore rules, file-kind grouping, and selection intent.
+- `src/core/git`: local Git commit selection and diff formatting.
 - `src/core/prompts`: versioned prompt preset types, validation, store, and versioning.
-- `src/core/tokens`: estimate-only token profiles for Claude, OpenAI, and Gemini.
+- `src/core/tokens`: rough estimate profiles for Claude, OpenAI, and Gemini.
 - `src/core/export`: prompt file naming and export target rules.
 - `src/app`: context, prompt preset, and workspace-state application services.
 - `src/vscode/shell`: VS Code bootstrap, commands, message routing, service wiring, logging, and watcher session.
 - `src/vscode/views`: native file tree and selection filter tree providers.
-- `src/vscode/webview`: compact vanilla webview HTML, CSS, script, and typed messages.
+- `src/vscode/webview`: webview HTML host, CSS, Vue UI, and typed messages.
 
 ## Implementation Rules
 

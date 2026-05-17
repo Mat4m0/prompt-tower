@@ -43,7 +43,7 @@ function formatCompactNumber(value: number): string {
 }
 
 const chips = computed(() =>
-  props.state.tokenSummaries.map((summary) => ({
+  props.state.estimateSummaries.map((summary) => ({
     id: summary.id,
     label: summary.label,
     display: '~' + formatCompactNumber(summary.tokens),
@@ -51,14 +51,14 @@ const chips = computed(() =>
 )
 
 function onProfileToggle(profileId: string, checked: boolean) {
-  const current = new Set(props.state.visibleTokenProfileIds)
+  const current = new Set(props.state.visibleEstimateProfileIds)
   if (checked) {
     current.add(profileId)
   } else {
     current.delete(profileId)
   }
   props.send({
-    type: 'tokenSummary.setProfiles',
+    type: 'estimateSummary.setProfiles',
     profileIds: Array.from(current),
   })
 }
@@ -76,20 +76,25 @@ function onProfileToggle(profileId: string, checked: boolean) {
       <button
         ref="settingsButton"
         class="icon-button"
-        title="Token summary settings"
-        aria-label="Token summary settings"
+        title="Estimate settings"
+        aria-label="Estimate settings"
         @click="togglePopover"
       >
         ⚙
       </button>
       <div v-if="popoverOpen" ref="popover" class="popover">
-        <div class="popover-title">Token summary</div>
+        <div class="popover-title">Rough estimates</div>
         <div class="check-list">
-          <label v-for="profile in state.tokenProfiles" :key="profile.id" class="popover-check">
+          <label
+            v-for="profile in state.tokenEstimateProfiles"
+            :key="profile.id"
+            class="popover-check"
+            :title="`${profile.modelHint}, updated ${profile.updatedAt}`"
+          >
             <input
               type="checkbox"
               :value="profile.id"
-              :checked="state.visibleTokenProfileIds.includes(profile.id)"
+              :checked="state.visibleEstimateProfileIds.includes(profile.id)"
               @change="onProfileToggle(profile.id, ($event.target as HTMLInputElement).checked)"
             />
             {{ profile.label }}

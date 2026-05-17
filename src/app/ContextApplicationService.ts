@@ -14,14 +14,21 @@ import type { GitCommitDiff } from '../core/git/GitTypes'
 import type { FileIndex, IndexedNode } from '../core/files/FileIndex'
 import type { FileSelection } from '../core/files/FileSelection'
 import {
-  estimateTokensFromText,
+  estimateTokenCountFromBytes,
+  estimateTokenCountFromTextLength,
   formatTokenCost,
-  type TokenProfile,
-} from '../core/tokens/TokenProfiles'
+  type TokenEstimateProfile,
+} from '../core/tokens/TokenEstimateProfiles'
 import { buildPromptExportTarget } from '../core/export/PromptFileWriter'
 import type { PromptExportOptions } from '../core/export/ExportOptions'
-import type { Clipboard, TextFileSystem } from './ports'
-import type { GitApplicationService } from './GitApplicationService'
+
+export interface TextFileSystem {
+  readText(absolutePath: string): Promise<string>
+  writeText(absolutePath: string, content: string): PromiseLike<void>
+}
+
+export type WriteClipboardText = (text: string) => PromiseLike<void>
+export type ReadSelectedGitDiffs = () => Promise<readonly GitCommitDiff[]>
 
 export interface ContextBuildOptions {
   prefix: string
@@ -33,7 +40,7 @@ export interface ContextBuildOutput {
   text: string
   fileCount: number
   commitCount: number
-  estimatedTokens: number
+  estimatedTokenCount: number
   estimatedCost: string
   warnings: readonly ContextWarning[]
 }
@@ -43,14 +50,14 @@ export class ContextApplicationService {
     private fileIndex: FileIndex,
     private fileSelection: FileSelection,
     private fileSystem: TextFileSystem,
-    private clipboard: Clipboard,
-    private tokenProfile: TokenProfile,
-    private git?: GitApplicationService,
+    private writeClipboardText: WriteClipboardText,
+    private tokenProfile: TokenEstimateProfile,
+    private readSelectedGitDiffs?: ReadSelectedGitDiffs,
   ) {}
 
-  setTokenProfile(profile: TokenProfile): void {
+  setTokenEstimateProfile(profile: TokenEstimateProfile): void {
     this.tokenProfile = profile
-    this.fileIndex.setTokenProfile(profile)
+    this.fileIndex.setTokenEstimateProfile(profile)
   }
 
   async buildContext(options: ContextBuildOptions): Promise<ContextBuildOutput> {
@@ -77,20 +84,20 @@ export class ContextApplicationService {
       outputMode: options.outputMode,
       gitDiffs,
     })
-    const estimatedTokens = estimateTokensFromText(result.text, this.tokenProfile)
+    const estimatedTokenCount = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
     return {
       text: result.text,
       fileCount: result.fileCount,
       commitCount: result.commitCount,
-      estimatedTokens,
-      estimatedCost: formatTokenCost(estimatedTokens, this.tokenProfile),
+      estimatedTokenCount,
+      estimatedCost: formatTokenCost(estimatedTokenCount, this.tokenProfile),
       warnings: result.warnings,
     }
   }
 
   async copyContext(options: ContextBuildOptions): Promise<ContextBuildOutput> {
     const output = await this.buildContext(options)
-    await this.clipboard.writeText(output.text)
+    await this.writeClipboardText(output.text)
     return output
   }
 
@@ -111,11 +118,21 @@ export class ContextApplicationService {
 
   async estimatePreviewForProfiles(
     options: ContextBuildOptions,
-    profiles: readonly TokenProfile[],
-  ): Promise<Array<{ profile: TokenProfile; tokens: number; cost: string }>> {
-    const chars = await this.estimatePreviewCharacters(options)
+    profiles: readonly TokenEstimateProfile[],
+  ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number; cost: string }>> {
+    const selection = this.fileSelection.getSnapshot()
+    const fixedChars = await this.estimatePreviewFixedCharacters(options)
     return profiles.map((profile) => {
-      const tokens = Math.ceil(chars / profile.charsPerToken)
+      const fileTokens = selection.selectedFiles.reduce(
+        (sum, file) =>
+          sum +
+          estimateTokenCountFromBytes(fileSizeChars(file), profile, file.name) +
+          Math.ceil(
+            estimateFileBlockOverheadChars(file, options.outputMode) / profile.charsPerToken,
+          ),
+        0,
+      )
+      const tokens = Math.ceil(fixedChars / profile.charsPerToken) + fileTokens
       return {
         profile,
         tokens,
@@ -124,18 +141,18 @@ export class ContextApplicationService {
     })
   }
 
-  private async estimatePreviewCharacters(options: ContextBuildOptions): Promise<number> {
+  private async estimatePreviewFixedCharacters(options: ContextBuildOptions): Promise<number> {
     const selection = this.fileSelection.getSnapshot()
     const projectTree = this.buildProjectTree(options.treeMode)
-    const selectedFileBlockChars = selection.selectedFiles.reduce(
-      (sum, file) => sum + estimateFileBlockChars(file, options.outputMode),
+    const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
+      (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
       0,
     )
     const selectedGitDiffChars = await this.estimateGitDiffCharacters(options.outputMode)
     return estimateContextCharacters({
       prefix: options.prefix,
       suffix: '',
-      selectedFileBlockChars,
+      selectedFileBlockChars: selectedFileBlockOverheadChars,
       selectedFileCount: selection.selectedFiles.length,
       selectedGitDiffChars,
       projectTree,
@@ -145,7 +162,7 @@ export class ContextApplicationService {
   }
 
   private async loadGitDiffs(): Promise<ContextGitDiff[]> {
-    const diffs = await this.git?.readSelectedDiffs()
+    const diffs = await this.readSelectedGitDiffs?.()
     return (diffs ?? []).map(toContextGitDiff)
   }
 
@@ -224,13 +241,13 @@ function toTreePath(entry: IndexedNode, workspaceName: string, multiRoot: boolea
   return multiRoot ? `${workspaceName}/${relativePath}` : relativePath
 }
 
-function estimateFileBlockChars(file: ContextFile, outputMode: ContextOutputMode): number {
+function estimateFileBlockOverheadChars(file: ContextFile, outputMode: ContextOutputMode): number {
   const sourcePath = `/${file.relativePath.replace(/\\/g, '/')}`
   if (outputMode === 'compact') {
-    return `<file path="${sourcePath}"></file>`.length + fileSizeChars(file)
+    return `<file path="${sourcePath}"></file>`.length
   }
 
-  return `<file name="${file.name}" path="${sourcePath}">\n\n</file>`.length + fileSizeChars(file)
+  return `<file name="${file.name}" path="${sourcePath}">\n\n</file>`.length
 }
 
 function fileSizeChars(file: ContextFile): number {

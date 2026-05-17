@@ -29,7 +29,8 @@ export function registerCommands(options: {
       services.fileSelection.excludeAllFilters(services.fileIndex.getSnapshot())
     }),
     vscode.commands.registerCommand('lupinumContext.refreshGitCommits', async () => {
-      await services.gitService.refreshCommits()
+      const commits = await services.gitHost.listRecentCommits(services.getWorkspaces(), 50)
+      services.gitSelection.setCommits(commits)
     }),
     vscode.commands.registerCommand('lupinumContext.clearGitCommits', () => {
       services.gitSelection.clear()

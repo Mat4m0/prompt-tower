@@ -1,10 +1,13 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
+import ignore from 'ignore'
 import { getSelectionRefinementDefinition } from '../../core/files/FileKind'
+import { normalizeIgnorePath } from '../../core/files/IgnoreRules'
 import { FileIndex, type FileStat, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
-import { getTokenProfile } from '../../core/tokens/TokenProfiles'
+import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { createSelectionFixtureIndex } from '../helpers'
+import { ALWAYS_IGNORE } from '../../utils/alwaysIgnore'
 
 test('FileIndex refreshes once more when dirtied during refresh', async () => {
   const workspace: IndexedWorkspace = {
@@ -29,7 +32,7 @@ test('FileIndex refreshes once more when dirtied during refresh', async () => {
       },
     },
     [workspace],
-    getTokenProfile('claude'),
+    getTokenEstimateProfile('claude'),
   )
 
   await index.ensureFresh()
@@ -56,16 +59,52 @@ test('FileIndex updates metadata and token estimates after file changes', async 
       },
     },
     [workspace],
-    getTokenProfile('claude'),
+    getTokenEstimateProfile('claude'),
   )
 
   await index.ensureFresh()
-  const before = index.getSnapshot().files[0].estimatedTokens
+  const before = index.getSnapshot().files[0].estimatedTokenCount
   sizeBytes = 400
   index.markDirty()
   await index.ensureFresh()
 
-  assert.ok(index.getSnapshot().files[0].estimatedTokens > before)
+  assert.ok(index.getSnapshot().files[0].estimatedTokenCount > before)
+})
+
+test('FileIndex snapshots do not expose mutable index internals', async () => {
+  const workspace: IndexedWorkspace = {
+    id: 'w',
+    name: 'demo',
+    rootPath: '/repo',
+  }
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return ['/repo/src/a.ts']
+      },
+      async statFile() {
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+  const snapshot = index.getSnapshot()
+  const root = snapshot.nodes.get('w:')
+  assert.ok(root && root.kind !== 'file')
+
+  ;(snapshot.files as unknown[]).pop()
+  ;(root.childIds as string[]).length = 0
+  ;(snapshot.nodes as Map<string, unknown>).clear()
+
+  const nextSnapshot = index.getSnapshot()
+  assert.equal(nextSnapshot.files.length, 1)
+  assert.equal(nextSnapshot.nodes.has('w:'), true)
+  const nextRoot = nextSnapshot.nodes.get('w:')
+  assert.ok(nextRoot && nextRoot.kind !== 'file')
+  assert.deepEqual(nextRoot.childIds, ['w:src'])
 })
 
 test('FileSelection restores tests after excluded test filter is re-enabled', async () => {
@@ -258,4 +297,17 @@ test('folder selection refinement keeps tests and declarations separate', () => 
     label: 'No extension',
     sortLabel: '(no extension)',
   })
+})
+
+test('ignore rules combine built-ins, gitignore, contextignore, and towerignore syntax', () => {
+  const matcher = ignore().add(ALWAYS_IGNORE)
+  matcher.add(['generated/'])
+  matcher.add(['fixtures/'])
+  matcher.add(['legacy-output/'])
+
+  assert.equal(matcher.ignores(normalizeIgnorePath('node_modules/pkg/index.js')), true)
+  assert.equal(matcher.ignores(normalizeIgnorePath('generated/report.json')), true)
+  assert.equal(matcher.ignores(normalizeIgnorePath('fixtures/context.xml')), true)
+  assert.equal(matcher.ignores(normalizeIgnorePath('legacy-output/a.txt')), true)
+  assert.equal(matcher.ignores(normalizeIgnorePath('src/app.ts')), false)
 })

@@ -1,4 +1,3 @@
-import { createHash } from 'crypto'
 import type { PromptPreset, PromptPresetVersion } from './PromptPresetTypes'
 
 export function createPromptPreset(
@@ -69,17 +68,12 @@ export function getCurrentPromptPresetVersion(preset: PromptPreset): PromptPrese
   return version
 }
 
-export function checksumPromptText(text: string): string {
-  return createHash('sha256').update(text).digest('hex')
-}
-
 function createPromptPresetVersion(text: string, now: string, note?: string): PromptPresetVersion {
   return {
     id: createId(),
     text,
     note,
     createdAt: now,
-    checksum: checksumPromptText(text),
   }
 }
 

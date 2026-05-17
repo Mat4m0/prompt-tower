@@ -5,15 +5,18 @@ import {
   type PromptExportOptions,
 } from '../core/export/ExportOptions'
 import type { PersistedSelectionIntent } from '../core/files/FileSelection'
-import { isTokenProfileId, type TokenProfileId } from '../core/tokens/TokenProfiles'
+import {
+  isTokenEstimateProfileId,
+  type TokenEstimateProfileId,
+} from '../core/tokens/TokenEstimateProfiles'
 import type { AppStorage } from './PromptPresetApplicationService'
 
 const SELECTION_INTENT_KEY = 'lupinumContext.selectionIntent'
 const TREE_MODE_KEY = 'lupinumContext.treeMode'
 const OUTPUT_MODE_KEY = 'lupinumContext.outputMode'
 const EXPORT_OPTIONS_KEY = 'lupinumContext.exportOptions'
-const TOKEN_SUMMARY_PROFILE_IDS_KEY = 'lupinumContext.tokenSummaryProfileIds'
-const DEFAULT_TOKEN_SUMMARY_PROFILE_IDS: readonly TokenProfileId[] = ['openai', 'gemini']
+const ESTIMATE_SUMMARY_PROFILE_IDS_KEY = 'lupinumContext.estimateSummaryProfileIds'
+const DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS: readonly TokenEstimateProfileId[] = ['openai', 'gemini']
 
 export class WorkspaceStateService {
   constructor(private storage: AppStorage) {}
@@ -54,20 +57,20 @@ export class WorkspaceStateService {
     await this.storage.update(EXPORT_OPTIONS_KEY, normalizePromptExportOptions(options))
   }
 
-  getTokenSummaryProfileIds(): readonly TokenProfileId[] {
+  getEstimateSummaryProfileIds(): readonly TokenEstimateProfileId[] {
     const ids = this.storage.get<readonly string[]>(
-      TOKEN_SUMMARY_PROFILE_IDS_KEY,
-      DEFAULT_TOKEN_SUMMARY_PROFILE_IDS,
+      ESTIMATE_SUMMARY_PROFILE_IDS_KEY,
+      DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS,
     )
-    const normalized = ids.filter(isTokenProfileId)
-    return normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS
+    const normalized = ids.filter(isTokenEstimateProfileId)
+    return normalized.length > 0 ? normalized : DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS
   }
 
-  async setTokenSummaryProfileIds(ids: readonly string[]): Promise<void> {
-    const normalized = ids.filter(isTokenProfileId)
+  async setEstimateSummaryProfileIds(ids: readonly string[]): Promise<void> {
+    const normalized = ids.filter(isTokenEstimateProfileId)
     await this.storage.update(
-      TOKEN_SUMMARY_PROFILE_IDS_KEY,
-      normalized.length > 0 ? normalized : DEFAULT_TOKEN_SUMMARY_PROFILE_IDS,
+      ESTIMATE_SUMMARY_PROFILE_IDS_KEY,
+      normalized.length > 0 ? normalized : DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS,
     )
   }
 }

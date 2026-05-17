@@ -11,8 +11,8 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 
 ### Added
 
-- **Visual file selection** in a native VS Code tree with live token counts per file and total.
-- **Multi-provider token estimates** for Claude, OpenAI, and Gemini side by side.
+- **Visual file selection** in a native VS Code tree with live rough size estimates per file and total.
+- **Rough multi-provider estimates** for Claude, OpenAI, and Gemini side by side.
 - **Git commit selection** — pick recent commits and include their diffs as a structured block in the generated context.
 - **Versioned prompt prefixes** — save reusable prompt prefixes, version them as you edit, restore older versions.
 - **Compact output mode** — strips whitespace to save tokens when the chat window is tight.

@@ -1,5 +1,5 @@
 import type { PromptPreset } from './PromptPresetTypes'
-import { parsePromptPresets } from './promptPresetSchema'
+import { parsePromptPresets } from './parsePromptPresets'
 
 export interface PromptPresetStorage {
   get<T>(key: string, fallback: T): T

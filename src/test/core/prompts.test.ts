@@ -9,7 +9,7 @@ import {
   savePromptPresetVersion,
   softDeletePromptPreset,
 } from '../../core/prompts/PromptPresetVersioning'
-import { parsePromptPresets } from '../../core/prompts/promptPresetSchema'
+import { parsePromptPresets } from '../../core/prompts/parsePromptPresets'
 import { createMemoryStorage } from '../helpers'
 
 test('PromptPreset versioning is recoverable', () => {
@@ -73,7 +73,7 @@ test('PromptPreset application service duplicates, restores, and soft deletes', 
   assert.equal(getCurrentPromptPresetVersion(duplicated).text, 'v1')
 })
 
-test('PromptPreset schema ignores corrupted stored presets', () => {
+test('PromptPreset parser ignores corrupted stored presets', () => {
   const valid = createPromptPreset('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'valid')
 
   assert.deepEqual(
@@ -85,4 +85,27 @@ test('PromptPreset schema ignores corrupted stored presets', () => {
     ]).map((preset) => preset.id),
     ['valid'],
   )
+})
+
+test('PromptPreset application service ignores missing active preset ids', async () => {
+  const service = new PromptPresetApplicationService(
+    createMemoryStorage({}),
+    createMemoryStorage({ 'lupinumContext.activePromptPresetId': 'missing' }),
+  )
+
+  assert.equal(service.getActivePreset(), null)
+  assert.equal(service.getEffectivePrefix(), '')
+})
+
+test('PromptPreset application service clears active preset when deleting it', async () => {
+  const service = new PromptPresetApplicationService(
+    createMemoryStorage({}),
+    createMemoryStorage({}),
+  )
+  const preset = await service.createPreset('Audit', 'v1')
+
+  await service.deletePreset(preset.id)
+
+  assert.equal(service.getActivePresetId(), null)
+  assert.deepEqual(service.listPresets(), [])
 })

@@ -4,7 +4,7 @@ import { assembleContext } from '../../core/context/ContextAssembler'
 import { estimateContextCharacters } from '../../core/context/ContextEstimate'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
-import { getTokenProfile } from '../../core/tokens/TokenProfiles'
+import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { ContextApplicationService } from '../../app/ContextApplicationService'
 import { readFixture } from '../helpers'
 
@@ -227,7 +227,7 @@ test('ContextApplicationService prefixes multi-root tree paths', async () => {
       },
     },
     workspaces,
-    getTokenProfile('claude'),
+    getTokenEstimateProfile('claude'),
   )
   await index.ensureFresh()
   const selection = new FileSelection()
@@ -242,10 +242,8 @@ test('ContextApplicationService prefixes multi-root tree paths', async () => {
       },
       async writeText() {},
     },
-    {
-      async writeText() {},
-    },
-    getTokenProfile('claude'),
+    async () => {},
+    getTokenEstimateProfile('claude'),
   )
 
   const output = await service.buildContext({
@@ -271,7 +269,7 @@ test('ContextApplicationService returns warnings for files that disappear before
       },
     },
     [workspace],
-    getTokenProfile('claude'),
+    getTokenEstimateProfile('claude'),
   )
   await index.ensureFresh()
   const selection = new FileSelection()
@@ -285,10 +283,8 @@ test('ContextApplicationService returns warnings for files that disappear before
       },
       async writeText() {},
     },
-    {
-      async writeText() {},
-    },
-    getTokenProfile('claude'),
+    async () => {},
+    getTokenEstimateProfile('claude'),
   )
 
   const output = await service.buildContext({
@@ -307,3 +303,82 @@ test('ContextApplicationService returns warnings for files that disappear before
     },
   ])
 })
+
+test('ContextApplicationService preview estimates stay close to final normal text estimates', async () => {
+  const content = 'export const value = "hello";\n'.repeat(200)
+  const service = await createSingleFileContextService('src/app.ts', content)
+  const options = {
+    prefix: 'Review this file.',
+    treeMode: 'selectedFilesOnly' as const,
+    outputMode: 'readable' as const,
+  }
+
+  const [preview] = await service.estimatePreviewForProfiles(options, [
+    getTokenEstimateProfile('claude'),
+  ])
+  const output = await service.buildContext(options)
+
+  assertWithinPercent(preview.tokens, output.estimatedTokenCount, 10)
+})
+
+test('ContextApplicationService preview estimates account for numeric-heavy files', async () => {
+  const content = '1234.5678 -9012.3456\n'.repeat(500)
+  const service = await createSingleFileContextService('data/sample.csv', content)
+  service.setTokenEstimateProfile(getTokenEstimateProfile('gemini'))
+  const options = {
+    prefix: '',
+    treeMode: 'selectedFilesOnly' as const,
+    outputMode: 'readable' as const,
+  }
+
+  const [preview] = await service.estimatePreviewForProfiles(options, [
+    getTokenEstimateProfile('gemini'),
+  ])
+  const output = await service.buildContext(options)
+
+  assertWithinPercent(preview.tokens, output.estimatedTokenCount, 15)
+})
+
+async function createSingleFileContextService(
+  relativePath: string,
+  content: string,
+): Promise<ContextApplicationService> {
+  const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
+  const absolutePath = `/repo/${relativePath}`
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return [absolutePath]
+      },
+      async statFile() {
+        return { sizeBytes: Buffer.byteLength(content, 'utf8'), mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+  await index.ensureFresh()
+  const selection = new FileSelection()
+  selection.setNodeIncluded(index.getSnapshot(), `w:${relativePath}`, true)
+  return new ContextApplicationService(
+    index,
+    selection,
+    {
+      async readText() {
+        return content
+      },
+      async writeText() {},
+    },
+    async () => {},
+    getTokenEstimateProfile('claude'),
+  )
+}
+
+function assertWithinPercent(actual: number, expected: number, tolerancePercent: number): void {
+  const delta = Math.abs(actual - expected)
+  const allowed = Math.ceil(expected * (tolerancePercent / 100))
+  assert.ok(
+    delta <= allowed,
+    `${actual} differs from ${expected} by more than ${tolerancePercent}%`,
+  )
+}

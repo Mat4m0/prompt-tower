@@ -6,7 +6,7 @@ import { SelectionFiltersProvider } from '../views/SelectionFiltersProvider'
 import { registerCommands } from './commandRegistry'
 import { createServiceContainer } from './serviceContainer'
 import { MessageRouter } from './messageRouter'
-import { isWebviewMessage } from '../../shared/messages'
+import { isWebviewToExtensionMessage } from '../../shared/messages'
 import { WorkspaceSession } from './workspaceSession'
 
 const VIEW_TYPE = 'lupinumContext.context'
@@ -73,7 +73,7 @@ export async function bootstrapLupinumContext(
     const currentRouter = new MessageRouter(
       services,
       panel,
-      services.workspace.getPrimaryWorkspaceRoot() ?? process.cwd(),
+      services.getPrimaryWorkspaceRoot() ?? process.cwd(),
     )
     router = currentRouter
     const webviewDir = vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')
@@ -91,7 +91,7 @@ export async function bootstrapLupinumContext(
       state: await currentRouter.createState(),
     })
     panel.webview.onDidReceiveMessage(async (message) => {
-      if (!isWebviewMessage(message)) {
+      if (!isWebviewToExtensionMessage(message)) {
         return
       }
       try {
@@ -165,7 +165,8 @@ async function refreshCommits(
 ): Promise<void> {
   try {
     services.logger.info(`[git] refresh requested: ${reason}`)
-    await services.gitService.refreshCommits()
+    const commits = await services.gitHost.listRecentCommits(services.getWorkspaces(), 50)
+    services.gitSelection.setCommits(commits)
     services.logger.info(`[git] refresh complete: ${reason}`)
   } catch (error) {
     services.logger.error(`[git] refresh failed: ${reason}`, error)

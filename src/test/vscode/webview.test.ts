@@ -2,37 +2,40 @@ import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import { normalizePromptExportOptions } from '../../core/export/ExportOptions'
 import { getWebviewHtml } from '../../vscode/webview/webviewHost'
-import { isWebviewMessage } from '../../shared/messages'
+import { isExtensionToWebviewMessage, isWebviewToExtensionMessage } from '../../shared/messages'
 import type { ContextPanelState } from '../../shared/messages'
 
-test('webview message guard rejects unknown and malformed messages', () => {
-  assert.equal(isWebviewMessage({ type: 'ready' }), true)
-  assert.equal(isWebviewMessage({ type: 'unknown.command' }), false)
-  assert.equal(isWebviewMessage({ type: 'context.copyPreview', text: 'preview' }), true)
-  assert.equal(isWebviewMessage({ type: 'context.copyPreview' }), false)
+test('webview inbound message guard rejects unknown and malformed messages', () => {
+  assert.equal(isWebviewToExtensionMessage({ type: 'ready' }), true)
+  assert.equal(isWebviewToExtensionMessage({ type: 'unknown.command' }), false)
+  assert.equal(isWebviewToExtensionMessage({ type: 'context.copyPreview', text: 'preview' }), true)
+  assert.equal(isWebviewToExtensionMessage({ type: 'context.copyPreview' }), false)
   assert.equal(
-    isWebviewMessage({
-      type: 'tokenSummary.setProfiles',
+    isWebviewToExtensionMessage({
+      type: 'estimateSummary.setProfiles',
       profileIds: ['openai', 'gemini'],
     }),
     true,
   )
   assert.equal(
-    isWebviewMessage({
+    isWebviewToExtensionMessage({
       type: 'prefix.restoreVersion',
       presetId: 'p1',
       versionId: 'v1',
     }),
     true,
   )
-  assert.equal(isWebviewMessage({ type: 'prefix.restoreVersion', presetId: 'p1' }), false)
+  assert.equal(
+    isWebviewToExtensionMessage({ type: 'prefix.restoreVersion', presetId: 'p1' }),
+    false,
+  )
 })
 
-test('webview message guard accepts every variant', () => {
+test('webview inbound message guard accepts every variant', () => {
   const variants = [
     { type: 'ready' },
     { type: 'selection.clear' },
-    { type: 'tokenSummary.setProfiles', profileIds: ['openai'] },
+    { type: 'estimateSummary.setProfiles', profileIds: ['openai'] },
     { type: 'prefix.inlineChanged', text: 'hello' },
     { type: 'prefix.selectPreset', presetId: 'p1' },
     { type: 'prefix.selectPreset', presetId: null },
@@ -65,19 +68,40 @@ test('webview message guard accepts every variant', () => {
     },
   ]
   for (const variant of variants) {
-    assert.equal(isWebviewMessage(variant), true, `should accept ${variant.type}`)
+    assert.equal(isWebviewToExtensionMessage(variant), true, `should accept ${variant.type}`)
   }
+})
+
+test('webview outbound message guard rejects malformed extension messages', () => {
+  assert.equal(isExtensionToWebviewMessage({ type: 'context.previewUpdated', text: 'ok' }), true)
+  assert.equal(isExtensionToWebviewMessage({ type: 'context.previewUpdated' }), false)
+  assert.equal(isExtensionToWebviewMessage({ type: 'state.changed', state: null }), false)
 })
 
 test('webview host html includes CSP, nonce, initial state, and Vue bundle script tag', () => {
   const state: ContextPanelState = {
-    tokenProfiles: [
-      { id: 'claude', label: 'Claude' },
-      { id: 'openai', label: 'OpenAI' },
-      { id: 'gemini', label: 'Gemini' },
+    tokenEstimateProfiles: [
+      {
+        id: 'claude',
+        label: 'Claude',
+        modelHint: 'Claude estimate profile',
+        updatedAt: '2026-05-17',
+      },
+      {
+        id: 'openai',
+        label: 'OpenAI',
+        modelHint: 'OpenAI estimate profile',
+        updatedAt: '2026-05-17',
+      },
+      {
+        id: 'gemini',
+        label: 'Gemini',
+        modelHint: 'Gemini estimate profile',
+        updatedAt: '2026-05-17',
+      },
     ],
-    visibleTokenProfileIds: ['claude', 'openai', 'gemini'],
-    tokenSummaries: [],
+    visibleEstimateProfileIds: ['claude', 'openai', 'gemini'],
+    estimateSummaries: [],
     promptPresets: [],
     activePresetId: null,
     inlinePrefix: '<script>evil</script>',

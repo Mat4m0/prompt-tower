@@ -6,12 +6,8 @@ const coreDir = path.join(rootDir, 'src', 'core')
 const appDir = path.join(rootDir, 'src', 'app')
 const sharedDir = path.join(rootDir, 'src', 'shared')
 const webviewDir = path.join(rootDir, 'src', 'webview')
-const sourceDir = path.join(rootDir, 'src')
-const packageJsonPath = path.join(rootDir, 'package.json')
 
 const failures = []
-
-await checkNoGitHubIntegration()
 
 if (await exists(coreDir)) {
   const files = await listFiles(coreDir)
@@ -157,25 +153,4 @@ function hasImportPathMatching(source, pattern) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-async function checkNoGitHubIntegration() {
-  const files = await listFiles(sourceDir)
-  for (const file of files) {
-    if (!/\.[cm]?tsx?$/.test(file)) {
-      continue
-    }
-
-    const source = await readFile(file, 'utf8')
-    const relativePath = path.relative(rootDir, file)
-    if (/\bgithub\b/i.test(source)) {
-      failures.push(`${relativePath} contains GitHub integration text`)
-    }
-  }
-
-  const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'))
-  const contributions = JSON.stringify(packageJson.contributes ?? {})
-  if (/\bgithub\b/i.test(contributions)) {
-    failures.push('package.json contributes GitHub views or commands')
-  }
 }

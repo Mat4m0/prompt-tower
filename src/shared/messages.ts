@@ -3,7 +3,7 @@ import type { PromptExportOptions } from '../core/export/ExportOptions'
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }
-  | { type: 'tokenSummary.setProfiles'; profileIds: readonly string[] }
+  | { type: 'estimateSummary.setProfiles'; profileIds: readonly string[] }
   | { type: 'prefix.inlineChanged'; text: string }
   | { type: 'prefix.selectPreset'; presetId: string | null }
   | { type: 'prefix.createPreset'; name: string; text: string }
@@ -33,9 +33,14 @@ export type ExtensionToWebviewMessage =
   | { type: 'context.previewUpdated'; text: string }
 
 export interface ContextPanelState {
-  tokenProfiles: readonly { id: string; label: string }[]
-  visibleTokenProfileIds: readonly string[]
-  tokenSummaries: readonly {
+  tokenEstimateProfiles: readonly {
+    id: string
+    label: string
+    modelHint: string
+    updatedAt: string
+  }[]
+  visibleEstimateProfileIds: readonly string[]
+  estimateSummaries: readonly {
     id: string
     label: string
     tokens: number
@@ -61,7 +66,7 @@ export interface ContextPanelState {
   exportOptions: PromptExportOptions
 }
 
-export function isWebviewMessage(value: unknown): value is WebviewToExtensionMessage {
+export function isWebviewToExtensionMessage(value: unknown): value is WebviewToExtensionMessage {
   if (typeof value !== 'object' || value === null) {
     return false
   }
@@ -72,7 +77,7 @@ export function isWebviewMessage(value: unknown): value is WebviewToExtensionMes
       return true
     case 'context.copyPreview':
       return typeof message.text === 'string'
-    case 'tokenSummary.setProfiles':
+    case 'estimateSummary.setProfiles':
       return (
         Array.isArray(message.profileIds) &&
         message.profileIds.every((id) => typeof id === 'string')
@@ -123,4 +128,38 @@ function isTreeMode(value: unknown): value is ProjectTreeMode {
 
 function isOutputMode(value: unknown): value is ContextOutputMode {
   return value === 'readable' || value === 'compact'
+}
+
+export function isExtensionToWebviewMessage(value: unknown): value is ExtensionToWebviewMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const message = value as Record<string, unknown>
+  switch (message.type) {
+    case 'context.previewUpdated':
+      return typeof message.text === 'string'
+    case 'state.changed':
+      return isContextPanelState(message.state)
+    default:
+      return false
+  }
+}
+
+function isContextPanelState(value: unknown): value is ContextPanelState {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const state = value as Record<string, unknown>
+  return (
+    Array.isArray(state.tokenEstimateProfiles) &&
+    Array.isArray(state.visibleEstimateProfileIds) &&
+    Array.isArray(state.estimateSummaries) &&
+    Array.isArray(state.promptPresets) &&
+    (typeof state.activePresetId === 'string' || state.activePresetId === null) &&
+    typeof state.inlinePrefix === 'string' &&
+    isTreeMode(state.treeMode) &&
+    isOutputMode(state.outputMode) &&
+    typeof state.exportOptions === 'object' &&
+    state.exportOptions !== null
+  )
 }

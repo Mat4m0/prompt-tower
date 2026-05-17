@@ -40,7 +40,6 @@ function isPromptPresetVersion(value: unknown): value is PromptPreset['versions'
     typeof version.id === 'string' &&
     typeof version.text === 'string' &&
     typeof version.createdAt === 'string' &&
-    typeof version.checksum === 'string' &&
     (version.note === undefined || typeof version.note === 'string')
   )
 }

@@ -4,8 +4,10 @@ import {
   normalizePromptExportOptions,
   type PromptExportOptions,
 } from '../../core/export/ExportOptions'
-import { TOKEN_PROFILES, getTokenProfile } from '../../core/tokens/TokenProfiles'
-import type { IndexedNode } from '../../core/files/FileIndex'
+import {
+  TOKEN_ESTIMATE_PROFILES,
+  getTokenEstimateProfile,
+} from '../../core/tokens/TokenEstimateProfiles'
 import { getCurrentPromptPresetVersion } from '../../core/prompts/PromptPresetVersioning'
 import type { ServiceContainer } from './serviceContainer'
 import type {
@@ -36,8 +38,8 @@ export class MessageRouter {
       case 'ready':
         await this.postState()
         return
-      case 'tokenSummary.setProfiles':
-        await this.services.workspaceState.setTokenSummaryProfileIds(message.profileIds)
+      case 'estimateSummary.setProfiles':
+        await this.services.workspaceState.setEstimateSummaryProfileIds(message.profileIds)
         await this.postState()
         return
       case 'prefix.inlineChanged':
@@ -139,19 +141,24 @@ export class MessageRouter {
     const activePresetId = this.services.promptPresets.getActivePresetId()
     const presets = this.services.promptPresets.listPresets()
     const prefix = this.getDraftPrefix()
-    const visibleTokenProfileIds = this.services.workspaceState.getTokenSummaryProfileIds()
-    const tokenSummaries = await this.services.contextService.estimatePreviewForProfiles(
+    const visibleEstimateProfileIds = this.services.workspaceState.getEstimateSummaryProfileIds()
+    const estimateSummaries = await this.services.contextService.estimatePreviewForProfiles(
       {
         prefix,
         treeMode: this.treeMode,
         outputMode: this.outputMode,
       },
-      visibleTokenProfileIds.map(getTokenProfile),
+      visibleEstimateProfileIds.map(getTokenEstimateProfile),
     )
     return {
-      tokenProfiles: TOKEN_PROFILES.map(({ id, label }) => ({ id, label })),
-      visibleTokenProfileIds,
-      tokenSummaries: tokenSummaries.map(({ profile, tokens, cost }) => ({
+      tokenEstimateProfiles: TOKEN_ESTIMATE_PROFILES.map(({ id, label, modelHint, updatedAt }) => ({
+        id,
+        label,
+        modelHint,
+        updatedAt,
+      })),
+      visibleEstimateProfileIds,
+      estimateSummaries: estimateSummaries.map(({ profile, tokens, cost }) => ({
         id: profile.id,
         label: profile.label,
         tokens,
@@ -203,10 +210,6 @@ export class MessageRouter {
   private post(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message)
   }
-}
-
-export function isIndexedNode(value: unknown): value is IndexedNode {
-  return typeof value === 'object' && value !== null && 'id' in value && 'kind' in value
 }
 
 function showContextResultMessage(successMessage: string, warningCount: number): void {

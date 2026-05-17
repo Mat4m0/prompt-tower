@@ -1,7 +1,7 @@
 import * as vscode from 'vscode'
 import type { FileIndex, IndexedNode } from '../../core/files/FileIndex'
 import type { FileSelection } from '../../core/files/FileSelection'
-import { formatTreeTokenCount } from '../../core/tokens/TokenEstimator'
+import { formatEstimatedTokenCount } from '../../core/tokens/TokenEstimateProfiles'
 
 export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
@@ -36,8 +36,8 @@ export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
       this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? 'unchecked'
     item.description =
       selectionState === 'partial'
-        ? `partial · ${formatTreeTokenCount(element.estimatedTokens)}`
-        : formatTreeTokenCount(element.estimatedTokens)
+        ? `partial · ${formatEstimatedTokenCount(element.estimatedTokenCount)}`
+        : formatEstimatedTokenCount(element.estimatedTokenCount)
     item.tooltip =
       selectionState === 'partial'
         ? `${element.absolutePath}\nPartially selected`

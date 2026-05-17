@@ -13,5 +13,4 @@ export interface PromptPresetVersion {
   text: string
   note?: string
   createdAt: string
-  checksum: string
 }

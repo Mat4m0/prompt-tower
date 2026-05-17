@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import type { FileSelection, SelectionFilterGroup } from '../../core/files/FileSelection'
-import { formatTreeTokenCount } from '../../core/tokens/TokenEstimator'
+import { formatEstimatedTokenCount } from '../../core/tokens/TokenEstimateProfiles'
 
 export interface SelectionFilterNode {
   group: SelectionFilterGroup
@@ -27,8 +27,8 @@ export class SelectionFiltersProvider implements vscode.TreeDataProvider<Selecti
       ? vscode.TreeItemCheckboxState.Unchecked
       : vscode.TreeItemCheckboxState.Checked
     item.description = group.excluded
-      ? `excluded · ${formatTreeTokenCount(group.excludedTokenCount)}`
-      : formatTreeTokenCount(group.selectedTokenCount)
+      ? `excluded · ${formatEstimatedTokenCount(group.excludedEstimatedTokenCount)}`
+      : formatEstimatedTokenCount(group.selectedEstimatedTokenCount)
     item.tooltip = group.excluded
       ? `${group.label} excluded from folder selections`
       : `${group.label} included`

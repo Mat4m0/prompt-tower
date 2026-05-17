@@ -18,7 +18,7 @@ export interface PersistedSelectionIntent {
 export interface EffectiveSelectionSnapshot {
   selectedFileIds: readonly string[]
   selectedFiles: readonly IndexedFile[]
-  selectedTokenEstimate: number
+  selectedEstimatedTokens: number
   checkboxStates: ReadonlyMap<string, CheckboxState>
   filterGroups: readonly SelectionFilterGroup[]
 }
@@ -29,8 +29,8 @@ export interface SelectionFilterGroup {
   sortLabel: string
   selectedFiles: number
   totalFiles: number
-  selectedTokenCount: number
-  excludedTokenCount: number
+  selectedEstimatedTokenCount: number
+  excludedEstimatedTokenCount: number
   excluded: boolean
 }
 
@@ -173,11 +173,11 @@ export function deriveSelectionSnapshot(
       group.totalFiles += 1
       if (excludedByFilter) {
         ignoredFileIds.add(file.id)
-        group.excludedTokenCount += file.estimatedTokens
+        group.excludedEstimatedTokenCount += file.estimatedTokenCount
       } else {
         selectedFiles.push(file)
         group.selectedFiles += 1
-        group.selectedTokenCount += file.estimatedTokens
+        group.selectedEstimatedTokenCount += file.estimatedTokenCount
       }
     }
   }
@@ -195,7 +195,7 @@ export function deriveSelectionSnapshot(
   return {
     selectedFileIds: selectedFiles.map((file) => file.id),
     selectedFiles,
-    selectedTokenEstimate: selectedFiles.reduce((sum, file) => sum + file.estimatedTokens, 0),
+    selectedEstimatedTokens: selectedFiles.reduce((sum, file) => sum + file.estimatedTokenCount, 0),
     checkboxStates,
     filterGroups: [...filterGroups.values()].sort((left, right) =>
       left.sortLabel.localeCompare(right.sortLabel),
@@ -279,8 +279,8 @@ function deriveCheckboxState(
 interface MutableSelectionFilterGroup extends SelectionFilterGroup {
   selectedFiles: number
   totalFiles: number
-  selectedTokenCount: number
-  excludedTokenCount: number
+  selectedEstimatedTokenCount: number
+  excludedEstimatedTokenCount: number
 }
 
 function getOrCreateFilterGroup(
@@ -296,8 +296,8 @@ function getOrCreateFilterGroup(
       sortLabel: kind.sortLabel,
       selectedFiles: 0,
       totalFiles: 0,
-      selectedTokenCount: 0,
-      excludedTokenCount: 0,
+      selectedEstimatedTokenCount: 0,
+      excludedEstimatedTokenCount: 0,
       excluded,
     }
     groups.set(kind.id, group)
@@ -310,7 +310,7 @@ function createEmptySnapshot(): EffectiveSelectionSnapshot {
   return {
     selectedFileIds: [],
     selectedFiles: [],
-    selectedTokenEstimate: 0,
+    selectedEstimatedTokens: 0,
     checkboxStates: new Map(),
     filterGroups: [],
   }
