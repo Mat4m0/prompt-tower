@@ -134,7 +134,7 @@ That's the whole loop. Build a habit around it.
 
 ## Configuration
 
-### `.towerignore` / `.kontextignore`
+### `.contextignore` / `.towerignore`
 
 Create either in your project root. Works like `.gitignore`:
 
@@ -145,14 +145,6 @@ docs/generated/
 *.min.js
 data/
 ```
-
-### Token warnings
-
-Set `lupinumContext.maxFileSizeWarningKB` in your settings to flag oversized files before they bloat your context.
-
-### Tree display
-
-`lupinumContext.showTreeTokenCounts` toggles inline token counts in the file tree.
 
 ---
 

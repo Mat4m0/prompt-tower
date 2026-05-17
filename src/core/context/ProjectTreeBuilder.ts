@@ -7,7 +7,6 @@ interface TreeNode {
 }
 
 interface FileTreeEntry {
-  origin: string
   tree: string
 }
 
@@ -122,11 +121,11 @@ function renderTree(node: TreeNode, maxDepth: number, depth = 0, prefix = ''): s
   return lines
 }
 
-export async function generateFileStructureTree(
+export function generateFileStructureTree(
   rootFolder: string,
   filePaths: FileTreeEntry[],
   printLinesLimit: number = Number.MAX_VALUE,
-): Promise<string> {
+): string {
   const folderTree = createDirectoryNode()
   const depthCounts: number[] = []
 

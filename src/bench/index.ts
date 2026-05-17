@@ -41,7 +41,6 @@ interface FixtureSet {
 }
 
 interface TreeFileEntry {
-  origin: string
   tree: string
 }
 
@@ -271,21 +270,21 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       name: 'tree:selected',
       description: 'Generate project tree for selected files only',
       run: async () => {
-        await generateFileStructureTree(fixtureSet.rootDir, toTreeEntries(fixtureSet.selectedFiles))
+        generateFileStructureTree(fixtureSet.rootDir, toTreeEntries(fixtureSet.selectedFiles))
       },
     },
     {
       name: 'tree:full',
       description: 'Generate project tree for the full repository view',
       run: async () => {
-        await generateFileStructureTree(fixtureSet.rootDir, toTreeEntries(fixtureSet.allFiles))
+        generateFileStructureTree(fixtureSet.rootDir, toTreeEntries(fixtureSet.allFiles))
       },
     },
     {
       name: 'context:selected-tree',
       description: 'End-to-end context generation with selected-files tree',
       run: async () => {
-        const projectTree = await generateFileStructureTree(
+        const projectTree = generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.selectedFiles),
         )
@@ -301,7 +300,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       name: 'context:full-tree',
       description: 'End-to-end context generation with full repository tree',
       run: async () => {
-        const projectTree = await generateFileStructureTree(
+        const projectTree = generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.allFiles),
         )
@@ -317,7 +316,7 @@ function createBenchmarkCases(fixtureSet: FixtureSet): BenchmarkCase[] {
       name: 'context:minified-full-tree',
       description: 'End-to-end context generation with minified wrapper output',
       run: async () => {
-        const projectTree = await generateFileStructureTree(
+        const projectTree = generateFileStructureTree(
           fixtureSet.rootDir,
           toTreeEntries(fixtureSet.allFiles),
         )
@@ -348,7 +347,6 @@ function createNestedDirectorySegments(directoryIndex: number, nestingDepth: num
 
 function toTreeEntries(fileEntries: ContextFile[]): TreeFileEntry[] {
   return fileEntries.map((fileEntry) => ({
-    origin: fileEntry.absolutePath,
     tree: fileEntry.relativePath.replace(/\\/g, '/'),
   }))
 }

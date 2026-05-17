@@ -46,7 +46,7 @@ export function assembleContext(request: ContextBuildRequest): ContextBuildResul
 
 function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
   const treeBlock = shouldIncludeTree(request)
-    ? `<project_tree>\n${request.projectTree}\n</project_tree>\n`
+    ? `<project_tree>\n${escapeText(request.projectTree)}\n</project_tree>\n`
     : ''
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>\n${fileBlocks.join('\n')}\n</project_files>\n` : ''
@@ -61,7 +61,7 @@ function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly
 
 function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
   const treeBlock = shouldIncludeTree(request)
-    ? `<project_tree>${trimGeneratedSection(request.projectTree)}</project_tree>`
+    ? `<project_tree>${escapeText(trimGeneratedSection(request.projectTree))}</project_tree>`
     : ''
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>${fileBlocks.join('')}</project_files>` : ''
@@ -77,11 +77,13 @@ function formatReadableFileBlock(file: ContextFile, content: string): string {
   const fileName = file.name || path.basename(file.relativePath)
   return `<file name="${escapeAttribute(fileName)}" path="${escapeAttribute(
     sourcePath,
-  )}">\n${content}</file>`
+  )}">\n${escapeText(content)}</file>`
 }
 
 function formatCompactFileBlock(file: ContextFile, content: string): string {
-  return `<file path="${escapeAttribute(toSourcePath(file.relativePath))}">${content}</file>`
+  return `<file path="${escapeAttribute(toSourcePath(file.relativePath))}">${escapeText(
+    content,
+  )}</file>`
 }
 
 function shouldIncludeTree(request: ContextBuildRequest): boolean {
@@ -116,4 +118,8 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+function escapeText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

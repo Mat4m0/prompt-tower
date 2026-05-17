@@ -96,6 +96,44 @@ test('ContextAssembler matches compact golden fixture', async () => {
   assert.equal(result.text, await readFixture('context/basic-compact.expected.xml'))
 })
 
+test('ContextAssembler escapes XML-sensitive file content and git diffs', () => {
+  const result = assembleContext({
+    files: [CONTEXT_FIXTURE_FILE],
+    snapshots: new Map([
+      ['example', { content: '<script>if (a < b && c > d) return "</file>"</script>' }],
+    ]),
+    prefix: '',
+    projectTree: 'demo\n└─ danger<&>.ts',
+    treeMode: 'selectedFilesOnly',
+    outputMode: 'readable',
+    gitDiffs: [
+      {
+        commit: {
+          id: 'workspace:abc123',
+          workspaceName: 'demo',
+          hash: 'abc123',
+          shortHash: 'abc123',
+          authorName: 'Ada & Bob',
+          authorDate: '2026-05-16T10:00:00.000Z',
+          subject: 'Escape <diff>',
+        },
+        patch: '+if (a < b && c > d) return "</diff>"\n',
+      },
+    ],
+  })
+
+  assert.match(
+    result.text,
+    /&lt;script&gt;if \(a &lt; b &amp;&amp; c &gt; d\) return "&lt;\/file&gt;"/,
+  )
+  assert.match(result.text, /danger&lt;&amp;&gt;\.ts/)
+  assert.match(result.text, /Author: Ada &amp; Bob/)
+  assert.match(result.text, /subject="Escape &lt;diff&gt;"/)
+  assert.match(result.text, /\+if \(a &lt; b &amp;&amp; c &gt; d\) return "&lt;\/diff&gt;"/)
+  assert.doesNotMatch(result.text, /<script>/)
+  assert.doesNotMatch(result.text, /<\/file><\/file>/)
+})
+
 test('ContextAssembler omits tree when tree mode is none', async () => {
   const result = assembleContext({
     files: [CONTEXT_FIXTURE_FILE],
@@ -219,4 +257,53 @@ test('ContextApplicationService prefixes multi-root tree paths', async () => {
   assert.match(output.text, /workspace\n/)
   assert.match(output.text, /frontend\/\n.*src\/\n.*index\.ts/s)
   assert.match(output.text, /backend\/\n.*src\/\n.*index\.ts/s)
+})
+
+test('ContextApplicationService returns warnings for files that disappear before read', async () => {
+  const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return ['/repo/src/deleted.ts']
+      },
+      async statFile() {
+        return { sizeBytes: 20, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenProfile('claude'),
+  )
+  await index.ensureFresh()
+  const selection = new FileSelection()
+  selection.setNodeIncluded(index.getSnapshot(), 'w:src/deleted.ts', true)
+  const service = new ContextApplicationService(
+    index,
+    selection,
+    {
+      async readText() {
+        throw new Error('ENOENT')
+      },
+      async writeText() {},
+    },
+    {
+      async writeText() {},
+    },
+    getTokenProfile('claude'),
+  )
+
+  const output = await service.buildContext({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(output.text, '')
+  assert.equal(output.fileCount, 0)
+  assert.deepEqual(output.warnings, [
+    {
+      type: 'missingFile',
+      fileId: 'w:src/deleted.ts',
+      path: 'src/deleted.ts',
+    },
+  ])
 })

@@ -82,16 +82,6 @@
           "type": "boolean",
           "default": true,
           "description": "Use your .gitignore file to filter out files and folders available for context"
-        },
-        "lupinumContext.maxFileSizeWarningKB": {
-          "type": "number",
-          "default": 500,
-          "description": "Show warning when selecting files larger than this size (in KB)"
-        },
-        "lupinumContext.showTreeTokenCounts": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show estimated token counts next to files and folders in the Lupinum Context file tree."
         }
       }
     },

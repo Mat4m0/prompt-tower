@@ -40,16 +40,16 @@ function formatReadableCommit(diff: FormattableGitDiff): string {
   const { commit } = diff
   return `<commit hash="${escapeAttribute(commit.hash)}" subject="${escapeAttribute(
     commit.subject,
-  )}" workspace="${escapeAttribute(commit.workspaceName)}">\nAuthor: ${commit.authorName}\nDate: ${
-    commit.authorDate
-  }\n</commit>`
+  )}" workspace="${escapeAttribute(commit.workspaceName)}">\nAuthor: ${escapeText(
+    commit.authorName,
+  )}\nDate: ${escapeText(commit.authorDate)}\n</commit>`
 }
 
 function formatReadableDiff(diff: FormattableGitDiff): string {
   const { commit } = diff
   return `<diff hash="${escapeAttribute(commit.hash)}" subject="${escapeAttribute(
     commit.subject,
-  )}" workspace="${escapeAttribute(commit.workspaceName)}">\n${diff.patch}</diff>`
+  )}" workspace="${escapeAttribute(commit.workspaceName)}">\n${escapeText(diff.patch)}</diff>`
 }
 
 function formatCompactCommit(diff: FormattableGitDiff): string {
@@ -63,7 +63,7 @@ function formatCompactDiff(diff: FormattableGitDiff): string {
   const { commit } = diff
   return `<diff hash="${escapeAttribute(commit.hash)}" workspace="${escapeAttribute(
     commit.workspaceName,
-  )}">${diff.patch}</diff>`
+  )}">${escapeText(diff.patch)}</diff>`
 }
 
 function escapeAttribute(value: string): string {
@@ -72,4 +72,8 @@ function escapeAttribute(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
+}
+
+function escapeText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }

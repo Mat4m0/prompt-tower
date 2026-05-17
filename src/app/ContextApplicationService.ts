@@ -4,6 +4,7 @@ import type {
   ContextFile,
   ContextFileSnapshot,
   ContextGitDiff,
+  ContextWarning,
   ContextOutputMode,
   ProjectTreeMode,
 } from '../core/context/ContextFormat'
@@ -34,6 +35,7 @@ export interface ContextBuildOutput {
   commitCount: number
   estimatedTokens: number
   estimatedCost: string
+  warnings: readonly ContextWarning[]
 }
 
 export class ContextApplicationService {
@@ -64,7 +66,7 @@ export class ContextApplicationService {
       }),
     )
     const snapshots = await this.loadSnapshots(files)
-    const projectTree = await this.buildProjectTree(options.treeMode)
+    const projectTree = this.buildProjectTree(options.treeMode)
     const gitDiffs = await this.loadGitDiffs()
     const result = assembleContext({
       files,
@@ -82,6 +84,7 @@ export class ContextApplicationService {
       commitCount: result.commitCount,
       estimatedTokens,
       estimatedCost: formatTokenCost(estimatedTokens, this.tokenProfile),
+      warnings: result.warnings,
     }
   }
 
@@ -123,7 +126,7 @@ export class ContextApplicationService {
 
   private async estimatePreviewCharacters(options: ContextBuildOptions): Promise<number> {
     const selection = this.fileSelection.getSnapshot()
-    const projectTree = await this.buildProjectTree(options.treeMode)
+    const projectTree = this.buildProjectTree(options.treeMode)
     const selectedFileBlockChars = selection.selectedFiles.reduce(
       (sum, file) => sum + estimateFileBlockChars(file, options.outputMode),
       0,
@@ -157,15 +160,19 @@ export class ContextApplicationService {
     const snapshots = new Map<string, ContextFileSnapshot>()
     await Promise.all(
       files.map(async (file) => {
-        snapshots.set(file.id, {
-          content: await this.fileSystem.readText(file.absolutePath),
-        })
+        try {
+          snapshots.set(file.id, {
+            content: await this.fileSystem.readText(file.absolutePath),
+          })
+        } catch {
+          // Missing snapshots are converted to user-visible context warnings by the assembler.
+        }
       }),
     )
     return snapshots
   }
 
-  private async buildProjectTree(treeMode: ProjectTreeMode): Promise<string> {
+  private buildProjectTree(treeMode: ProjectTreeMode): string {
     if (treeMode === 'none') {
       return ''
     }
@@ -187,7 +194,6 @@ export class ContextApplicationService {
     return generateFileStructureTree(
       primaryRoot,
       entries.map((entry) => ({
-        origin: entry.kind === 'file' ? entry.absolutePath : `${entry.absolutePath}/`,
         tree: toTreePath(
           entry,
           workspaceNames.get(entry.workspaceId) ?? entry.workspaceId,

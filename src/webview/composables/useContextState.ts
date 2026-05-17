@@ -11,19 +11,13 @@ export function useContextState(): {
   return { state, previewText }
 }
 
-export function applyExtensionMessage(
-  message: ExtensionToWebviewMessage,
-  toast: (level: 'info' | 'warning' | 'error', text: string) => void,
-): void {
+export function applyExtensionMessage(message: ExtensionToWebviewMessage): void {
   switch (message.type) {
     case 'state.changed':
       state.value = message.state
       return
     case 'context.previewUpdated':
       previewText.value = message.text
-      return
-    case 'toast':
-      toast(message.level, message.message)
       return
   }
 }

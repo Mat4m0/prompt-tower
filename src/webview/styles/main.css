@@ -251,35 +251,6 @@ textarea {
   border-top: 1px solid var(--vscode-panel-border);
 }
 
-.toast-stack {
-  position: fixed;
-  bottom: 16px;
-  right: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 100;
-}
-
-.toast {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: var(--vscode-notifications-background);
-  color: var(--vscode-notifications-foreground);
-  border: 1px solid var(--vscode-notifications-border);
-  font-weight: 600;
-  max-width: 320px;
-}
-
-.toast.warning {
-  border-color: var(--vscode-notificationsWarningIcon-foreground);
-}
-
-.toast.error {
-  border-color: var(--vscode-notificationsErrorIcon-foreground);
-  color: var(--vscode-errorForeground);
-}
-
 @media (max-width: 760px) {
   .control-grid {
     grid-template-columns: 1fr;

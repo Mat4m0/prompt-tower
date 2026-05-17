@@ -27,8 +27,8 @@ export class SelectionFiltersProvider implements vscode.TreeDataProvider<Selecti
       ? vscode.TreeItemCheckboxState.Unchecked
       : vscode.TreeItemCheckboxState.Checked
     item.description = group.excluded
-      ? `excluded · ${formatTreeTokenCount(group.excludedTokenCount, 'estimated')}`
-      : formatTreeTokenCount(group.selectedTokenCount, 'estimated')
+      ? `excluded · ${formatTreeTokenCount(group.excludedTokenCount)}`
+      : formatTreeTokenCount(group.selectedTokenCount)
     item.tooltip = group.excluded
       ? `${group.label} excluded from folder selections`
       : `${group.label} included`

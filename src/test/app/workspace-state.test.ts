@@ -16,7 +16,6 @@ test('WorkspaceState persists selection, context options, and export options', a
   await state.setExportOptions({
     fileName: 'Audit',
     format: 'txt',
-    location: 'workspaceRoot',
   })
   await state.setTokenSummaryProfileIds(['claude', 'gemini'])
 
@@ -25,6 +24,5 @@ test('WorkspaceState persists selection, context options, and export options', a
   assert.equal(state.getOutputMode(), 'compact')
   assert.equal(state.getExportOptions().fileName, 'Audit')
   assert.equal(state.getExportOptions().format, 'txt')
-  assert.equal(state.getExportOptions().location, 'workspaceRoot')
   assert.deepEqual(state.getTokenSummaryProfileIds(), ['claude', 'gemini'])
 })

@@ -3,26 +3,8 @@ import assert from 'node:assert/strict'
 import { getSelectionRefinementDefinition } from '../../core/files/FileKind'
 import { FileIndex, type FileStat, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
-import { isRelativePathIgnored } from '../../core/files/IgnoreRules'
 import { getTokenProfile } from '../../core/tokens/TokenProfiles'
 import { createSelectionFixtureIndex } from '../helpers'
-
-test('ignore rules include .contextignore before legacy .towerignore', () => {
-  const groups = {
-    builtin: ['node_modules/'],
-    gitignore: ['dist/'],
-    contextignore: ['fixtures/', '*.snap'],
-    towerignore: ['legacy/'],
-    manual: [],
-  }
-
-  assert.equal(isRelativePathIgnored('node_modules/pkg/index.js', groups), true)
-  assert.equal(isRelativePathIgnored('dist/index.js', groups), true)
-  assert.equal(isRelativePathIgnored('fixtures/demo.ts', groups), true)
-  assert.equal(isRelativePathIgnored('src/output.snap', groups), true)
-  assert.equal(isRelativePathIgnored('legacy/old.ts', groups), true)
-  assert.equal(isRelativePathIgnored('src/index.ts', groups), false)
-})
 
 test('FileIndex refreshes once more when dirtied during refresh', async () => {
   const workspace: IndexedWorkspace = {

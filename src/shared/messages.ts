@@ -31,7 +31,6 @@ export type WebviewToExtensionMessage =
 export type ExtensionToWebviewMessage =
   | { type: 'state.changed'; state: ContextPanelState }
   | { type: 'context.previewUpdated'; text: string }
-  | { type: 'toast'; level: 'info' | 'warning' | 'error'; message: string }
 
 export interface ContextPanelState {
   tokenProfiles: readonly { id: string; label: string }[]
@@ -60,12 +59,6 @@ export interface ContextPanelState {
   treeMode: ProjectTreeMode
   outputMode: ContextOutputMode
   exportOptions: PromptExportOptions
-  selectionSummary: {
-    selectedFiles: number
-    selectedCommits: number
-    selectedTokens: number
-  }
-  syncStatus: string
 }
 
 export function isWebviewMessage(value: unknown): value is WebviewToExtensionMessage {

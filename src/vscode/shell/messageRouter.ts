@@ -97,8 +97,9 @@ export class MessageRouter {
         this.preview = output.text
         this.post({ type: 'context.previewUpdated', text: output.text })
         await this.postState()
-        vscode.window.showInformationMessage(
+        showContextResultMessage(
           message.copy ? 'Context copied to clipboard.' : 'Context created.',
+          output.warnings.length,
         )
         return
       }
@@ -118,7 +119,7 @@ export class MessageRouter {
         this.preview = saved.output.text
         this.post({ type: 'context.previewUpdated', text: saved.output.text })
         await this.postState()
-        vscode.window.showInformationMessage(`Saved ${saved.fileName}.`)
+        showContextResultMessage(`Saved ${saved.fileName}.`, saved.output.warnings.length)
         return
       }
       case 'selection.clear':
@@ -147,7 +148,6 @@ export class MessageRouter {
       },
       visibleTokenProfileIds.map(getTokenProfile),
     )
-    const selection = this.services.fileSelection.getSnapshot()
     return {
       tokenProfiles: TOKEN_PROFILES.map(({ id, label }) => ({ id, label })),
       visibleTokenProfileIds,
@@ -175,12 +175,6 @@ export class MessageRouter {
       treeMode: this.treeMode,
       outputMode: this.outputMode,
       exportOptions: this.exportOptions,
-      selectionSummary: {
-        selectedFiles: selection.selectedFiles.length,
-        selectedCommits: this.services.gitSelection.getSnapshot().selectedCommits.length,
-        selectedTokens: selection.selectedTokenEstimate,
-      },
-      syncStatus: this.services.fileIndex.getRefreshState(),
     }
   }
 
@@ -213,4 +207,19 @@ export class MessageRouter {
 
 export function isIndexedNode(value: unknown): value is IndexedNode {
   return typeof value === 'object' && value !== null && 'id' in value && 'kind' in value
+}
+
+function showContextResultMessage(successMessage: string, warningCount: number): void {
+  if (warningCount === 0) {
+    vscode.window.showInformationMessage(successMessage)
+    return
+  }
+
+  vscode.window.showWarningMessage(`${successMessage} ${formatUnreadableFiles(warningCount)}.`)
+}
+
+function formatUnreadableFiles(count: number): string {
+  return count === 1
+    ? '1 selected file could not be read'
+    : `${count} selected files could not be read`
 }

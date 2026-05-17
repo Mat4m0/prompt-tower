@@ -91,17 +91,30 @@ export function registerCommands(options: {
         treeMode: services.workspaceState.getTreeMode(),
         outputMode: services.workspaceState.getOutputMode(),
       })
-      vscode.window.showInformationMessage(formatCopyMessage(output.fileCount, output.commitCount))
+      const message = formatCopyMessage(
+        output.fileCount,
+        output.commitCount,
+        output.warnings.length,
+      )
+      if (output.warnings.length > 0) {
+        vscode.window.showWarningMessage(message)
+      } else {
+        vscode.window.showInformationMessage(message)
+      }
     }),
   )
 }
 
-function formatCopyMessage(fileCount: number, commitCount: number): string {
+function formatCopyMessage(fileCount: number, commitCount: number, warningCount: number): string {
   const files = `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
+  const warningSuffix =
+    warningCount === 0
+      ? ''
+      : ` ${warningCount === 1 ? '1 selected file could not be read.' : `${warningCount} selected files could not be read.`}`
   if (commitCount === 0) {
-    return `Copied ${files} to clipboard.`
+    return `Copied ${files} to clipboard.${warningSuffix}`
   }
 
   const commits = `${commitCount} ${commitCount === 1 ? 'commit diff' : 'commit diffs'}`
-  return `Copied ${files} and ${commits} to clipboard.`
+  return `Copied ${files} and ${commits} to clipboard.${warningSuffix}`
 }

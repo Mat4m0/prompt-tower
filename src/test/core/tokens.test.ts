@@ -1,35 +1,11 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import {
-  estimateTokenCountFromBytes,
-  formatTreeTokenCount,
-  recomputeTreeTokenCounts,
-  updateLeafTreeTokenCounts,
-  type TreeTokenNode,
-} from '../../core/tokens/TokenEstimator'
+import { estimateTokenCountFromBytes, formatTreeTokenCount } from '../../core/tokens/TokenEstimator'
 import {
   estimateTokensFromText,
   formatTokenCost,
   getTokenProfile,
 } from '../../core/tokens/TokenProfiles'
-
-interface TestTreeTokenNode extends TreeTokenNode<TestTreeTokenNode> {
-  name: string
-}
-
-function createTokenNode(
-  name: string,
-  estimatedTokenCount: number,
-  exactTokenCount?: number,
-): TestTreeTokenNode {
-  return {
-    name,
-    estimatedTokenCount,
-    exactTokenCount,
-    displayTokenCount: 0,
-    tokenCountStatus: 'estimated',
-  }
-}
 
 test('tree token helpers estimate and format compact labels', () => {
   assert.equal(estimateTokenCountFromBytes(0), 0)
@@ -48,10 +24,9 @@ test('tree token helpers estimate and format compact labels', () => {
     estimateTokenCountFromBytes(1_272_939, getTokenProfile('gemini'), 'shape.ts'),
     370_041,
   )
-  assert.equal(formatTreeTokenCount(842, 'estimated'), '~842')
-  assert.equal(formatTreeTokenCount(842, 'exact'), '842')
-  assert.equal(formatTreeTokenCount(1800, 'estimated'), '~1.8k')
-  assert.equal(formatTreeTokenCount(1200000, 'estimated'), '~1.2m')
+  assert.equal(formatTreeTokenCount(842), '~842')
+  assert.equal(formatTreeTokenCount(1800), '~1.8k')
+  assert.equal(formatTreeTokenCount(1200000), '~1.2m')
 })
 
 test('token profiles estimate calibrated sample counts and input costs', () => {
@@ -76,66 +51,4 @@ test('token profiles estimate calibrated sample counts and input costs', () => {
 
   assert.equal(formatTokenCost(40_406, getTokenProfile('claude')), '$0.6061')
   assert.equal(formatTokenCost(370_041, getTokenProfile('gemini')), '$0.1110')
-})
-
-test('tree token aggregation sums nested folders and marks mixed counts estimated', () => {
-  const exactFile = createTokenNode('exact.ts', 40, 25)
-  const estimatedFile = createTokenNode('estimated.ts', 80)
-  const folder: TestTreeTokenNode = {
-    name: 'src',
-    estimatedTokenCount: 0,
-    displayTokenCount: 0,
-    tokenCountStatus: 'estimated',
-    children: [exactFile, estimatedFile],
-  }
-  const root: TestTreeTokenNode = {
-    name: 'root',
-    estimatedTokenCount: 0,
-    displayTokenCount: 0,
-    tokenCountStatus: 'estimated',
-    children: [folder],
-  }
-  exactFile.parent = folder
-  estimatedFile.parent = folder
-  folder.parent = root
-
-  recomputeTreeTokenCounts(root)
-
-  assert.equal(folder.estimatedTokenCount, 120)
-  assert.equal(folder.displayTokenCount, 105)
-  assert.equal(folder.tokenCountStatus, 'estimated')
-  assert.equal(root.displayTokenCount, 105)
-  assert.equal(root.tokenCountStatus, 'estimated')
-})
-
-test('tree token exact replacement updates ancestor totals by delta', () => {
-  const file = createTokenNode('file.ts', 100)
-  const folder: TestTreeTokenNode = {
-    name: 'src',
-    estimatedTokenCount: 0,
-    displayTokenCount: 0,
-    tokenCountStatus: 'estimated',
-    children: [file],
-  }
-  file.parent = folder
-  recomputeTreeTokenCounts(folder)
-
-  updateLeafTreeTokenCounts(file, { exactTokenCount: 70 })
-
-  assert.equal(file.displayTokenCount, 70)
-  assert.equal(file.tokenCountStatus, 'exact')
-  assert.equal(folder.estimatedTokenCount, 100)
-  assert.equal(folder.displayTokenCount, 70)
-  assert.equal(folder.tokenCountStatus, 'exact')
-
-  updateLeafTreeTokenCounts(file, {
-    estimatedTokenCount: 120,
-    exactTokenCount: undefined,
-  })
-
-  assert.equal(file.displayTokenCount, 120)
-  assert.equal(file.tokenCountStatus, 'estimated')
-  assert.equal(folder.estimatedTokenCount, 120)
-  assert.equal(folder.displayTokenCount, 120)
-  assert.equal(folder.tokenCountStatus, 'estimated')
 })

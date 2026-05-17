@@ -50,9 +50,6 @@ function exportOptions(): PromptExportOptions {
   return {
     fileName: fileName.value || 'prompt',
     format: format.value || 'md',
-    location: 'promptFolder',
-    customFolderPath: 'prompts',
-    customFolderPathMode: 'relative',
     includeTimestamp: includeTimestamp.value,
   }
 }

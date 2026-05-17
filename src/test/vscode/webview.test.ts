@@ -84,8 +84,6 @@ test('webview host html includes CSP, nonce, initial state, and Vue bundle scrip
     treeMode: 'selectedFilesOnly',
     outputMode: 'readable',
     exportOptions: normalizePromptExportOptions({}),
-    selectionSummary: { selectedFiles: 0, selectedCommits: 0, selectedTokens: 0 },
-    syncStatus: 'idle',
   }
 
   const html = getWebviewHtml({
