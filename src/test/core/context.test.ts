@@ -340,6 +340,40 @@ test('SelectionContextBuilder surfaces selected git diff warnings', async () => 
   ])
 })
 
+test('SelectionContextBuilder emits large context warnings with other warning types', async () => {
+  const content = 'x'.repeat(1_000_100)
+  const service = await createSingleFileContextService('src/large.ts', content, async () => [
+    {
+      commit: {
+        id: 'w:abc123',
+        workspaceId: 'w',
+        workspaceName: 'demo',
+        rootPath: '/repo',
+        hash: 'abc123',
+        shortHash: 'abc123',
+        authorName: 'Ada',
+        authorDate: '2026-05-16T10:00:00.000Z',
+        subject: 'Binary diff',
+      },
+      patch: '',
+      warnings: ['Binary patch content was omitted from the context.'],
+    },
+  ])
+
+  const output = await service.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.ok(output.warnings.some((warning) => warning.type === 'gitDiff'))
+  const largeWarning = output.warnings.find((warning) => warning.type === 'largeContext')
+  assert.ok(largeWarning)
+  assert.equal(largeWarning.type, 'largeContext')
+  assert.ok(largeWarning.estimatedTokens >= 250_000)
+  assert.ok(largeWarning.characterCount >= 1_000_000)
+})
+
 test('SelectionContextBuilder preview estimates stay close to final normal text estimates', async () => {
   const content = 'export const value = "hello";\n'.repeat(200)
   const service = await createSingleFileContextService('src/app.ts', content)

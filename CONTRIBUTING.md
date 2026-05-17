@@ -10,13 +10,12 @@ Thanks for taking the time. This is a focused VS Code extension — one job, don
 
 ## Local setup
 
-This repo uses **pnpm** (pinned via the `packageManager` field).
+This repo uses **vite-plus** (`vp`) for install, checks, tests, and builds. `vp` uses the pinned package manager from [package.json](package.json).
 
 ```bash
 git clone https://github.com/lupinum-dev/context.git
 cd context
-corepack enable          # ensures pnpm@10 is on PATH
-pnpm install
+vp install
 ```
 
 Node 20+ is required (see [.nvmrc](.nvmrc) and the `engines` block in [package.json](package.json)).
@@ -24,7 +23,7 @@ Node 20+ is required (see [.nvmrc](.nvmrc) and the `engines` block in [package.j
 ## Running the extension
 
 ```bash
-pnpm run watch           # incremental rebuild of extension + webview
+vp run watch             # incremental rebuild of extension + webview
 ```
 
 Then press **F5** in VS Code to launch the Extension Development Host. Reload that window (`Cmd/Ctrl+R`) after edits — the watcher rebuilds in the background.
@@ -32,7 +31,7 @@ Then press **F5** in VS Code to launch the Extension Development Host. Reload th
 To install the production VSIX into your real VS Code:
 
 ```bash
-pnpm run deploy:local
+vp run deploy:local
 ```
 
 ## Quality gates
@@ -40,10 +39,10 @@ pnpm run deploy:local
 Before opening a PR, run:
 
 ```bash
-pnpm run check               # format + lint + types (via vp)
-pnpm test                    # vitest
-pnpm run test:no-core-vscode-imports   # core boundary check
-pnpm run validate            # all of the above in one shot
+vp check
+vp test
+vp run test:no-core-vscode-imports
+vp run validate
 ```
 
 The pre-commit hook (`.vite-hooks/pre-commit`) runs `vp staged` automatically — it formats and lints only what you staged. Don't bypass it.

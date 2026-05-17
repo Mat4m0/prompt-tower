@@ -2,7 +2,7 @@ import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import { normalizePromptExportOptions } from '../../core/export/ExportOptions'
 import { getWebviewHtml } from '../../vscode/webview/webviewHost'
-import { isWebviewToExtensionMessage } from '../../shared/messages'
+import { isExtensionToWebviewMessage, isWebviewToExtensionMessage } from '../../shared/messages'
 import type { ContextPanelState } from '../../shared/messages'
 
 test('webview inbound message guard rejects unknown and malformed messages', () => {
@@ -50,6 +50,50 @@ test('webview inbound message guard rejects unknown and malformed messages', () 
     isWebviewToExtensionMessage({
       type: 'estimateSummary.setProfiles',
       profileIds: ['openai', 'unknown'],
+    }),
+    false,
+  )
+})
+
+test('webview outbound message guard validates full panel state shape', () => {
+  const state: ContextPanelState = {
+    tokenEstimateProfiles: [
+      {
+        id: 'claude',
+        label: 'Claude',
+        estimateNote: 'Rough character-based estimate for Claude-style context windows.',
+      },
+    ],
+    visibleEstimateProfileIds: ['claude'],
+    estimateSummaries: [{ id: 'claude', label: 'Claude', tokens: 1200, cost: '$0.01+' }],
+    promptPrefixes: [{ id: 'p1', name: 'Audit', text: 'Review this.' }],
+    activePrefixId: 'p1',
+    inlinePrefix: 'Review this.',
+    treeMode: 'selectedFilesOnly',
+    outputMode: 'readable',
+    exportOptions: normalizePromptExportOptions({}),
+  }
+
+  assert.equal(isExtensionToWebviewMessage({ type: 'context.previewUpdated', text: 'x' }), true)
+  assert.equal(isExtensionToWebviewMessage({ type: 'state.changed', state }), true)
+  assert.equal(
+    isExtensionToWebviewMessage({
+      type: 'state.changed',
+      state: { ...state, treeMode: 'everything' },
+    }),
+    false,
+  )
+  assert.equal(
+    isExtensionToWebviewMessage({
+      type: 'state.changed',
+      state: { ...state, exportOptions: { fileName: 'x', format: 'pdf', includeTimestamp: true } },
+    }),
+    false,
+  )
+  assert.equal(
+    isExtensionToWebviewMessage({
+      type: 'state.changed',
+      state: { ...state, promptPrefixes: [{ id: 'p1', name: 'Audit' }] },
     }),
     false,
   )

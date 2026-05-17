@@ -76,6 +76,9 @@ export function formatTokenCost(tokens: number, profile: TokenEstimateProfile): 
   if (cost < 0.01) {
     return '<$0.01'
   }
+  if (cost < 1) {
+    return '$0.01+'
+  }
   return `$${cost.toFixed(2)}`
 }
 

@@ -2,7 +2,7 @@ import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import ignore from 'ignore'
 import { getSelectionRefinementDefinition } from '../../core/files/FileKind'
-import { normalizeIgnorePath } from '../../core/files/IgnoreRules'
+import { createLayeredIgnoreMatcher, normalizeIgnorePath } from '../../core/files/IgnoreRules'
 import { FileIndex, type FileStat, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
@@ -337,4 +337,66 @@ test('ignore rules combine built-ins, gitignore, contextignore, and towerignore 
   assert.equal(matcher.ignores(normalizeIgnorePath('fixtures/context.xml')), true)
   assert.equal(matcher.ignores(normalizeIgnorePath('legacy-output/a.txt')), true)
   assert.equal(matcher.ignores(normalizeIgnorePath('src/app.ts')), false)
+})
+
+test('layered ignore rules support nested gitignore and later negation', () => {
+  const isIgnored = createLayeredIgnoreMatcher(
+    [
+      { basePath: '', patterns: ['node_modules/', 'secrets/*'] },
+      { basePath: '', patterns: ['generated/'] },
+      { basePath: 'src', patterns: ['*.secret'] },
+      { basePath: 'secrets', patterns: ['!keep.env'] },
+    ],
+    (patterns) => ignore().add(patterns),
+  )
+
+  assert.equal(isIgnored('node_modules/pkg/index.js'), true)
+  assert.equal(isIgnored('generated/report.json'), true)
+  assert.equal(isIgnored('src/token.secret'), true)
+  assert.equal(isIgnored('test/token.secret'), false)
+  assert.equal(isIgnored('secrets/client.env'), true)
+  assert.equal(isIgnored('secrets/keep.env'), false)
+})
+
+test('ignored secret-like files cannot be indexed or selected into context', async () => {
+  const workspace: IndexedWorkspace = {
+    id: 'w',
+    name: 'demo',
+    rootPath: '/repo',
+  }
+  const isIgnored = createLayeredIgnoreMatcher(
+    [{ basePath: '', patterns: ['.env', '*.pem', 'secrets/'] }],
+    (patterns) => ignore().add(patterns),
+  )
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return ['/repo/src/app.ts', '/repo/.env', '/repo/cert.pem', '/repo/secrets/client.txt']
+          .map((filePath) => ({
+            filePath,
+            relativePath: normalizeIgnorePath(filePath.replace('/repo/', '')),
+          }))
+          .filter(({ relativePath }) => !isIgnored(relativePath))
+          .map(({ filePath }) => filePath)
+      },
+      async statFile(): Promise<FileStat> {
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+  const selection = new FileSelection()
+  selection.setNodeIncluded(index.getSnapshot(), 'w:', true)
+
+  assert.deepEqual(
+    index.getSnapshot().files.map((file) => file.relativePath),
+    ['src/app.ts'],
+  )
+  assert.deepEqual(
+    selection.getSnapshot().selectedFiles.map((file) => file.relativePath),
+    ['src/app.ts'],
+  )
 })

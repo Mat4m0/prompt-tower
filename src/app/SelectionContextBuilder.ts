@@ -41,6 +41,9 @@ export interface ContextBuildOutput {
   warnings: readonly ContextWarning[]
 }
 
+const LARGE_CONTEXT_TOKEN_THRESHOLD = 250_000
+const LARGE_CONTEXT_CHARACTER_THRESHOLD = 1_000_000
+
 export class SelectionContextBuilder {
   constructor(
     private fileIndex: FileIndex,
@@ -80,13 +83,25 @@ export class SelectionContextBuilder {
       gitDiffs,
     })
     const estimatedTokens = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
+    const warnings = [...result.warnings, ...gitWarnings]
+    if (
+      estimatedTokens >= LARGE_CONTEXT_TOKEN_THRESHOLD ||
+      result.characterCount >= LARGE_CONTEXT_CHARACTER_THRESHOLD
+    ) {
+      warnings.push({
+        type: 'largeContext',
+        estimatedTokens,
+        characterCount: result.characterCount,
+        message: `Generated context is large: ${estimatedTokens} rough tokens, ${result.characterCount} characters.`,
+      })
+    }
     return {
       text: result.text,
       fileCount: result.fileCount,
       commitCount: result.commitCount,
       estimatedTokens,
       estimatedCostLabel: formatTokenCost(estimatedTokens, this.tokenProfile),
-      warnings: [...result.warnings, ...gitWarnings],
+      warnings,
     }
   }
 

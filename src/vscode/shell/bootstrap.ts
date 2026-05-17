@@ -163,6 +163,7 @@ async function refreshCommits(services: ExtensionServices, reason: string): Prom
   try {
     services.logger.info(`[git] refresh requested: ${reason}`)
     const commits = await services.gitHost.listRecentCommits(services.getWorkspaces(), 50)
+    services.clearSelectedGitDiffCache()
     services.gitSelection.setCommits(commits)
     services.logger.info(`[git] refresh complete: ${reason}`)
   } catch (error) {

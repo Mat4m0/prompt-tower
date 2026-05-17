@@ -5,11 +5,11 @@ import {
   type ContextBuildOutput,
 } from '../../app/SelectionContextBuilder'
 import { PromptPrefixes } from '../../app/PromptPrefixes'
+import { createSelectedGitDiffReader } from '../../app/SelectedGitDiffs'
 import { WorkspaceSettings } from '../../app/WorkspaceSettings'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { GitSelection } from '../../core/git/GitSelection'
-import type { GitCommitDiff } from '../../core/git/GitTypes'
 import {
   getTokenEstimateProfile,
   type TokenEstimateProfile,
@@ -33,6 +33,7 @@ export interface ExtensionServices {
   createContextFromSelection(
     options: Omit<ContextBuildOptions, 'prefix'>,
   ): Promise<ContextBuildOutput>
+  clearSelectedGitDiffCache(): void
   getTokenEstimateProfile(): TokenEstimateProfile
   setTokenEstimateProfile(profileId: string): Promise<TokenEstimateProfile>
 }
@@ -49,12 +50,15 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
   const fileIndex = new FileIndex(fileSystem, getWorkspaces(), tokenProfile, logger)
   const fileSelection = new FileSelection()
   const gitSelection = new GitSelection()
+  const selectedGitDiffs = createSelectedGitDiffReader(gitSelection, (commit) =>
+    gitHost.readCommitDiff(commit),
+  )
   const contextBuilder = new SelectionContextBuilder(
     fileIndex,
     fileSelection,
     fileSystem,
     tokenProfile,
-    () => readSelectedGitDiffs(gitHost, gitSelection),
+    () => selectedGitDiffs.readSelectedGitDiffs(),
   )
   const promptPrefixes = new PromptPrefixes(context.globalState, context.workspaceState)
   const workspaceState = new WorkspaceSettings(context.workspaceState)
@@ -77,6 +81,9 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
         prefix: promptPrefixes.getEffectivePrefix(),
       })
     },
+    clearSelectedGitDiffCache(): void {
+      selectedGitDiffs.clear()
+    },
     getTokenEstimateProfile(): TokenEstimateProfile {
       return tokenProfile
     },
@@ -96,13 +103,4 @@ function readWorkspaceFolders(): IndexedWorkspace[] {
     name: folder.name,
     rootPath: folder.uri.fsPath,
   }))
-}
-
-function readSelectedGitDiffs(
-  gitHost: VsCodeGit,
-  gitSelection: GitSelection,
-): Promise<readonly GitCommitDiff[]> {
-  return Promise.all(
-    gitSelection.getSnapshot().selectedCommits.map((commit) => gitHost.readCommitDiff(commit)),
-  )
 }

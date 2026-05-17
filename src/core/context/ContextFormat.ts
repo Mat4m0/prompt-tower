@@ -45,6 +45,12 @@ export type ContextWarning =
       subject: string
       message: string
     }
+  | {
+      type: 'largeContext'
+      estimatedTokens: number
+      characterCount: number
+      message: string
+    }
 
 export interface ContextBuildRequest {
   files: readonly ContextFile[]

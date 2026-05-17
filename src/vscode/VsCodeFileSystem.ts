@@ -3,14 +3,19 @@ import * as vscode from 'vscode'
 import ignore from 'ignore'
 import type { FileIndexHost, FileStat, IndexedWorkspace } from '../core/files/FileIndex'
 import { ALWAYS_IGNORE } from '../utils/alwaysIgnore'
-import { normalizeIgnorePath } from '../core/files/IgnoreRules'
+import {
+  createLayeredIgnoreMatcher,
+  normalizeIgnorePath,
+  type IgnoreRuleLayer,
+} from '../core/files/IgnoreRules'
 import type { FileIndexLogger } from '../core/files/FileIndex'
 
 export class VsCodeFileSystem implements FileIndexHost {
   constructor(private logger?: FileIndexLogger) {}
 
   async listFiles(workspace: IndexedWorkspace): Promise<string[]> {
-    const matcher = await this.createMatcher(workspace)
+    const layers = await this.createIgnoreLayers(workspace)
+    const isIgnored = createLayeredIgnoreMatcher(layers, createIgnoreMatcher)
     const exclude = buildFindFilesExcludePattern()
     const startedAt = Date.now()
     const uris = await vscode.workspace.findFiles(
@@ -25,7 +30,7 @@ export class VsCodeFileSystem implements FileIndexHost {
       .map((uri) => uri.fsPath)
       .filter((absolutePath) => {
         const relativePath = normalizeIgnorePath(path.relative(workspace.rootPath, absolutePath))
-        return !matcher.ignores(relativePath)
+        return !isIgnored(relativePath)
       })
   }
 
@@ -55,16 +60,50 @@ export class VsCodeFileSystem implements FileIndexHost {
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'))
   }
 
-  private async createMatcher(workspace: IndexedWorkspace): Promise<ignore.Ignore> {
-    const matcher = ignore()
-    matcher.add(ALWAYS_IGNORE)
+  private async createIgnoreLayers(workspace: IndexedWorkspace): Promise<IgnoreRuleLayer[]> {
+    const layers: IgnoreRuleLayer[] = [
+      {
+        basePath: '',
+        patterns: ALWAYS_IGNORE,
+      },
+      {
+        basePath: '',
+        patterns: await this.readIgnoreFile(path.join(workspace.rootPath, '.contextignore')),
+      },
+      {
+        basePath: '',
+        patterns: await this.readIgnoreFile(path.join(workspace.rootPath, '.towerignore')),
+      },
+    ]
 
-    if (vscode.workspace.getConfiguration('lupinumContext').get<boolean>('useGitignore', true)) {
-      matcher.add(await this.readIgnoreFile(path.join(workspace.rootPath, '.gitignore')))
+    if (!vscode.workspace.getConfiguration('lupinumContext').get<boolean>('useGitignore', true)) {
+      return layers
     }
-    matcher.add(await this.readIgnoreFile(path.join(workspace.rootPath, '.contextignore')))
-    matcher.add(await this.readIgnoreFile(path.join(workspace.rootPath, '.towerignore')))
-    return matcher
+
+    const gitignorePaths = await this.findGitignorePaths(workspace)
+    for (const filePath of gitignorePaths) {
+      layers.push({
+        basePath: normalizeIgnorePath(path.relative(workspace.rootPath, path.dirname(filePath))),
+        patterns: await this.readIgnoreFile(filePath),
+      })
+    }
+    return layers
+  }
+
+  private async findGitignorePaths(workspace: IndexedWorkspace): Promise<string[]> {
+    const exclude = buildFindFilesExcludePattern()
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(workspace.rootPath, '**/.gitignore'),
+      exclude,
+      undefined,
+    )
+    return [path.join(workspace.rootPath, '.gitignore'), ...uris.map((uri) => uri.fsPath)]
+      .filter((filePath, index, paths) => paths.indexOf(filePath) === index)
+      .sort(
+        (left, right) =>
+          path.relative(workspace.rootPath, left).split(path.sep).length -
+          path.relative(workspace.rootPath, right).split(path.sep).length,
+      )
   }
 
   private async readIgnoreFile(filePath: string): Promise<string[]> {
@@ -79,6 +118,10 @@ export class VsCodeFileSystem implements FileIndexHost {
       return []
     }
   }
+}
+
+function createIgnoreMatcher(patterns: readonly string[]): ignore.Ignore {
+  return ignore().add(patterns)
 }
 
 function buildFindFilesExcludePattern(): string {

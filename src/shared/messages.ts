@@ -125,6 +125,104 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
   }
 }
 
+export function isExtensionToWebviewMessage(value: unknown): value is ExtensionToWebviewMessage {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const message = value as Record<string, unknown>
+  switch (message.type) {
+    case 'context.previewUpdated':
+      return hasOnlyKeys(message, ['type', 'text']) && typeof message.text === 'string'
+    case 'state.changed':
+      return hasOnlyKeys(message, ['type', 'state']) && isContextPanelState(message.state)
+    default:
+      return false
+  }
+}
+
+function isContextPanelState(value: unknown): value is ContextPanelState {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const state = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(state, [
+      'tokenEstimateProfiles',
+      'visibleEstimateProfileIds',
+      'estimateSummaries',
+      'promptPrefixes',
+      'activePrefixId',
+      'inlinePrefix',
+      'treeMode',
+      'outputMode',
+      'exportOptions',
+    ]) &&
+    Array.isArray(state.tokenEstimateProfiles) &&
+    state.tokenEstimateProfiles.every(isTokenEstimateProfileSummary) &&
+    Array.isArray(state.visibleEstimateProfileIds) &&
+    state.visibleEstimateProfileIds.every(
+      (id) => typeof id === 'string' && isTokenEstimateProfileId(id),
+    ) &&
+    Array.isArray(state.estimateSummaries) &&
+    state.estimateSummaries.every(isEstimateSummary) &&
+    Array.isArray(state.promptPrefixes) &&
+    state.promptPrefixes.every(isPromptPrefixSummary) &&
+    (typeof state.activePrefixId === 'string' || state.activePrefixId === null) &&
+    typeof state.inlinePrefix === 'string' &&
+    isTreeMode(state.treeMode) &&
+    isOutputMode(state.outputMode) &&
+    isPromptExportOptions(state.exportOptions)
+  )
+}
+
+function isTokenEstimateProfileSummary(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const profile = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(profile, ['id', 'label', 'estimateNote']) &&
+    typeof profile.id === 'string' &&
+    isTokenEstimateProfileId(profile.id) &&
+    typeof profile.label === 'string' &&
+    typeof profile.estimateNote === 'string'
+  )
+}
+
+function isEstimateSummary(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const summary = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(summary, ['id', 'label', 'tokens', 'cost']) &&
+    typeof summary.id === 'string' &&
+    isTokenEstimateProfileId(summary.id) &&
+    typeof summary.label === 'string' &&
+    typeof summary.tokens === 'number' &&
+    Number.isFinite(summary.tokens) &&
+    typeof summary.cost === 'string'
+  )
+}
+
+function isPromptPrefixSummary(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const prefix = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(prefix, ['id', 'name', 'text']) &&
+    typeof prefix.id === 'string' &&
+    typeof prefix.name === 'string' &&
+    typeof prefix.text === 'string'
+  )
+}
+
 function isTreeMode(value: unknown): value is ProjectTreeMode {
   return (
     value === 'selectedFilesOnly' ||
@@ -149,6 +247,20 @@ function isPartialPromptExportOptions(value: unknown): value is Partial<PromptEx
     (options.fileName === undefined || typeof options.fileName === 'string') &&
     (options.format === undefined || isExportFormat(options.format)) &&
     (options.includeTimestamp === undefined || typeof options.includeTimestamp === 'boolean')
+  )
+}
+
+function isPromptExportOptions(value: unknown): value is PromptExportOptions {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  const options = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(options, ['fileName', 'format', 'includeTimestamp']) &&
+    typeof options.fileName === 'string' &&
+    isExportFormat(options.format) &&
+    typeof options.includeTimestamp === 'boolean'
   )
 }
 

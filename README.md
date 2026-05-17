@@ -75,7 +75,7 @@ Two output formats. _Readable_ for humans peeking at the preview. _Compact_ stri
 
 ### Smart ignores
 
-Honors `.gitignore`, `.contextignore`, `.towerignore`, plus built-in rules. Keeps `node_modules`, `dist`, lockfiles, and generated junk out by default.
+Honors nested `.gitignore` files, root `.contextignore` / `.towerignore`, plus built-in rules. Keeps `node_modules`, `dist`, lockfiles, and generated junk out by default.
 
 ### Clean output format
 
@@ -136,7 +136,7 @@ That's the whole loop. Build a habit around it.
 
 ### `.contextignore` / `.towerignore`
 
-Create either in your project root. Works like `.gitignore`:
+Create either in your project root. These project-level context ignore files use `.gitignore`-style patterns, but unlike `.gitignore`, only the workspace-root files are read:
 
 ```gitignore
 # Keep context lean
@@ -168,11 +168,12 @@ Found a bug? Want a feature? [Open an issue](https://github.com/lupinum-dev/cont
 
 ```bash
 git clone https://github.com/lupinum-dev/context.git
-corepack enable           # picks up pnpm@10 pinned in package.json
-pnpm install
-pnpm build
-pnpm run deploy:local     # installs the .vsix into your local VS Code
+vp install
+vp run build
+vp run deploy:local     # installs the .vsix into your local VS Code
 ```
+
+Lupinum Context is local-only by design: it reads workspace files, builds context text, and writes to your clipboard or local files. It does not make network requests or send telemetry by default. Token and cost labels are rough character-based estimates, not exact tokenizer or billing numbers.
 
 ---
 
