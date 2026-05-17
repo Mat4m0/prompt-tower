@@ -28,11 +28,11 @@ vscode shell
 - `src/core/context`: context assembly, project tree rendering, and context-size estimation.
 - `src/core/files`: file indexing, ignore rules, file-kind grouping, and selection intent.
 - `src/core/git`: local Git commit selection and diff formatting.
-- `src/core/prompts`: versioned prompt preset types, validation, store, and versioning.
+- `src/app/PromptPrefixes.ts`: named prompt prefix storage, validation, and one-time old-prefix import.
 - `src/core/tokens`: rough estimate profiles for Claude, OpenAI, and Gemini.
 - `src/core/export`: prompt file naming and export target rules.
-- `src/app`: context, prompt preset, and workspace-state application services.
-- `src/vscode/shell`: VS Code bootstrap, commands, message routing, service wiring, logging, and watcher session.
+- `src/app`: context creation, prompt prefixes, and workspace settings.
+- `src/vscode/shell`: VS Code bootstrap, commands, webview message handling, service wiring, logging, and watcher session.
 - `src/vscode/views`: native file tree and selection filter tree providers.
 - `src/vscode/webview`: webview HTML host, CSS, Vue UI, and typed messages.
 
@@ -42,9 +42,7 @@ vscode shell
 - Keep every important concept to one source of truth.
 - Selection intent is canonical; selected files, folder checkbox state, filter groups, and token totals are derived.
 - Context generation is pure; update golden fixtures for intentional output changes.
-- Prompt preset edits create recoverable versions. Do not silently overwrite old prefix text.
-- Generated benchmark reports are local artifacts, not product documentation.
-- `scripts/benchmark.mjs` deliberately uses `esbuild` as the only benchmark-only TypeScript bundling exception. Do not add another TS runner just to remove it.
+- Prompt prefixes are simple named snippets. Do not add version history or hidden soft-delete records without a proven product requirement.
 
 ## Verification
 
@@ -54,9 +52,9 @@ Before finishing meaningful changes, run:
 vp install
 vp check
 vp test
-vp run test:architecture
+vp run test:no-core-vscode-imports
 vp build
 vp run validate
 ```
 
-Run `vp run benchmark:smoke` for performance-sensitive changes and `vp run deploy:local` before manual VS Code smoke.
+Run `vp run deploy:local` before manual VS Code smoke.

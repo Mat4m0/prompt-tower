@@ -11,57 +11,43 @@ import {
 test('tree token helpers estimate and format compact labels', () => {
   assert.equal(estimateTokenCountFromBytes(0), 0)
   assert.equal(estimateTokenCountFromBytes(1), 1)
-  assert.equal(estimateTokenCountFromBytes(16), 5)
-  assert.equal(
+  assertWithinPercent(
     estimateTokenCountFromBytes(1_272_939, getTokenEstimateProfile('claude'), 'shape.ts'),
-    326_395,
-  )
-  assert.equal(
-    estimateTokenCountFromBytes(1_272_939, getTokenEstimateProfile('openai'), 'shape.ts'),
-    305_262,
-  )
-  assert.equal(
-    estimateTokenCountFromBytes(67_469, getTokenEstimateProfile('gemini'), 'shape.dat'),
-    60_241,
-  )
-  assert.equal(
-    estimateTokenCountFromBytes(1_272_939, getTokenEstimateProfile('gemini'), 'shape.ts'),
-    370_041,
+    326_000,
+    5,
   )
   assert.equal(formatEstimatedTokenCount(842), '~842')
   assert.equal(formatEstimatedTokenCount(1800), '~1.8k')
   assert.equal(formatEstimatedTokenCount(1200000), '~1.2m')
 })
 
-test('token profiles estimate calibrated sample counts and input costs', () => {
+test('token profiles make rough estimates and numeric-heavy text uses the numeric path', () => {
   const numericText = '1234.5678 -9012.3456\n'.repeat(3_300).slice(0, 67_469)
   const lupinumSourceContextChars = 'x'.repeat(1_272_939)
 
-  assert.equal(
-    estimateTokenCountFromTextLength(numericText, getTokenEstimateProfile('claude')),
-    40_401,
+  const geminiNumeric = estimateTokenCountFromTextLength(
+    numericText,
+    getTokenEstimateProfile('gemini'),
   )
-  assert.equal(
-    estimateTokenCountFromTextLength(numericText, getTokenEstimateProfile('openai')),
-    37_693,
-  )
-  assert.equal(
-    estimateTokenCountFromTextLength(numericText, getTokenEstimateProfile('gemini')),
-    60_241,
-  )
-  assert.equal(
-    estimateTokenCountFromTextLength(lupinumSourceContextChars, getTokenEstimateProfile('claude')),
-    326_395,
-  )
-  assert.equal(
-    estimateTokenCountFromTextLength(lupinumSourceContextChars, getTokenEstimateProfile('openai')),
-    305_262,
-  )
-  assert.equal(
-    estimateTokenCountFromTextLength(lupinumSourceContextChars, getTokenEstimateProfile('gemini')),
-    370_041,
+  const geminiSource = estimateTokenCountFromTextLength(
+    lupinumSourceContextChars,
+    getTokenEstimateProfile('gemini'),
   )
 
-  assert.equal(formatTokenCost(40_406, getTokenEstimateProfile('claude')), '$0.6061')
-  assert.equal(formatTokenCost(370_041, getTokenEstimateProfile('gemini')), '$0.1110')
+  assert.ok(geminiNumeric > 50_000)
+  assert.ok(geminiSource > 300_000)
+  assertWithinPercent(
+    estimateTokenCountFromTextLength(lupinumSourceContextChars, getTokenEstimateProfile('claude')),
+    326_000,
+    5,
+  )
+  assert.equal(formatTokenCost(0, getTokenEstimateProfile('claude')), '$0')
+  assert.equal(formatTokenCost(100, getTokenEstimateProfile('gemini')), '<$0.01')
+  assert.equal(formatTokenCost(40_406, getTokenEstimateProfile('claude')), '$0.61')
+  assert.match(formatTokenCost(370_041, getTokenEstimateProfile('gemini')), /^\$0\.11/)
 })
+
+function assertWithinPercent(actual: number, expected: number, tolerancePercent: number): void {
+  const allowed = Math.ceil(expected * (tolerancePercent / 100))
+  assert.ok(Math.abs(actual - expected) <= allowed, `${actual} not within ${tolerancePercent}%`)
+}

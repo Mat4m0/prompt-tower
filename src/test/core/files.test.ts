@@ -71,6 +71,33 @@ test('FileIndex updates metadata and token estimates after file changes', async 
   assert.ok(index.getSnapshot().files[0].estimatedTokenCount > before)
 })
 
+test('FileIndex skips paths that normalize outside the workspace', async () => {
+  const workspace: IndexedWorkspace = {
+    id: 'w',
+    name: 'demo',
+    rootPath: '/repo',
+  }
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return ['/repo/src/a.ts', '/repo/../secret.ts', '/repo-other/app.ts']
+      },
+      async statFile(): Promise<FileStat> {
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+
+  assert.deepEqual(
+    index.getSnapshot().files.map((file) => file.relativePath),
+    ['src/a.ts'],
+  )
+})
+
 test('FileIndex snapshots do not expose mutable index internals', async () => {
   const workspace: IndexedWorkspace = {
     id: 'w',

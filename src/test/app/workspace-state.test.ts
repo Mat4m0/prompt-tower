@@ -1,11 +1,11 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import { WorkspaceStateService } from '../../app/WorkspaceStateService'
+import { WorkspaceSettings } from '../../app/WorkspaceSettings'
 import { createMemoryStorage } from '../helpers'
 
 test('WorkspaceState persists selection, context options, and export options', async () => {
   const storage = createMemoryStorage({})
-  const state = new WorkspaceStateService(storage)
+  const state = new WorkspaceSettings(storage)
   await state.setSelectionIntent({
     includedNodeIds: ['w:src'],
     excludedNodeIds: [],

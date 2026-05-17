@@ -64,8 +64,7 @@ new version string (e.g. `1.0.1`).
 ### 1. Pre-flight checks
 
 ```sh
-vp run validate          # check + test + architecture
-vp run benchmark:smoke   # perf-sensitive changes only
+vp run validate          # check + test + core boundary check
 ```
 
 Confirm:

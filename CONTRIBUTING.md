@@ -6,7 +6,7 @@ Thanks for taking the time. This is a focused VS Code extension — one job, don
 
 - **Bug or small fix:** just open a PR.
 - **New feature or anything that changes the UX:** open an issue first so we can talk shape. We've turned down good ideas because they widened the product surface area. See [README › Why a fork, not a contribution?](README.md#why-a-fork-not-a-contribution) for what we deliberately don't do.
-- **Architecture:** read [AGENTS.md](AGENTS.md) before touching `src/`. The dependency direction `vscode → app → core` is non-negotiable and enforced by `scripts/check-architecture.mjs`.
+- **Architecture:** read [AGENTS.md](AGENTS.md) before touching `src/`. The core boundary is enforced by `scripts/check-no-core-vscode-imports.mjs`.
 
 ## Local setup
 
@@ -42,14 +42,8 @@ Before opening a PR, run:
 ```bash
 pnpm run check               # format + lint + types (via vp)
 pnpm test                    # vitest
-pnpm run test:architecture   # dependency-direction check
+pnpm run test:no-core-vscode-imports   # core boundary check
 pnpm run validate            # all of the above in one shot
-```
-
-Performance-sensitive change? Also run:
-
-```bash
-pnpm run benchmark:smoke
 ```
 
 The pre-commit hook (`.vite-hooks/pre-commit`) runs `vp staged` automatically — it formats and lints only what you staged. Don't bypass it.

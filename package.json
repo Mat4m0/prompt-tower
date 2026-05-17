@@ -51,11 +51,8 @@
     "check-types": "vp check --no-fmt --no-lint",
     "lint": "vp lint src",
     "test": "vp test run",
-    "test:architecture": "node scripts/check-architecture.mjs",
-    "validate": "vp check && vp test run && vp run test:architecture",
-    "benchmark": "node scripts/benchmark.mjs",
-    "benchmark:smoke": "node scripts/benchmark.mjs --scale=smoke",
-    "benchmark:json": "node scripts/benchmark.mjs --json",
+    "test:no-core-vscode-imports": "node scripts/check-no-core-vscode-imports.mjs",
+    "validate": "vp check && vp test run && vp run test:no-core-vscode-imports",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -68,7 +65,6 @@
     "@vitejs/plugin-vue": "6.0.7",
     "@vscode/vsce": "3.9.1",
     "@vue/tsconfig": "0.9.1",
-    "esbuild": "0.25.12",
     "ovsx": "^0.10.12",
     "typescript": "5.9.3",
     "vite": "8.0.11",

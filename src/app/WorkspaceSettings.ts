@@ -9,7 +9,7 @@ import {
   isTokenEstimateProfileId,
   type TokenEstimateProfileId,
 } from '../core/tokens/TokenEstimateProfiles'
-import type { AppStorage } from './PromptPresetApplicationService'
+import type { AppStorage } from './PromptPrefixes'
 
 const SELECTION_INTENT_KEY = 'lupinumContext.selectionIntent'
 const TREE_MODE_KEY = 'lupinumContext.treeMode'
@@ -18,7 +18,7 @@ const EXPORT_OPTIONS_KEY = 'lupinumContext.exportOptions'
 const ESTIMATE_SUMMARY_PROFILE_IDS_KEY = 'lupinumContext.estimateSummaryProfileIds'
 const DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS: readonly TokenEstimateProfileId[] = ['openai', 'gemini']
 
-export class WorkspaceStateService {
+export class WorkspaceSettings {
   constructor(private storage: AppStorage) {}
 
   getSelectionIntent(): PersistedSelectionIntent | undefined {

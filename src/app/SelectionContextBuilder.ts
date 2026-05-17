@@ -19,15 +19,11 @@ import {
   formatTokenCost,
   type TokenEstimateProfile,
 } from '../core/tokens/TokenEstimateProfiles'
-import { buildPromptExportTarget } from '../core/export/PromptFileWriter'
-import type { PromptExportOptions } from '../core/export/ExportOptions'
 
 export interface TextFileSystem {
   readText(absolutePath: string): Promise<string>
-  writeText(absolutePath: string, content: string): PromiseLike<void>
 }
 
-export type WriteClipboardText = (text: string) => PromiseLike<void>
 export type ReadSelectedGitDiffs = () => Promise<readonly GitCommitDiff[]>
 
 export interface ContextBuildOptions {
@@ -40,17 +36,16 @@ export interface ContextBuildOutput {
   text: string
   fileCount: number
   commitCount: number
-  estimatedTokenCount: number
-  estimatedCost: string
+  estimatedTokens: number
+  estimatedCostLabel: string
   warnings: readonly ContextWarning[]
 }
 
-export class ContextApplicationService {
+export class SelectionContextBuilder {
   constructor(
     private fileIndex: FileIndex,
     private fileSelection: FileSelection,
     private fileSystem: TextFileSystem,
-    private writeClipboardText: WriteClipboardText,
     private tokenProfile: TokenEstimateProfile,
     private readSelectedGitDiffs?: ReadSelectedGitDiffs,
   ) {}
@@ -60,7 +55,7 @@ export class ContextApplicationService {
     this.fileIndex.setTokenEstimateProfile(profile)
   }
 
-  async buildContext(options: ContextBuildOptions): Promise<ContextBuildOutput> {
+  async createContextFromSelection(options: ContextBuildOptions): Promise<ContextBuildOutput> {
     await this.fileIndex.ensureFresh()
     this.fileSelection.reconcile(this.fileIndex.getSnapshot())
     const selection = this.fileSelection.getSnapshot()
@@ -74,7 +69,7 @@ export class ContextApplicationService {
     )
     const snapshots = await this.loadSnapshots(files)
     const projectTree = this.buildProjectTree(options.treeMode)
-    const gitDiffs = await this.loadGitDiffs()
+    const { gitDiffs, warnings: gitWarnings } = await this.loadGitDiffs()
     const result = assembleContext({
       files,
       snapshots,
@@ -84,35 +79,14 @@ export class ContextApplicationService {
       outputMode: options.outputMode,
       gitDiffs,
     })
-    const estimatedTokenCount = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
+    const estimatedTokens = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
     return {
       text: result.text,
       fileCount: result.fileCount,
       commitCount: result.commitCount,
-      estimatedTokenCount,
-      estimatedCost: formatTokenCost(estimatedTokenCount, this.tokenProfile),
-      warnings: result.warnings,
-    }
-  }
-
-  async copyContext(options: ContextBuildOptions): Promise<ContextBuildOutput> {
-    const output = await this.buildContext(options)
-    await this.writeClipboardText(output.text)
-    return output
-  }
-
-  async saveContext(
-    workspaceRoot: string,
-    exportOptions: PromptExportOptions,
-    buildOptions: ContextBuildOptions,
-  ): Promise<{ output: ContextBuildOutput; filePath: string; fileName: string }> {
-    const output = await this.buildContext(buildOptions)
-    const target = buildPromptExportTarget(workspaceRoot, exportOptions, new Date())
-    await this.fileSystem.writeText(target.absolutePath, output.text)
-    return {
-      output,
-      filePath: target.absolutePath,
-      fileName: target.fileName,
+      estimatedTokens,
+      estimatedCostLabel: formatTokenCost(estimatedTokens, this.tokenProfile),
+      warnings: [...result.warnings, ...gitWarnings],
     }
   }
 
@@ -161,14 +135,20 @@ export class ContextApplicationService {
     })
   }
 
-  private async loadGitDiffs(): Promise<ContextGitDiff[]> {
+  private async loadGitDiffs(): Promise<{
+    gitDiffs: ContextGitDiff[]
+    warnings: ContextWarning[]
+  }> {
     const diffs = await this.readSelectedGitDiffs?.()
-    return (diffs ?? []).map(toContextGitDiff)
+    return {
+      gitDiffs: (diffs ?? []).filter((diff) => diff.patch.length > 0).map(toContextGitDiff),
+      warnings: (diffs ?? []).flatMap(toGitDiffWarnings),
+    }
   }
 
   private async estimateGitDiffCharacters(outputMode: ContextOutputMode): Promise<number> {
-    const diffs = await this.loadGitDiffs()
-    return estimateGitDiffChars(diffs, outputMode === 'compact')
+    const { gitDiffs } = await this.loadGitDiffs()
+    return estimateGitDiffChars(gitDiffs, outputMode === 'compact')
   }
 
   private async loadSnapshots(
@@ -234,6 +214,16 @@ function toContextGitDiff(diff: GitCommitDiff): ContextGitDiff {
     },
     patch: diff.patch,
   }
+}
+
+function toGitDiffWarnings(diff: GitCommitDiff): ContextWarning[] {
+  return (diff.warnings ?? []).map((message) => ({
+    type: 'gitDiff',
+    commitId: diff.commit.id,
+    shortHash: diff.commit.shortHash,
+    subject: diff.commit.subject,
+    message,
+  }))
 }
 
 function toTreePath(entry: IndexedNode, workspaceName: string, multiRoot: boolean): string {

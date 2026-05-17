@@ -5,7 +5,7 @@ import { estimateContextCharacters } from '../../core/context/ContextEstimate'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
-import { ContextApplicationService } from '../../app/ContextApplicationService'
+import { SelectionContextBuilder } from '../../app/SelectionContextBuilder'
 import { readFixture } from '../helpers'
 
 const CONTEXT_FIXTURE_TREE = 'demo\n└─ src/\n   └─ example.ts'
@@ -211,7 +211,7 @@ test('ContextAssembler includes selected git commit diffs', () => {
   assert.equal(result.commitCount, 1)
 })
 
-test('ContextApplicationService prefixes multi-root tree paths', async () => {
+test('SelectionContextBuilder prefixes multi-root tree paths', async () => {
   const workspaces: IndexedWorkspace[] = [
     { id: 'front', name: 'frontend', rootPath: '/repo/frontend' },
     { id: 'back', name: 'backend', rootPath: '/repo/backend' },
@@ -233,20 +233,18 @@ test('ContextApplicationService prefixes multi-root tree paths', async () => {
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'front:', true)
   selection.setNodeIncluded(index.getSnapshot(), 'back:', true)
-  const service = new ContextApplicationService(
+  const builder = new SelectionContextBuilder(
     index,
     selection,
     {
       async readText(absolutePath) {
         return absolutePath
       },
-      async writeText() {},
     },
-    async () => {},
     getTokenEstimateProfile('claude'),
   )
 
-  const output = await service.buildContext({
+  const output = await builder.createContextFromSelection({
     prefix: '',
     treeMode: 'selectedFilesOnly',
     outputMode: 'readable',
@@ -257,7 +255,7 @@ test('ContextApplicationService prefixes multi-root tree paths', async () => {
   assert.match(output.text, /backend\/\n.*src\/\n.*index\.ts/s)
 })
 
-test('ContextApplicationService returns warnings for files that disappear before read', async () => {
+test('SelectionContextBuilder returns warnings for files that disappear before read', async () => {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const index = new FileIndex(
     {
@@ -274,20 +272,18 @@ test('ContextApplicationService returns warnings for files that disappear before
   await index.ensureFresh()
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'w:src/deleted.ts', true)
-  const service = new ContextApplicationService(
+  const builder = new SelectionContextBuilder(
     index,
     selection,
     {
       async readText() {
         throw new Error('ENOENT')
       },
-      async writeText() {},
     },
-    async () => {},
     getTokenEstimateProfile('claude'),
   )
 
-  const output = await service.buildContext({
+  const output = await builder.createContextFromSelection({
     prefix: '',
     treeMode: 'none',
     outputMode: 'readable',
@@ -304,7 +300,47 @@ test('ContextApplicationService returns warnings for files that disappear before
   ])
 })
 
-test('ContextApplicationService preview estimates stay close to final normal text estimates', async () => {
+test('SelectionContextBuilder surfaces selected git diff warnings', async () => {
+  const service = await createSingleFileContextService(
+    'src/app.ts',
+    'export const ok = true\n',
+    async () => [
+      {
+        commit: {
+          id: 'w:abc123',
+          workspaceId: 'w',
+          workspaceName: 'demo',
+          rootPath: '/repo',
+          hash: 'abc123',
+          shortHash: 'abc123',
+          authorName: 'Ada',
+          authorDate: '2026-05-16T10:00:00.000Z',
+          subject: 'Large diff',
+        },
+        patch: '',
+        warnings: ['Diff was truncated at 1000000 characters.'],
+      },
+    ],
+  )
+
+  const output = await service.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.deepEqual(output.warnings, [
+    {
+      type: 'gitDiff',
+      commitId: 'w:abc123',
+      shortHash: 'abc123',
+      subject: 'Large diff',
+      message: 'Diff was truncated at 1000000 characters.',
+    },
+  ])
+})
+
+test('SelectionContextBuilder preview estimates stay close to final normal text estimates', async () => {
   const content = 'export const value = "hello";\n'.repeat(200)
   const service = await createSingleFileContextService('src/app.ts', content)
   const options = {
@@ -316,12 +352,12 @@ test('ContextApplicationService preview estimates stay close to final normal tex
   const [preview] = await service.estimatePreviewForProfiles(options, [
     getTokenEstimateProfile('claude'),
   ])
-  const output = await service.buildContext(options)
+  const output = await service.createContextFromSelection(options)
 
-  assertWithinPercent(preview.tokens, output.estimatedTokenCount, 10)
+  assertWithinPercent(preview.tokens, output.estimatedTokens, 10)
 })
 
-test('ContextApplicationService preview estimates account for numeric-heavy files', async () => {
+test('SelectionContextBuilder preview estimates account for numeric-heavy files', async () => {
   const content = '1234.5678 -9012.3456\n'.repeat(500)
   const service = await createSingleFileContextService('data/sample.csv', content)
   service.setTokenEstimateProfile(getTokenEstimateProfile('gemini'))
@@ -334,15 +370,16 @@ test('ContextApplicationService preview estimates account for numeric-heavy file
   const [preview] = await service.estimatePreviewForProfiles(options, [
     getTokenEstimateProfile('gemini'),
   ])
-  const output = await service.buildContext(options)
+  const output = await service.createContextFromSelection(options)
 
-  assertWithinPercent(preview.tokens, output.estimatedTokenCount, 15)
+  assertWithinPercent(preview.tokens, output.estimatedTokens, 15)
 })
 
 async function createSingleFileContextService(
   relativePath: string,
   content: string,
-): Promise<ContextApplicationService> {
+  readSelectedGitDiffs?: ConstructorParameters<typeof SelectionContextBuilder>[4],
+): Promise<SelectionContextBuilder> {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const absolutePath = `/repo/${relativePath}`
   const index = new FileIndex(
@@ -360,17 +397,16 @@ async function createSingleFileContextService(
   await index.ensureFresh()
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), `w:${relativePath}`, true)
-  return new ContextApplicationService(
+  return new SelectionContextBuilder(
     index,
     selection,
     {
       async readText() {
         return content
       },
-      async writeText() {},
     },
-    async () => {},
     getTokenEstimateProfile('claude'),
+    readSelectedGitDiffs,
   )
 }
 

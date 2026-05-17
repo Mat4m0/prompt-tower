@@ -1,36 +1,40 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import { PromptPresetApplicationService } from '../../app/PromptPresetApplicationService'
 import {
-  createPromptPreset,
-  duplicatePromptPreset,
-  getCurrentPromptPresetVersion,
-  restorePromptPresetVersion,
-  savePromptPresetVersion,
-  softDeletePromptPreset,
-} from '../../core/prompts/PromptPresetVersioning'
-import { parsePromptPresets } from '../../core/prompts/parsePromptPresets'
+  PromptPrefixes,
+  createPromptPrefix,
+  duplicatePromptPrefix,
+  parsePromptPrefixes,
+} from '../../app/PromptPrefixes'
 import { createMemoryStorage } from '../helpers'
 
-test('PromptPreset versioning is recoverable', () => {
-  const preset = createPromptPreset('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'p1')
-  const edited = savePromptPresetVersion(preset, 'v2', undefined, '2026-01-02T00:00:00.000Z')
-  const restored = restorePromptPresetVersion(
-    edited,
-    preset.currentVersionId,
-    '2026-01-03T00:00:00.000Z',
-  )
-  const duplicated = duplicatePromptPreset(restored, '2026-01-04T00:00:00.000Z', 'p2')
-  const deleted = softDeletePromptPreset(restored, '2026-01-05T00:00:00.000Z')
+test('PromptPrefixes creates, selects, edits, duplicates, and hard deletes prefixes', async () => {
+  const service = new PromptPrefixes(createMemoryStorage({}), createMemoryStorage({}))
+  const prefix = await service.createPrefix('Audit', 'v1')
 
-  assert.equal(edited.versions.length, 2)
-  assert.equal(getCurrentPromptPresetVersion(restored).text, 'v1')
-  assert.equal(duplicated.id, 'p2')
-  assert.equal(getCurrentPromptPresetVersion(duplicated).text, 'v1')
-  assert.equal(deleted.deletedAt, '2026-01-05T00:00:00.000Z')
+  await service.updatePrefix(prefix.id, { name: 'Architecture Audit', text: 'v2' })
+  const duplicated = await service.duplicatePrefix(prefix.id)
+  await service.deletePrefix(prefix.id)
+
+  assert.equal(service.getActivePrefixId(), duplicated.id)
+  assert.deepEqual(
+    service.listPrefixes().map((candidate) => candidate.name),
+    ['Architecture Audit Copy'],
+  )
+  assert.equal(service.getEffectivePrefix(), 'v2')
 })
 
-test('PromptPreset migration deduplicates old prefix history', async () => {
+test('PromptPrefixes uses inline text when no saved prefix is active', async () => {
+  const service = new PromptPrefixes(createMemoryStorage({}), createMemoryStorage({}))
+
+  await service.setInlinePrefix('inline')
+  await service.setActivePrefix(null)
+
+  assert.equal(service.getActivePrefix(), null)
+  assert.equal(service.getEffectivePrefix(), 'inline')
+})
+
+test('PromptPrefixes imports old prefix history once without duplicates', async () => {
   const globalStorage = createMemoryStorage({
     'promptTower.prefixHistory': [
       { text: 'Audit' },
@@ -39,73 +43,53 @@ test('PromptPreset migration deduplicates old prefix history', async () => {
       { text: '' },
     ],
   })
-  const workspaceStorage = createMemoryStorage({})
-  const service = new PromptPresetApplicationService(globalStorage, workspaceStorage)
+  const service = new PromptPrefixes(globalStorage, createMemoryStorage({}))
 
-  await service.migrateOldPrefixHistory()
-  await service.migrateOldPrefixHistory()
+  await service.importOldPrefixesOnce()
+  await service.importOldPrefixesOnce()
 
   assert.deepEqual(
     service
-      .listPresets()
-      .map((preset) => getCurrentPromptPresetVersion(preset).text)
+      .listPrefixes()
+      .map((prefix) => prefix.text)
       .sort(),
     ['Audit', 'Refactor'],
   )
 })
 
-test('PromptPreset application service duplicates, restores, and soft deletes', async () => {
-  const service = new PromptPresetApplicationService(
-    createMemoryStorage({}),
-    createMemoryStorage({}),
-  )
-  const preset = await service.createPreset('Audit', 'v1')
-  const edited = await service.saveVersion(preset.id, 'v2')
-  await service.restoreVersion(edited.id, preset.currentVersionId)
-  const duplicated = await service.duplicatePreset(edited.id)
-  await service.deletePreset(edited.id)
-
-  assert.equal(service.getActivePresetId(), duplicated.id)
-  assert.deepEqual(
-    service.listPresets().map((candidate) => candidate.id),
-    [duplicated.id],
-  )
-  assert.equal(getCurrentPromptPresetVersion(duplicated).text, 'v1')
-})
-
-test('PromptPreset parser ignores corrupted stored presets', () => {
-  const valid = createPromptPreset('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'valid')
+test('PromptPrefixes parser ignores corrupted stored prefixes without hidden deletes', () => {
+  const valid = createPromptPrefix('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'valid')
 
   assert.deepEqual(
-    parsePromptPresets([
+    parsePromptPrefixes([
       valid,
-      { ...valid, id: 'missing-current', currentVersionId: 'missing' },
-      { ...valid, id: 'bad-version', versions: [{ id: 'v1' }] },
-      { ...valid, id: 'bad-deleted', deletedAt: 42 },
-    ]).map((preset) => preset.id),
+      { ...valid, id: 'missing-text', text: undefined },
+      { ...valid, id: 'bad-deleted', deletedAt: '2026-01-01T00:00:00.000Z' },
+      { ...valid, id: 'bad-updated', updatedAt: 42 },
+    ]).map((prefix) => prefix.id),
     ['valid'],
   )
 })
 
-test('PromptPreset application service ignores missing active preset ids', async () => {
-  const service = new PromptPresetApplicationService(
+test('PromptPrefixes ignores missing active prefix ids', () => {
+  const service = new PromptPrefixes(
     createMemoryStorage({}),
-    createMemoryStorage({ 'lupinumContext.activePromptPresetId': 'missing' }),
+    createMemoryStorage({ 'lupinumContext.activePromptPrefixId': 'missing' }),
   )
 
-  assert.equal(service.getActivePreset(), null)
+  assert.equal(service.getActivePrefix(), null)
   assert.equal(service.getEffectivePrefix(), '')
 })
 
-test('PromptPreset application service clears active preset when deleting it', async () => {
-  const service = new PromptPresetApplicationService(
-    createMemoryStorage({}),
-    createMemoryStorage({}),
-  )
-  const preset = await service.createPreset('Audit', 'v1')
+test('duplicatePromptPrefix copies only the current name and text', () => {
+  const prefix = createPromptPrefix('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'p1')
+  const duplicate = duplicatePromptPrefix(prefix, '2026-01-02T00:00:00.000Z', 'p2')
 
-  await service.deletePreset(preset.id)
-
-  assert.equal(service.getActivePresetId(), null)
-  assert.deepEqual(service.listPresets(), [])
+  assert.deepEqual(duplicate, {
+    id: 'p2',
+    name: 'Audit Copy',
+    text: 'v1',
+    createdAt: '2026-01-02T00:00:00.000Z',
+    updatedAt: '2026-01-02T00:00:00.000Z',
+  })
 })

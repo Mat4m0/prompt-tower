@@ -65,9 +65,9 @@ See rough token and input-cost estimates for Claude, OpenAI, and Gemini side by 
 
 Select recent commits in a dedicated tree view. Their diffs land in the context as a structured block — so when you ask "review my last change", the model actually sees the change.
 
-### Versioned prompt prefixes
+### Reusable prompt prefixes
 
-Save a reusable prefix ("You are reviewing a TypeScript codebase. Be specific…"), version it as you tweak it, and restore older versions. No more rewriting the same intro every time.
+Save named prefixes like "You are reviewing a TypeScript codebase. Be specific…" and switch between them without rewriting the same intro every time.
 
 ### Compact mode for token savings
 
@@ -85,7 +85,7 @@ Honors `.gitignore`, `.contextignore`, `.towerignore`, plus built-in rules. Keep
 src/
 ├─ core/
 │  └─ context/ContextAssembler.ts
-└─ app/ContextApplicationService.ts
+└─ app/SelectionContextBuilder.ts
 </project_tree>
 <project_files>
 <file name="ContextAssembler.ts" path="/src/core/context/ContextAssembler.ts">

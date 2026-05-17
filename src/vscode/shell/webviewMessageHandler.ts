@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { ContextOutputMode, ProjectTreeMode } from '../../core/context/ContextFormat'
+import { buildPromptExportTarget } from '../../core/export/PromptFileWriter'
 import {
   normalizePromptExportOptions,
   type PromptExportOptions,
@@ -8,23 +9,20 @@ import {
   TOKEN_ESTIMATE_PROFILES,
   getTokenEstimateProfile,
 } from '../../core/tokens/TokenEstimateProfiles'
-import { getCurrentPromptPresetVersion } from '../../core/prompts/PromptPresetVersioning'
-import type { ServiceContainer } from './serviceContainer'
+import type { ExtensionServices } from './extensionServices'
 import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
   WebviewToExtensionMessage,
 } from '../../shared/messages'
 
-export class MessageRouter {
+export class WebviewMessageHandler {
   private treeMode: ProjectTreeMode
   private outputMode: ContextOutputMode
   private exportOptions: PromptExportOptions
-  private preview = ''
-  private draftPrefixOverride: string | null = null
 
   constructor(
-    private services: ServiceContainer,
+    private services: ExtensionServices,
     private panel: vscode.WebviewPanel,
     private workspaceRoot: string,
   ) {
@@ -42,44 +40,35 @@ export class MessageRouter {
         await this.services.workspaceState.setEstimateSummaryProfileIds(message.profileIds)
         await this.postState()
         return
-      case 'prefix.inlineChanged':
-        if (this.services.promptPresets.getActivePresetId()) {
-          this.draftPrefixOverride = message.text
+      case 'prefix.inlineChanged': {
+        const activePrefixId = this.services.promptPrefixes.getActivePrefixId()
+        if (activePrefixId) {
+          await this.services.promptPrefixes.updatePrefix(activePrefixId, { text: message.text })
         } else {
-          this.draftPrefixOverride = null
-          await this.services.promptPresets.setInlinePrefix(message.text)
-          await this.services.promptPresets.setActivePreset(null)
+          await this.services.promptPrefixes.setInlinePrefix(message.text)
+          await this.services.promptPrefixes.setActivePrefix(null)
         }
         await this.postState()
         return
-      case 'prefix.selectPreset':
-        this.draftPrefixOverride = null
-        await this.services.promptPresets.setActivePreset(message.presetId)
+      }
+      case 'prefix.selectPrefix':
+        await this.services.promptPrefixes.setActivePrefix(message.prefixId)
         await this.postState()
         return
-      case 'prefix.createPreset':
-        this.draftPrefixOverride = null
-        await this.services.promptPresets.createPreset(message.name, message.text)
+      case 'prefix.createPrefix':
+        await this.services.promptPrefixes.createPrefix(message.name, message.text)
         await this.postState()
         return
-      case 'prefix.saveVersion':
-        await this.services.promptPresets.saveVersion(message.presetId, message.text)
-        this.draftPrefixOverride = null
+      case 'prefix.renamePrefix':
+        await this.services.promptPrefixes.updatePrefix(message.prefixId, { name: message.name })
         await this.postState()
         return
-      case 'prefix.restoreVersion':
-        await this.services.promptPresets.restoreVersion(message.presetId, message.versionId)
-        this.draftPrefixOverride = null
+      case 'prefix.duplicatePrefix':
+        await this.services.promptPrefixes.duplicatePrefix(message.prefixId)
         await this.postState()
         return
-      case 'prefix.duplicatePreset':
-        await this.services.promptPresets.duplicatePreset(message.presetId)
-        this.draftPrefixOverride = null
-        await this.postState()
-        return
-      case 'prefix.deletePreset':
-        await this.services.promptPresets.deletePreset(message.presetId)
-        this.draftPrefixOverride = null
+      case 'prefix.deletePrefix':
+        await this.services.promptPrefixes.deletePrefix(message.prefixId)
         await this.postState()
         return
       case 'context.optionsChanged':
@@ -93,10 +82,13 @@ export class MessageRouter {
         return
       case 'context.create': {
         await this.setContextOptions(message.treeMode, message.outputMode)
-        const output = message.copy
-          ? await this.services.contextService.copyContext(this.buildOptions())
-          : await this.services.contextService.buildContext(this.buildOptions())
-        this.preview = output.text
+        const output = await this.services.createContextFromSelection({
+          treeMode: this.treeMode,
+          outputMode: this.outputMode,
+        })
+        if (message.copy) {
+          await vscode.env.clipboard.writeText(output.text)
+        }
         this.post({ type: 'context.previewUpdated', text: output.text })
         await this.postState()
         showContextResultMessage(
@@ -113,15 +105,15 @@ export class MessageRouter {
         await this.setContextOptions(message.treeMode, message.outputMode)
         this.exportOptions = normalizePromptExportOptions(message.options)
         await this.services.workspaceState.setExportOptions(this.exportOptions)
-        const saved = await this.services.contextService.saveContext(
-          this.workspaceRoot,
-          this.exportOptions,
-          this.buildOptions(),
-        )
-        this.preview = saved.output.text
-        this.post({ type: 'context.previewUpdated', text: saved.output.text })
+        const output = await this.services.createContextFromSelection({
+          treeMode: this.treeMode,
+          outputMode: this.outputMode,
+        })
+        const target = buildPromptExportTarget(this.workspaceRoot, this.exportOptions, new Date())
+        await this.services.fileSystem.writeText(target.absolutePath, output.text)
+        this.post({ type: 'context.previewUpdated', text: output.text })
         await this.postState()
-        showContextResultMessage(`Saved ${saved.fileName}.`, saved.output.warnings.length)
+        showContextResultMessage(`Saved ${target.fileName}.`, output.warnings.length)
         return
       }
       case 'selection.clear':
@@ -138,11 +130,10 @@ export class MessageRouter {
   }
 
   async createState(): Promise<ContextPanelState> {
-    const activePresetId = this.services.promptPresets.getActivePresetId()
-    const presets = this.services.promptPresets.listPresets()
-    const prefix = this.getDraftPrefix()
+    const activePrefixId = this.services.promptPrefixes.getActivePrefixId()
+    const prefix = this.services.promptPrefixes.getEffectivePrefix()
     const visibleEstimateProfileIds = this.services.workspaceState.getEstimateSummaryProfileIds()
-    const estimateSummaries = await this.services.contextService.estimatePreviewForProfiles(
+    const estimateSummaries = await this.services.contextBuilder.estimatePreviewForProfiles(
       {
         prefix,
         treeMode: this.treeMode,
@@ -151,11 +142,10 @@ export class MessageRouter {
       visibleEstimateProfileIds.map(getTokenEstimateProfile),
     )
     return {
-      tokenEstimateProfiles: TOKEN_ESTIMATE_PROFILES.map(({ id, label, modelHint, updatedAt }) => ({
+      tokenEstimateProfiles: TOKEN_ESTIMATE_PROFILES.map(({ id, label, estimateNote }) => ({
         id,
         label,
-        modelHint,
-        updatedAt,
+        estimateNote,
       })),
       visibleEstimateProfileIds,
       estimateSummaries: estimateSummaries.map(({ profile, tokens, cost }) => ({
@@ -164,32 +154,16 @@ export class MessageRouter {
         tokens,
         cost,
       })),
-      promptPresets: presets.map((preset) => ({
-        id: preset.id,
-        name: preset.name,
-        currentVersionId: preset.currentVersionId,
-        versions: preset.versions.map((version) => ({
-          id: version.id,
-          text: version.text,
-          note: version.note,
-          createdAt: version.createdAt,
-          current: version.id === preset.currentVersionId,
-        })),
-        text: getCurrentPromptPresetVersion(preset).text,
+      promptPrefixes: this.services.promptPrefixes.listPrefixes().map((promptPrefix) => ({
+        id: promptPrefix.id,
+        name: promptPrefix.name,
+        text: promptPrefix.text,
       })),
-      activePresetId,
+      activePrefixId,
       inlinePrefix: prefix,
       treeMode: this.treeMode,
       outputMode: this.outputMode,
       exportOptions: this.exportOptions,
-    }
-  }
-
-  private buildOptions() {
-    return {
-      prefix: this.getDraftPrefix(),
-      treeMode: this.treeMode,
-      outputMode: this.outputMode,
     }
   }
 
@@ -203,10 +177,6 @@ export class MessageRouter {
     await this.services.workspaceState.setOutputMode(outputMode)
   }
 
-  private getDraftPrefix(): string {
-    return this.draftPrefixOverride ?? this.services.promptPresets.getEffectivePrefix()
-  }
-
   private post(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message)
   }
@@ -218,11 +188,9 @@ function showContextResultMessage(successMessage: string, warningCount: number):
     return
   }
 
-  vscode.window.showWarningMessage(`${successMessage} ${formatUnreadableFiles(warningCount)}.`)
+  vscode.window.showWarningMessage(`${successMessage} ${formatWarnings(warningCount)}.`)
 }
 
-function formatUnreadableFiles(count: number): string {
-  return count === 1
-    ? '1 selected file could not be read'
-    : `${count} selected files could not be read`
+function formatWarnings(count: number): string {
+  return count === 1 ? '1 warning was reported' : `${count} warnings were reported`
 }

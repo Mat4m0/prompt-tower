@@ -19,6 +19,7 @@ export interface GitCommit {
 export interface GitCommitDiff {
   commit: GitCommit
   patch: string
+  warnings?: readonly string[]
 }
 
 export interface GitCommitHost {

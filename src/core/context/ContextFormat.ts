@@ -32,11 +32,19 @@ export interface ContextGitDiff {
   patch: string
 }
 
-export interface ContextWarning {
-  type: 'missingFile'
-  fileId: string
-  path: string
-}
+export type ContextWarning =
+  | {
+      type: 'missingFile'
+      fileId: string
+      path: string
+    }
+  | {
+      type: 'gitDiff'
+      commitId: string
+      shortHash: string
+      subject: string
+      message: string
+    }
 
 export interface ContextBuildRequest {
   files: readonly ContextFile[]

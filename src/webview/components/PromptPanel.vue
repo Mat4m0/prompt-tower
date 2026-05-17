@@ -7,42 +7,27 @@ const props = defineProps<{
   send: (message: WebviewToExtensionMessage) => void
 }>()
 
-const presetName = ref('')
-const selectedVersionId = ref('')
+const newPrefixName = ref('')
+const activePrefixName = ref('')
 
-const activePreset = computed(
+const activePrefix = computed(
   () =>
-    props.state.promptPresets.find((preset) => preset.id === props.state.activePresetId) ?? null,
-)
-
-const versionsReversed = computed(() =>
-  activePreset.value ? [...activePreset.value.versions].reverse() : [],
+    props.state.promptPrefixes.find((prefix) => prefix.id === props.state.activePrefixId) ?? null,
 )
 
 watch(
-  activePreset,
-  (preset) => {
-    if (!preset) {
-      selectedVersionId.value = ''
-      return
-    }
-    const current = preset.versions.find((v) => v.current)
-    selectedVersionId.value = current?.id ?? preset.currentVersionId
+  activePrefix,
+  (prefix) => {
+    activePrefixName.value = prefix?.name ?? ''
   },
   { immediate: true },
 )
 
-function versionLabel(version: { id: string; current: boolean; createdAt: string }): string {
-  const date = new Date(version.createdAt)
-  const label = Number.isNaN(date.valueOf()) ? version.createdAt : date.toLocaleString()
-  return (version.current ? 'current · ' : '') + label
-}
-
-function onPresetChange(event: Event) {
+function onPrefixChange(event: Event) {
   const value = (event.target as HTMLSelectElement).value
   props.send({
-    type: 'prefix.selectPreset',
-    presetId: value === '' ? null : value,
+    type: 'prefix.selectPrefix',
+    prefixId: value === '' ? null : value,
   })
 }
 
@@ -53,60 +38,49 @@ function onInlineInput(event: Event) {
   })
 }
 
-function onCreatePreset() {
-  const name = presetName.value.trim()
+function onActiveNameInput(event: Event) {
+  const prefixId = props.state.activePrefixId
+  if (!prefixId) {
+    return
+  }
+  activePrefixName.value = (event.target as HTMLInputElement).value
+  props.send({
+    type: 'prefix.renamePrefix',
+    prefixId,
+    name: activePrefixName.value,
+  })
+}
+
+function onCreatePrefix() {
+  const name = newPrefixName.value.trim()
   if (!name) {
     return
   }
   props.send({
-    type: 'prefix.createPreset',
+    type: 'prefix.createPrefix',
     name,
     text: props.state.inlinePrefix,
   })
-  presetName.value = ''
-}
-
-function onSaveVersion() {
-  const presetId = props.state.activePresetId
-  if (!presetId) {
-    return
-  }
-  props.send({
-    type: 'prefix.saveVersion',
-    presetId,
-    text: props.state.inlinePrefix,
-  })
-}
-
-function onRestoreVersion() {
-  const presetId = props.state.activePresetId
-  if (!presetId || !selectedVersionId.value) {
-    return
-  }
-  props.send({
-    type: 'prefix.restoreVersion',
-    presetId,
-    versionId: selectedVersionId.value,
-  })
+  newPrefixName.value = ''
 }
 
 function onDuplicate() {
-  const presetId = props.state.activePresetId
-  if (!presetId) {
+  const prefixId = props.state.activePrefixId
+  if (!prefixId) {
     return
   }
-  props.send({ type: 'prefix.duplicatePreset', presetId })
+  props.send({ type: 'prefix.duplicatePrefix', prefixId })
 }
 
 function onDelete() {
-  const presetId = props.state.activePresetId
-  if (!presetId) {
+  const prefixId = props.state.activePrefixId
+  if (!prefixId) {
     return
   }
-  if (!window.confirm('Delete this prefix preset?')) {
+  if (!window.confirm('Delete this prefix?')) {
     return
   }
-  props.send({ type: 'prefix.deletePreset', presetId })
+  props.send({ type: 'prefix.deletePrefix', prefixId })
 }
 </script>
 
@@ -114,40 +88,38 @@ function onDelete() {
   <div class="panel">
     <div class="row">
       <label>Prefix</label>
-      <select :value="state.activePresetId ?? ''" @change="onPresetChange">
+      <select :value="state.activePrefixId ?? ''" @change="onPrefixChange">
         <option value="">Inline prefix</option>
-        <option v-for="preset in state.promptPresets" :key="preset.id" :value="preset.id">
-          {{ preset.name }}
+        <option v-for="prefix in state.promptPrefixes" :key="prefix.id" :value="prefix.id">
+          {{ prefix.name }}
         </option>
       </select>
       <input
-        v-model="presetName"
+        v-if="activePrefix"
+        :value="activePrefixName"
         class="name-input"
-        placeholder="New preset name"
+        spellcheck="false"
+        @input="onActiveNameInput"
+      />
+      <input
+        v-else
+        v-model="newPrefixName"
+        class="name-input"
+        placeholder="New prefix name"
         spellcheck="false"
       />
-      <button class="secondary" @click="onCreatePreset">New</button>
-      <button class="secondary" :disabled="!activePreset" @click="onSaveVersion">
-        Save Version
+      <button class="secondary" :disabled="activePrefix !== null" @click="onCreatePrefix">
+        New
       </button>
-      <button class="secondary" :disabled="!activePreset" @click="onDuplicate">Duplicate</button>
-      <button class="secondary danger" :disabled="!activePreset" @click="onDelete">Delete</button>
+      <button class="secondary" :disabled="!activePrefix" @click="onDuplicate">Duplicate</button>
+      <button class="secondary danger" :disabled="!activePrefix" @click="onDelete">Delete</button>
     </div>
     <div class="row">
       <textarea
         :value="state.inlinePrefix"
-        placeholder="Write a reusable prefix or select a preset"
+        placeholder="Write a reusable prefix or select a saved prefix"
         @input="onInlineInput"
       />
-    </div>
-    <div v-if="activePreset" class="row subtle-row">
-      <label>Versions</label>
-      <select v-model="selectedVersionId">
-        <option v-for="version in versionsReversed" :key="version.id" :value="version.id">
-          {{ versionLabel(version) }}
-        </option>
-      </select>
-      <button class="secondary" @click="onRestoreVersion">Restore</button>
     </div>
   </div>
 </template>

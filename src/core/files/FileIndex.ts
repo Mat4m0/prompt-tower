@@ -1,5 +1,6 @@
 import { estimateTokenCountFromBytes } from '../tokens/TokenEstimateProfiles'
 import type { TokenEstimateProfile } from '../tokens/TokenEstimateProfiles'
+import path from 'path'
 import { getBaseName, getDirName, getExtension, joinPath, toPosixPath } from './pathUtils'
 
 export type IndexedNodeKind = 'workspace' | 'directory' | 'file'
@@ -204,6 +205,9 @@ export class FileIndex {
         }
 
         const relativePath = toRelativePath(workspace.rootPath, absolutePath)
+        if (relativePath === null) {
+          continue
+        }
         const parentId = this.ensureDirectoryNodes(workspace, relativePath, nodes)
         const file = createIndexedFile(
           workspace,
@@ -355,12 +359,14 @@ export function createNodeId(workspaceId: string, relativePath: string): string 
   return `${workspaceId}:${toPosixPath(relativePath)}`
 }
 
-function toRelativePath(workspaceRoot: string, absolutePath: string): string {
-  const normalizedRoot = toPosixPath(workspaceRoot).replace(/\/$/, '')
-  const normalizedPath = toPosixPath(absolutePath)
-  return normalizedPath.startsWith(`${normalizedRoot}/`)
-    ? normalizedPath.slice(normalizedRoot.length + 1)
-    : normalizedPath
+function toRelativePath(workspaceRoot: string, absolutePath: string): string | null {
+  const normalizedRoot = path.posix.normalize(toPosixPath(workspaceRoot)).replace(/\/$/, '')
+  const normalizedPath = path.posix.normalize(toPosixPath(absolutePath))
+  if (!normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return null
+  }
+  const relativePath = normalizedPath.slice(normalizedRoot.length + 1)
+  return relativePath.startsWith('../') || relativePath === '..' ? null : relativePath
 }
 
 function appendChild(nodes: Map<string, IndexedNode>, parentId: string, childId: string): void {

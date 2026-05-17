@@ -1,16 +1,16 @@
 import type { ProjectTreeMode, ContextOutputMode } from '../core/context/ContextFormat'
-import type { PromptExportOptions } from '../core/export/ExportOptions'
+import type { PromptExportFormat, PromptExportOptions } from '../core/export/ExportOptions'
+import { isTokenEstimateProfileId } from '../core/tokens/TokenEstimateProfiles'
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'estimateSummary.setProfiles'; profileIds: readonly string[] }
   | { type: 'prefix.inlineChanged'; text: string }
-  | { type: 'prefix.selectPreset'; presetId: string | null }
-  | { type: 'prefix.createPreset'; name: string; text: string }
-  | { type: 'prefix.saveVersion'; presetId: string; text: string }
-  | { type: 'prefix.restoreVersion'; presetId: string; versionId: string }
-  | { type: 'prefix.duplicatePreset'; presetId: string }
-  | { type: 'prefix.deletePreset'; presetId: string }
+  | { type: 'prefix.selectPrefix'; prefixId: string | null }
+  | { type: 'prefix.createPrefix'; name: string; text: string }
+  | { type: 'prefix.renamePrefix'; prefixId: string; name: string }
+  | { type: 'prefix.duplicatePrefix'; prefixId: string }
+  | { type: 'prefix.deletePrefix'; prefixId: string }
   | { type: 'context.optionsChanged'; treeMode: ProjectTreeMode; outputMode: ContextOutputMode }
   | { type: 'export.optionsChanged'; options: Partial<PromptExportOptions> }
   | {
@@ -36,8 +36,7 @@ export interface ContextPanelState {
   tokenEstimateProfiles: readonly {
     id: string
     label: string
-    modelHint: string
-    updatedAt: string
+    estimateNote: string
   }[]
   visibleEstimateProfileIds: readonly string[]
   estimateSummaries: readonly {
@@ -46,20 +45,12 @@ export interface ContextPanelState {
     tokens: number
     cost: string
   }[]
-  promptPresets: readonly {
+  promptPrefixes: readonly {
     id: string
     name: string
     text: string
-    currentVersionId: string
-    versions: readonly {
-      id: string
-      text: string
-      note?: string
-      createdAt: string
-      current: boolean
-    }[]
   }[]
-  activePresetId: string | null
+  activePrefixId: string | null
   inlinePrefix: string
   treeMode: ProjectTreeMode
   outputMode: ContextOutputMode
@@ -74,44 +65,61 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
   switch (message.type) {
     case 'ready':
     case 'selection.clear':
-      return true
+      return hasOnlyKeys(message, ['type'])
     case 'context.copyPreview':
-      return typeof message.text === 'string'
+      return hasOnlyKeys(message, ['type', 'text']) && typeof message.text === 'string'
     case 'estimateSummary.setProfiles':
       return (
+        hasOnlyKeys(message, ['type', 'profileIds']) &&
         Array.isArray(message.profileIds) &&
-        message.profileIds.every((id) => typeof id === 'string')
+        message.profileIds.every((id) => typeof id === 'string' && isTokenEstimateProfileId(id))
       )
     case 'prefix.inlineChanged':
-      return typeof message.text === 'string'
-    case 'prefix.selectPreset':
-      return typeof message.presetId === 'string' || message.presetId === null
-    case 'prefix.createPreset':
-      return typeof message.name === 'string' && typeof message.text === 'string'
-    case 'prefix.saveVersion':
-      return typeof message.presetId === 'string' && typeof message.text === 'string'
-    case 'prefix.restoreVersion':
-      return typeof message.presetId === 'string' && typeof message.versionId === 'string'
-    case 'prefix.duplicatePreset':
-    case 'prefix.deletePreset':
-      return typeof message.presetId === 'string'
+      return hasOnlyKeys(message, ['type', 'text']) && typeof message.text === 'string'
+    case 'prefix.selectPrefix':
+      return (
+        hasOnlyKeys(message, ['type', 'prefixId']) &&
+        (typeof message.prefixId === 'string' || message.prefixId === null)
+      )
+    case 'prefix.createPrefix':
+      return (
+        hasOnlyKeys(message, ['type', 'name', 'text']) &&
+        typeof message.name === 'string' &&
+        typeof message.text === 'string'
+      )
+    case 'prefix.renamePrefix':
+      return (
+        hasOnlyKeys(message, ['type', 'prefixId', 'name']) &&
+        typeof message.prefixId === 'string' &&
+        typeof message.name === 'string'
+      )
+    case 'prefix.duplicatePrefix':
+    case 'prefix.deletePrefix':
+      return hasOnlyKeys(message, ['type', 'prefixId']) && typeof message.prefixId === 'string'
     case 'context.optionsChanged':
-      return isTreeMode(message.treeMode) && isOutputMode(message.outputMode)
+      return (
+        hasOnlyKeys(message, ['type', 'treeMode', 'outputMode']) &&
+        isTreeMode(message.treeMode) &&
+        isOutputMode(message.outputMode)
+      )
     case 'context.create':
       return (
+        hasOnlyKeys(message, ['type', 'copy', 'treeMode', 'outputMode']) &&
         typeof message.copy === 'boolean' &&
         isTreeMode(message.treeMode) &&
         isOutputMode(message.outputMode)
       )
     case 'context.save':
       return (
-        typeof message.options === 'object' &&
-        message.options !== null &&
+        hasOnlyKeys(message, ['type', 'options', 'treeMode', 'outputMode']) &&
+        isPartialPromptExportOptions(message.options) &&
         isTreeMode(message.treeMode) &&
         isOutputMode(message.outputMode)
       )
     case 'export.optionsChanged':
-      return typeof message.options === 'object' && message.options !== null
+      return (
+        hasOnlyKeys(message, ['type', 'options']) && isPartialPromptExportOptions(message.options)
+      )
     default:
       return false
   }
@@ -130,36 +138,24 @@ function isOutputMode(value: unknown): value is ContextOutputMode {
   return value === 'readable' || value === 'compact'
 }
 
-export function isExtensionToWebviewMessage(value: unknown): value is ExtensionToWebviewMessage {
+function isPartialPromptExportOptions(value: unknown): value is Partial<PromptExportOptions> {
   if (typeof value !== 'object' || value === null) {
     return false
   }
-  const message = value as Record<string, unknown>
-  switch (message.type) {
-    case 'context.previewUpdated':
-      return typeof message.text === 'string'
-    case 'state.changed':
-      return isContextPanelState(message.state)
-    default:
-      return false
-  }
+
+  const options = value as Record<string, unknown>
+  return (
+    hasOnlyKeys(options, ['fileName', 'format', 'includeTimestamp']) &&
+    (options.fileName === undefined || typeof options.fileName === 'string') &&
+    (options.format === undefined || isExportFormat(options.format)) &&
+    (options.includeTimestamp === undefined || typeof options.includeTimestamp === 'boolean')
+  )
 }
 
-function isContextPanelState(value: unknown): value is ContextPanelState {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const state = value as Record<string, unknown>
-  return (
-    Array.isArray(state.tokenEstimateProfiles) &&
-    Array.isArray(state.visibleEstimateProfileIds) &&
-    Array.isArray(state.estimateSummaries) &&
-    Array.isArray(state.promptPresets) &&
-    (typeof state.activePresetId === 'string' || state.activePresetId === null) &&
-    typeof state.inlinePrefix === 'string' &&
-    isTreeMode(state.treeMode) &&
-    isOutputMode(state.outputMode) &&
-    typeof state.exportOptions === 'object' &&
-    state.exportOptions !== null
-  )
+function isExportFormat(value: unknown): value is PromptExportFormat {
+  return value === 'md' || value === 'txt'
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key))
 }

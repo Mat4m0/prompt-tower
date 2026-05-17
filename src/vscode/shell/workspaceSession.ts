@@ -1,12 +1,12 @@
 import * as vscode from 'vscode'
-import type { ServiceContainer } from './serviceContainer'
+import type { ExtensionServices } from './extensionServices'
 
 export class WorkspaceSession {
   private refreshTimer: NodeJS.Timeout | undefined
 
   constructor(
     private context: vscode.ExtensionContext,
-    private services: ServiceContainer,
+    private services: ExtensionServices,
   ) {}
 
   start(): void {

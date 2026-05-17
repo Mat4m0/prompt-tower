@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
+import * as fs from 'node:fs/promises'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { test } from 'vite-plus/test'
 import { GitSelection } from '../../core/git/GitSelection'
 import type { GitCommit } from '../../core/git/GitTypes'
+import { VsCodeGit } from '../../vscode/VsCodeGit'
 
 test('GitSelection keeps selected commits as derived state', () => {
   const selection = new GitSelection()
@@ -26,6 +31,89 @@ test('GitSelection drops selected commits that disappear after refresh', () => {
   assert.deepEqual(selection.getSnapshot().selectedCommitIds, [])
 })
 
+test('VsCodeGit returns a warning instead of throwing when a selected diff cannot be read', async () => {
+  const git = new VsCodeGit()
+  const diff = await git.readCommitDiff(commit('missing', 'Missing commit'))
+
+  assert.equal(diff.patch, '')
+  assert.match(diff.warnings?.[0] ?? '', /Could not read commit diff/)
+})
+
+test('VsCodeGit logs an explicit message for non-git workspaces', async () => {
+  const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'lupinum-context-not-git-test-'))
+  const messages: string[] = []
+  try {
+    const commits = await new VsCodeGit({
+      info(message) {
+        messages.push(message)
+      },
+      error() {},
+    }).listRecentCommits([{ id: 'w', name: 'plain', rootPath }], 1)
+
+    assert.deepEqual(commits, [])
+    assert.match(messages.join('\n'), /not a Git repository/)
+  } finally {
+    await fs.rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test('VsCodeGit logs an explicit message for empty repositories', async () => {
+  const repo = await createTempGitRepo()
+  const messages: string[] = []
+  try {
+    const commits = await new VsCodeGit({
+      info(message) {
+        messages.push(message)
+      },
+      error() {},
+    }).listRecentCommits([{ id: 'w', name: 'empty', rootPath: repo }], 1)
+
+    assert.deepEqual(commits, [])
+    assert.match(messages.join('\n'), /has no commits/)
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('VsCodeGit warns when binary patch lines are omitted', async () => {
+  const repo = await createTempGitRepo()
+  try {
+    await fs.writeFile(path.join(repo, 'image.bin'), Buffer.from([0, 1, 2, 3, 4, 5]))
+    await git(repo, ['add', 'image.bin'])
+    await git(repo, ['commit', '-m', 'Add binary'])
+    const [commitInfo] = await new VsCodeGit().listRecentCommits(
+      [{ id: 'w', name: 'demo', rootPath: repo }],
+      1,
+    )
+
+    const diff = await new VsCodeGit().readCommitDiff(commitInfo)
+
+    assert.match(diff.warnings?.join('\n') ?? '', /Binary patch content was omitted/)
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true })
+  }
+})
+
+test('VsCodeGit truncates oversized diffs with a warning', async () => {
+  const repo = await createTempGitRepo()
+  try {
+    await fs.writeFile(path.join(repo, 'large.txt'), `${'x'.repeat(1_100_000)}\n`)
+    await git(repo, ['add', 'large.txt'])
+    await git(repo, ['commit', '-m', 'Add large file'])
+    const [commitInfo] = await new VsCodeGit().listRecentCommits(
+      [{ id: 'w', name: 'demo', rootPath: repo }],
+      1,
+    )
+
+    const diff = await new VsCodeGit().readCommitDiff(commitInfo)
+
+    assert.ok(diff.patch.length < 1_010_000)
+    assert.match(diff.warnings?.join('\n') ?? '', /truncated at 1000000 characters/)
+  } finally {
+    await fs.rm(repo, { recursive: true, force: true })
+  }
+})
+
 function commit(hash: string, subject: string): GitCommit {
   return {
     id: `demo:${hash}`,
@@ -38,4 +126,24 @@ function commit(hash: string, subject: string): GitCommit {
     authorDate: '2026-05-16T10:00:00.000Z',
     subject,
   }
+}
+
+async function createTempGitRepo(): Promise<string> {
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'lupinum-context-git-test-'))
+  await git(repo, ['init'])
+  await git(repo, ['config', 'user.name', 'Test User'])
+  await git(repo, ['config', 'user.email', 'test@example.com'])
+  return repo
+}
+
+function git(cwd: string, args: readonly string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr || error.message))
+        return
+      }
+      resolve(stdout)
+    })
+  })
 }

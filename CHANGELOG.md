@@ -14,14 +14,14 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 - **Visual file selection** in a native VS Code tree with live rough size estimates per file and total.
 - **Rough multi-provider estimates** for Claude, OpenAI, and Gemini side by side.
 - **Git commit selection** — pick recent commits and include their diffs as a structured block in the generated context.
-- **Versioned prompt prefixes** — save reusable prompt prefixes, version them as you edit, restore older versions.
+- **Reusable prompt prefixes** — save named prompt prefixes and switch between them.
 - **Compact output mode** — strips whitespace to save tokens when the chat window is tight.
 - **Smart ignores** — honors `.gitignore`, `.contextignore`, `.towerignore`, plus sensible built-in rules.
 - **Clean XML output format** (`<context>` / `<project_tree>` / `<project_files>` / `<git_diffs>`) — structured, parseable, model-friendly.
 
 ### Project
 
-- Clean `core / app / vscode` architecture; dependency direction enforced by `scripts/check-architecture.mjs`.
+- Clean `core / app / vscode` architecture; the core boundary is enforced by `scripts/check-no-core-vscode-imports.mjs`.
 - Webview rebuilt on Vue 3.
 - `vp` (vite-plus) handles build, lint, format, and test in one toolchain.
 - Project ships pinned to pnpm 10 via the `packageManager` field.

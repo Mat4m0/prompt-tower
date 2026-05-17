@@ -1,7 +1,11 @@
 import * as vscode from 'vscode'
-import { ContextApplicationService } from '../../app/ContextApplicationService'
-import { PromptPresetApplicationService } from '../../app/PromptPresetApplicationService'
-import { WorkspaceStateService } from '../../app/WorkspaceStateService'
+import {
+  SelectionContextBuilder,
+  type ContextBuildOptions,
+  type ContextBuildOutput,
+} from '../../app/SelectionContextBuilder'
+import { PromptPrefixes } from '../../app/PromptPrefixes'
+import { WorkspaceSettings } from '../../app/WorkspaceSettings'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { GitSelection } from '../../core/git/GitSelection'
@@ -14,7 +18,7 @@ import { VsCodeFileSystem } from '../VsCodeFileSystem'
 import { VsCodeGit } from '../VsCodeGit'
 import { DebugLogger } from './DebugLogger'
 
-export interface ServiceContainer {
+export interface ExtensionServices {
   getWorkspaces(): IndexedWorkspace[]
   getPrimaryWorkspaceRoot(): string | undefined
   fileSystem: VsCodeFileSystem
@@ -22,15 +26,18 @@ export interface ServiceContainer {
   fileIndex: FileIndex
   fileSelection: FileSelection
   gitSelection: GitSelection
-  contextService: ContextApplicationService
-  promptPresets: PromptPresetApplicationService
-  workspaceState: WorkspaceStateService
+  contextBuilder: SelectionContextBuilder
+  promptPrefixes: PromptPrefixes
+  workspaceState: WorkspaceSettings
   logger: DebugLogger
+  createContextFromSelection(
+    options: Omit<ContextBuildOptions, 'prefix'>,
+  ): Promise<ContextBuildOutput>
   getTokenEstimateProfile(): TokenEstimateProfile
   setTokenEstimateProfile(profileId: string): Promise<TokenEstimateProfile>
 }
 
-export function createServiceContainer(context: vscode.ExtensionContext): ServiceContainer {
+export function createExtensionServices(context: vscode.ExtensionContext): ExtensionServices {
   const logger = new DebugLogger()
   const fileSystem = new VsCodeFileSystem(logger)
   const gitHost = new VsCodeGit(logger)
@@ -42,19 +49,15 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
   const fileIndex = new FileIndex(fileSystem, getWorkspaces(), tokenProfile, logger)
   const fileSelection = new FileSelection()
   const gitSelection = new GitSelection()
-  const contextService = new ContextApplicationService(
+  const contextBuilder = new SelectionContextBuilder(
     fileIndex,
     fileSelection,
     fileSystem,
-    (text) => vscode.env.clipboard.writeText(text),
     tokenProfile,
     () => readSelectedGitDiffs(gitHost, gitSelection),
   )
-  const promptPresets = new PromptPresetApplicationService(
-    context.globalState,
-    context.workspaceState,
-  )
-  const workspaceState = new WorkspaceStateService(context.workspaceState)
+  const promptPrefixes = new PromptPrefixes(context.globalState, context.workspaceState)
+  const workspaceState = new WorkspaceSettings(context.workspaceState)
 
   return {
     getWorkspaces,
@@ -64,10 +67,16 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
     fileIndex,
     fileSelection,
     gitSelection,
-    contextService,
-    promptPresets,
+    contextBuilder,
+    promptPrefixes,
     workspaceState,
     logger,
+    createContextFromSelection(options): Promise<ContextBuildOutput> {
+      return contextBuilder.createContextFromSelection({
+        ...options,
+        prefix: promptPrefixes.getEffectivePrefix(),
+      })
+    },
     getTokenEstimateProfile(): TokenEstimateProfile {
       return tokenProfile
     },
@@ -75,7 +84,7 @@ export function createServiceContainer(context: vscode.ExtensionContext): Servic
       const profile = getTokenEstimateProfile(profileId)
       await context.globalState.update('lupinumContext.selectedTokenEstimateProfile', profile.id)
       tokenProfile = profile
-      contextService.setTokenEstimateProfile(profile)
+      contextBuilder.setTokenEstimateProfile(profile)
       return profile
     },
   }

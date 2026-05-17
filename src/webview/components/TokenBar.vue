@@ -89,7 +89,7 @@ function onProfileToggle(profileId: string, checked: boolean) {
             v-for="profile in state.tokenEstimateProfiles"
             :key="profile.id"
             class="popover-check"
-            :title="`${profile.modelHint}, updated ${profile.updatedAt}`"
+            :title="profile.estimateNote"
           >
             <input
               type="checkbox"

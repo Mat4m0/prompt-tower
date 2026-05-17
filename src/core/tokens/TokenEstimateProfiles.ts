@@ -3,8 +3,7 @@ export type TokenEstimateProfileId = 'claude' | 'openai' | 'gemini'
 export interface TokenEstimateProfile {
   id: TokenEstimateProfileId
   label: string
-  modelHint: string
-  updatedAt: string
+  estimateNote: string
   charsPerToken: number
   numericCharsPerToken?: number
   inputPricePerMTok: number
@@ -16,8 +15,7 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
   {
     id: 'claude',
     label: 'Claude',
-    modelHint: 'Claude estimate profile',
-    updatedAt: '2026-05-17',
+    estimateNote: 'Rough character-based estimate for Claude-style context windows.',
     charsPerToken: 3.9,
     numericCharsPerToken: 1.67,
     inputPricePerMTok: 15,
@@ -25,8 +23,7 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
   {
     id: 'openai',
     label: 'OpenAI',
-    modelHint: 'OpenAI estimate profile',
-    updatedAt: '2026-05-17',
+    estimateNote: 'Rough character-based estimate for OpenAI-style context windows.',
     charsPerToken: 4.17,
     numericCharsPerToken: 1.79,
     inputPricePerMTok: 2.5,
@@ -34,8 +31,7 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
   {
     id: 'gemini',
     label: 'Gemini',
-    modelHint: 'Gemini estimate profile',
-    updatedAt: '2026-05-17',
+    estimateNote: 'Rough character-based estimate for Gemini-style context windows.',
     charsPerToken: 3.44,
     numericCharsPerToken: 1.12,
     inputPricePerMTok: 0.3,
@@ -75,13 +71,10 @@ export function estimateTokenCost(tokens: number, profile: TokenEstimateProfile)
 export function formatTokenCost(tokens: number, profile: TokenEstimateProfile): string {
   const cost = estimateTokenCost(tokens, profile)
   if (cost === 0) {
-    return '$0.00'
+    return '$0'
   }
   if (cost < 0.01) {
-    return `$${cost.toFixed(5)}`
-  }
-  if (cost < 1) {
-    return `$${cost.toFixed(4)}`
+    return '<$0.01'
   }
   return `$${cost.toFixed(2)}`
 }

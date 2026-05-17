@@ -4,8 +4,8 @@ import { FileTreeProvider } from '../views/FileTreeProvider'
 import { GitCommitsProvider } from '../views/GitCommitsProvider'
 import { SelectionFiltersProvider } from '../views/SelectionFiltersProvider'
 import { registerCommands } from './commandRegistry'
-import { createServiceContainer } from './serviceContainer'
-import { MessageRouter } from './messageRouter'
+import { createExtensionServices, type ExtensionServices } from './extensionServices'
+import { WebviewMessageHandler } from './webviewMessageHandler'
 import { isWebviewToExtensionMessage } from '../../shared/messages'
 import { WorkspaceSession } from './workspaceSession'
 
@@ -14,10 +14,10 @@ const VIEW_TYPE = 'lupinumContext.context'
 export async function bootstrapLupinumContext(
   context: vscode.ExtensionContext,
 ): Promise<vscode.Disposable> {
-  const services = createServiceContainer(context)
+  const services = createExtensionServices(context)
   context.subscriptions.push(services.logger)
   services.logger.info('[bootstrap] activating Lupinum Context')
-  await services.promptPresets.migrateOldPrefixHistory()
+  await services.promptPrefixes.importOldPrefixesOnce()
   services.fileSelection.restoreIntent(
     services.fileIndex.getSnapshot(),
     services.workspaceState.getSelectionIntent(),
@@ -25,7 +25,7 @@ export async function bootstrapLupinumContext(
 
   const disposables: vscode.Disposable[] = []
   let panel: vscode.WebviewPanel | undefined
-  let router: MessageRouter | undefined
+  let handler: WebviewMessageHandler | undefined
 
   const fileTreeProvider = new FileTreeProvider(services.fileIndex, services.fileSelection)
   const selectionFiltersProvider = new SelectionFiltersProvider(services.fileSelection)
@@ -49,10 +49,10 @@ export async function bootstrapLupinumContext(
 
   services.fileSelection.onDidChange(() => {
     void services.workspaceState.setSelectionIntent(services.fileSelection.getPersistedIntent())
-    void router?.postState()
+    void handler?.postState()
   })
   services.gitSelection.onDidChange(() => {
-    void router?.postState()
+    void handler?.postState()
   })
 
   const showPanel = async () => {
@@ -70,12 +70,12 @@ export async function bootstrapLupinumContext(
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')],
       },
     )
-    const currentRouter = new MessageRouter(
+    const currentHandler = new WebviewMessageHandler(
       services,
       panel,
       services.getPrimaryWorkspaceRoot() ?? process.cwd(),
     )
-    router = currentRouter
+    handler = currentHandler
     const webviewDir = vscode.Uri.joinPath(context.extensionUri, 'dist', 'webview')
     const scriptUri = panel.webview
       .asWebviewUri(vscode.Uri.joinPath(webviewDir, 'main.js'))
@@ -88,21 +88,21 @@ export async function bootstrapLupinumContext(
       styleUri,
       cspSource: panel.webview.cspSource,
       nonce: createNonce(),
-      state: await currentRouter.createState(),
+      state: await currentHandler.createState(),
     })
     panel.webview.onDidReceiveMessage(async (message) => {
       if (!isWebviewToExtensionMessage(message)) {
         return
       }
       try {
-        await currentRouter.handle(message)
+        await currentHandler.handle(message)
       } catch (error) {
         vscode.window.showErrorMessage(String(error))
       }
     })
     panel.onDidDispose(() => {
       panel = undefined
-      router = undefined
+      handler = undefined
     })
   }
 
@@ -159,10 +159,7 @@ export async function bootstrapLupinumContext(
   })
 }
 
-async function refreshCommits(
-  services: ReturnType<typeof createServiceContainer>,
-  reason: string,
-): Promise<void> {
+async function refreshCommits(services: ExtensionServices, reason: string): Promise<void> {
   try {
     services.logger.info(`[git] refresh requested: ${reason}`)
     const commits = await services.gitHost.listRecentCommits(services.getWorkspaces(), 50)
@@ -173,10 +170,7 @@ async function refreshCommits(
   }
 }
 
-async function refreshIndex(
-  services: ReturnType<typeof createServiceContainer>,
-  reason: string,
-): Promise<void> {
+async function refreshIndex(services: ExtensionServices, reason: string): Promise<void> {
   try {
     services.logger.info(`[refresh] requested: ${reason}`)
     services.fileIndex.markDirty()
