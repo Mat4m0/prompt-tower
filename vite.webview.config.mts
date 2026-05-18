@@ -6,7 +6,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist/webview',
-    sourcemap: true,
+    sourcemap: false,
     minify: false,
     emptyOutDir: true,
     cssCodeSplit: false,
