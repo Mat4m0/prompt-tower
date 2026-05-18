@@ -19,7 +19,6 @@ import {
   decideFileSafetyFromSample,
 } from '../core/files/FileSafety'
 import {
-  estimateTokenCountFromBytes,
   estimateTokenCountFromTextLength,
   type TokenEstimateProfile,
 } from '../core/tokens/TokenEstimateProfiles'
@@ -57,10 +56,22 @@ export interface ContextPreflightResult {
   requiresConfirmation: boolean
 }
 
+interface SelectedContextInspection {
+  selectedFiles: readonly IndexedFile[]
+  safeFiles: readonly IndexedFile[]
+  contextFiles: readonly ContextFile[]
+  projectTree: string
+  gitDiffs: readonly ContextGitDiff[]
+  warnings: readonly ContextWarning[]
+  selectedBytes: number
+  selectedGitDiffCharacters: number
+  estimatedCharacters: number
+}
+
 const LARGE_CONTEXT_TOKEN_THRESHOLD = 250_000
 const LARGE_CONTEXT_CHARACTER_THRESHOLD = 1_000_000
 
-export class SelectionContextBuilder {
+export class ContextWorkflow {
   constructor(
     private fileIndex: FileIndex,
     private fileSelection: FileSelection,
@@ -74,90 +85,52 @@ export class SelectionContextBuilder {
     options: ContextBuildOptions,
     profiles: readonly TokenEstimateProfile[] = [this.tokenProfile],
   ): Promise<ContextPreflightResult> {
-    await this.fileIndex.ensureFresh()
-    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
-    const selection = this.fileSelection.getSnapshot()
-    const projectTree = this.buildProjectTree(options.treeMode)
-    const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
-      (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
-      0,
-    )
-    const selectedGitDiffs = await this.loadGitDiffs()
-    const selectedGitDiffCharacters = estimateGitDiffChars(
-      selectedGitDiffs.gitDiffs,
-      options.outputMode === 'compact',
-    )
-    const selectedBytes = selection.selectedFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
-    const estimatedCharacters = estimateContextCharacters({
-      prefix: options.prefix,
-      suffix: '',
-      selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
-      selectedFileCount: selection.selectedFiles.length,
-      selectedGitDiffChars: selectedGitDiffCharacters,
-      projectTree,
-      treeType: options.treeMode,
-      minify: options.outputMode === 'compact',
-    })
-    const estimateSummaries = profiles.map((profile) => ({
-      profile,
-      tokens: Math.ceil(estimatedCharacters / profile.charsPerToken),
-    }))
-    const safetyWarnings = await this.inspectFilesForSafety(selection.selectedFiles)
-    const warnings = [...safetyWarnings, ...selectedGitDiffs.warnings]
+    const inspection = await this.inspectSelectedContext(options)
+    const estimateSummaries = estimateProfiles(inspection.estimatedCharacters, profiles)
     const primaryEstimate =
       estimateSummaries.find(({ profile }) => profile.id === this.tokenProfile.id) ??
       estimateSummaries[0]
+    const warnings = [...inspection.warnings]
 
     if (
       primaryEstimate &&
       (primaryEstimate.tokens >= LARGE_CONTEXT_TOKEN_THRESHOLD ||
-        estimatedCharacters >= LARGE_CONTEXT_CHARACTER_THRESHOLD)
+        inspection.estimatedCharacters >= LARGE_CONTEXT_CHARACTER_THRESHOLD)
     ) {
       warnings.push({
         type: 'largeContext',
         estimatedTokens: primaryEstimate.tokens,
-        characterCount: estimatedCharacters,
-        message: `Estimated context is large: ${primaryEstimate.tokens} rough tokens, ${estimatedCharacters} characters.`,
+        characterCount: inspection.estimatedCharacters,
+        message: `Estimated context is large: ${primaryEstimate.tokens} rough tokens, ${inspection.estimatedCharacters} characters.`,
       })
     }
 
     return {
-      selectedFileCount: selection.selectedFiles.length,
-      selectedBytes,
-      selectedGitDiffCount: selectedGitDiffs.gitDiffs.length,
-      selectedGitDiffCharacters,
-      estimatedCharacters,
+      selectedFileCount: inspection.selectedFiles.length,
+      selectedBytes: inspection.selectedBytes,
+      selectedGitDiffCount: inspection.gitDiffs.length,
+      selectedGitDiffCharacters: inspection.selectedGitDiffCharacters,
+      estimatedCharacters: inspection.estimatedCharacters,
       estimateSummaries,
-      omittedFileCount: safetyWarnings.filter((warning) => warning.type === 'omittedFile').length,
+      omittedFileCount: inspection.warnings.filter((warning) => warning.type === 'omittedFile')
+        .length,
       warnings,
       requiresConfirmation: warnings.some((warning) => warning.type === 'largeContext'),
     }
   }
 
   async createContextFromSelection(options: ContextBuildOptions): Promise<ContextBuildOutput> {
-    await this.fileIndex.ensureFresh()
-    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
-    const selection = this.fileSelection.getSnapshot()
-    const files = selection.selectedFiles.map(
-      (file): ContextFile => ({
-        id: file.id,
-        absolutePath: file.absolutePath,
-        relativePath: file.relativePath,
-        name: file.name,
-      }),
-    )
-    const { snapshots, warnings: fileWarnings } = await this.loadSnapshots(selection.selectedFiles)
-    const projectTree = this.buildProjectTree(options.treeMode)
-    const { gitDiffs, warnings: gitWarnings } = await this.loadGitDiffs()
+    const inspection = await this.inspectSelectedContext(options)
+    const snapshots = await this.readSnapshots(inspection.safeFiles)
     const result = assembleContext({
-      files,
+      files: inspection.contextFiles,
       snapshots,
       prefix: options.prefix,
-      projectTree,
+      projectTree: inspection.projectTree,
       treeMode: options.treeMode,
       outputMode: options.outputMode,
-      gitDiffs,
-      warnings: [...fileWarnings, ...gitWarnings],
+      gitDiffs: inspection.gitDiffs,
+      warnings: inspection.warnings,
     })
     const estimatedTokens = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
     const warnings = [...result.warnings]
@@ -185,41 +158,55 @@ export class SelectionContextBuilder {
     options: ContextBuildOptions,
     profiles: readonly TokenEstimateProfile[],
   ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number }>> {
-    const selection = this.fileSelection.getSnapshot()
-    const fixedChars = await this.estimatePreviewFixedCharacters(options)
-    return profiles.map((profile) => {
-      const fileTokens = selection.selectedFiles.reduce(
-        (sum, file) =>
-          sum +
-          estimateTokenCountFromBytes(fileSizeChars(file), profile, file.name) +
-          Math.ceil(
-            estimateFileBlockOverheadChars(file, options.outputMode) / profile.charsPerToken,
-          ),
-        0,
-      )
-      const tokens = Math.ceil(fixedChars / profile.charsPerToken) + fileTokens
-      return { profile, tokens }
-    })
+    const inspection = await this.inspectSelectedContext(options)
+    return estimateProfiles(inspection.estimatedCharacters, profiles)
   }
 
-  private async estimatePreviewFixedCharacters(options: ContextBuildOptions): Promise<number> {
+  private async inspectSelectedContext(
+    options: ContextBuildOptions,
+  ): Promise<SelectedContextInspection> {
+    await this.fileIndex.ensureFresh()
+    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
     const selection = this.fileSelection.getSnapshot()
     const projectTree = this.buildProjectTree(options.treeMode)
     const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
       (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
       0,
     )
-    const selectedGitDiffChars = await this.estimateGitDiffCharacters(options.outputMode)
-    return estimateContextCharacters({
+    const selectedGitDiffs = await this.loadGitDiffs()
+    const selectedGitDiffCharacters = estimateGitDiffChars(
+      selectedGitDiffs.gitDiffs,
+      options.outputMode === 'compact',
+    )
+    const selectedBytes = selection.selectedFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
+    const estimatedCharacters = estimateContextCharacters({
       prefix: options.prefix,
       suffix: '',
-      selectedFileBlockChars: selectedFileBlockOverheadChars,
+      selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
       selectedFileCount: selection.selectedFiles.length,
-      selectedGitDiffChars,
+      selectedGitDiffChars: selectedGitDiffCharacters,
       projectTree,
       treeType: options.treeMode,
       minify: options.outputMode === 'compact',
     })
+    const fileWarnings = await this.inspectFilesForSafety(selection.selectedFiles)
+    const unsafeFileIds = new Set(
+      fileWarnings
+        .filter((warning) => warning.type === 'omittedFile' || warning.type === 'missingFile')
+        .map((warning) => warning.fileId),
+    )
+
+    return {
+      selectedFiles: selection.selectedFiles,
+      safeFiles: selection.selectedFiles.filter((file) => !unsafeFileIds.has(file.id)),
+      contextFiles: selection.selectedFiles.map(toContextFile),
+      projectTree,
+      gitDiffs: selectedGitDiffs.gitDiffs,
+      warnings: sortWarnings([...fileWarnings, ...selectedGitDiffs.warnings]),
+      selectedBytes,
+      selectedGitDiffCharacters,
+      estimatedCharacters,
+    }
   }
 
   private async loadGitDiffs(): Promise<{
@@ -233,27 +220,12 @@ export class SelectionContextBuilder {
     }
   }
 
-  private async estimateGitDiffCharacters(outputMode: ContextOutputMode): Promise<number> {
-    const { gitDiffs } = await this.loadGitDiffs()
-    return estimateGitDiffChars(gitDiffs, outputMode === 'compact')
-  }
-
-  private async loadSnapshots(files: readonly IndexedFile[]): Promise<{
-    snapshots: Map<string, ContextFileSnapshot>
-    warnings: ContextWarning[]
-  }> {
+  private async readSnapshots(
+    files: readonly IndexedFile[],
+  ): Promise<Map<string, ContextFileSnapshot>> {
     const snapshots = new Map<string, ContextFileSnapshot>()
-    const warnings = await this.inspectFilesForSafety(files)
-    const unsafeFileIds = new Set(
-      warnings
-        .filter((warning) => warning.type === 'omittedFile' || warning.type === 'missingFile')
-        .map((warning) => warning.fileId),
-    )
     await Promise.all(
       files.map(async (file) => {
-        if (unsafeFileIds.has(file.id)) {
-          return
-        }
         try {
           snapshots.set(file.id, {
             content: await this.fileSystem.readText(file.absolutePath),
@@ -263,7 +235,7 @@ export class SelectionContextBuilder {
         }
       }),
     )
-    return { snapshots, warnings: sortWarnings(warnings) }
+    return snapshots
   }
 
   private async inspectFilesForSafety(files: readonly IndexedFile[]): Promise<ContextWarning[]> {
@@ -326,6 +298,15 @@ export class SelectionContextBuilder {
   }
 }
 
+function toContextFile(file: IndexedFile): ContextFile {
+  return {
+    id: file.id,
+    absolutePath: file.absolutePath,
+    relativePath: file.relativePath,
+    name: file.name,
+  }
+}
+
 function toContextGitDiff(diff: GitCommitDiff): ContextGitDiff {
   return {
     commit: {
@@ -365,10 +346,6 @@ function estimateFileBlockOverheadChars(file: ContextFile, outputMode: ContextOu
   return `<file name="${file.name}" path="${sourcePath}">\n\n</file>`.length
 }
 
-function fileSizeChars(file: ContextFile): number {
-  return 'sizeBytes' in file && typeof file.sizeBytes === 'number' ? file.sizeBytes : 0
-}
-
 function toOmittedFileWarning(
   file: IndexedFile,
   reason: Extract<ContextWarning, { type: 'omittedFile' }>['reason'],
@@ -381,6 +358,16 @@ function toOmittedFileWarning(
     reason,
     message,
   }
+}
+
+function estimateProfiles(
+  estimatedCharacters: number,
+  profiles: readonly TokenEstimateProfile[],
+): Array<{ profile: TokenEstimateProfile; tokens: number }> {
+  return profiles.map((profile) => ({
+    profile,
+    tokens: Math.ceil(estimatedCharacters / profile.charsPerToken),
+  }))
 }
 
 function sortWarnings(warnings: readonly ContextWarning[]): ContextWarning[] {

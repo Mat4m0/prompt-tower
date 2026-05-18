@@ -1,7 +1,7 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import ignore from 'ignore'
-import { getSelectionRefinementDefinition } from '../../core/files/FileKind'
+import { getFileTypeFilterDefinition } from '../../core/files/FileTypeFilter'
 import { createLayeredIgnoreMatcher, normalizeIgnorePath } from '../../core/files/IgnoreRules'
 import { FileIndex, type FileStat, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
@@ -237,14 +237,14 @@ test('FileSelection restores tests after excluded test filter is re-enabled', as
   const selection = new FileSelection()
   const snapshot = index.getSnapshot()
   selection.setNodeIncluded(snapshot, 'w:src', true)
-  selection.setFileKindExcluded(snapshot, 'pattern:test', true)
+  selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', true)
 
   assert.deepEqual(
     selection.getSnapshot().selectedFiles.map((file) => file.relativePath),
     ['src/app.ts'],
   )
 
-  selection.setFileKindExcluded(snapshot, 'pattern:test', false)
+  selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', false)
 
   assert.deepEqual(
     selection
@@ -298,8 +298,8 @@ test('FileSelection keeps explicit child excludes across filter changes', async 
   const snapshot = index.getSnapshot()
   selection.setNodeIncluded(snapshot, 'w:src', true)
   selection.setNodeIncluded(snapshot, 'w:src/app.ts', false)
-  selection.setFileKindExcluded(snapshot, 'pattern:test', true)
-  selection.setFileKindExcluded(snapshot, 'pattern:test', false)
+  selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', true)
+  selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', false)
 
   assert.deepEqual(
     selection.getSnapshot().selectedFiles.map((file) => file.relativePath),
@@ -313,7 +313,7 @@ test('FileSelection derives new files under selected folders and filters tests',
   selection.setNodeIncluded(index.getSnapshot(), 'w:src', true)
 
   index = await createSelectionFixtureIndex(['src/app.ts', 'src/new.ts', 'src/new.test.ts'])
-  selection.setFileKindExcluded(index.getSnapshot(), 'pattern:test', true)
+  selection.setFileTypeFilterExcluded(index.getSnapshot(), 'pattern:test', true)
   selection.reconcile(index.getSnapshot())
 
   assert.deepEqual(
@@ -337,12 +337,12 @@ test('FileSelection drops deleted selected files during reconcile', async () => 
   assert.deepEqual(selection.getPersistedIntent().includedNodeIds, [])
 })
 
-test('FileSelection folder checkbox ignores excluded file kinds', async () => {
+test('FileSelection folder checkbox ignores excluded file type filters', async () => {
   const index = await createSelectionFixtureIndex(['src/app.ts', 'src/app.test.ts'])
   const selection = new FileSelection()
   const snapshot = index.getSnapshot()
   selection.setNodeIncluded(snapshot, 'w:src', true)
-  selection.setFileKindExcluded(snapshot, 'pattern:test', true)
+  selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', true)
 
   assert.equal(selection.getSnapshot().checkboxStates.get('w:src'), 'checked')
   assert.equal(selection.getSnapshot().checkboxStates.get('w:src/app.test.ts'), 'unchecked')
@@ -352,7 +352,7 @@ test('FileSelection persists and restores selection intent', async () => {
   const index = await createSelectionFixtureIndex(['src/app.ts', 'src/app.test.ts'])
   const original = new FileSelection()
   original.setNodeIncluded(index.getSnapshot(), 'w:src', true)
-  original.setFileKindExcluded(index.getSnapshot(), 'pattern:test', true)
+  original.setFileTypeFilterExcluded(index.getSnapshot(), 'pattern:test', true)
 
   const restored = new FileSelection()
   restored.restoreIntent(index.getSnapshot(), original.getPersistedIntent())
@@ -392,32 +392,32 @@ test('FileSelection can include and exclude all filter groups', async () => {
 })
 
 test('folder selection refinement keeps tests and declarations separate', () => {
-  assert.deepEqual(getSelectionRefinementDefinition('Component.vue'), {
+  assert.deepEqual(getFileTypeFilterDefinition('Component.vue'), {
     id: 'extension:.vue',
     label: '.vue files',
     sortLabel: '.vue',
   })
-  assert.deepEqual(getSelectionRefinementDefinition('worker.ts'), {
+  assert.deepEqual(getFileTypeFilterDefinition('worker.ts'), {
     id: 'extension:.ts',
     label: '.ts files',
     sortLabel: '.ts',
   })
-  assert.deepEqual(getSelectionRefinementDefinition('worker.test.ts'), {
+  assert.deepEqual(getFileTypeFilterDefinition('worker.test.ts'), {
     id: 'pattern:test',
     label: 'Test files (*.test.*, *.spec.*)',
     sortLabel: 'zz-test',
   })
-  assert.deepEqual(getSelectionRefinementDefinition('worker.spec.tsx'), {
+  assert.deepEqual(getFileTypeFilterDefinition('worker.spec.tsx'), {
     id: 'pattern:test',
     label: 'Test files (*.test.*, *.spec.*)',
     sortLabel: 'zz-test',
   })
-  assert.deepEqual(getSelectionRefinementDefinition('types.d.ts'), {
+  assert.deepEqual(getFileTypeFilterDefinition('types.d.ts'), {
     id: 'pattern:declaration',
     label: 'Declaration files (*.d.ts)',
     sortLabel: 'zz-declaration',
   })
-  assert.deepEqual(getSelectionRefinementDefinition('Dockerfile'), {
+  assert.deepEqual(getFileTypeFilterDefinition('Dockerfile'), {
     id: 'extension:(no extension)',
     label: 'No extension',
     sortLabel: '(no extension)',

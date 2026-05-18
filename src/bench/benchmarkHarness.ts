@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
 import os from 'os'
 import path from 'path'
 import { performance } from 'perf_hooks'
-import { SelectionContextBuilder } from '../app/SelectionContextBuilder'
+import { ContextWorkflow } from '../app/ContextWorkflow'
 import { assembleContext } from '../core/context/ContextAssembler'
 import { generateFileStructureTree } from '../core/context/ProjectTreeBuilder'
 import { FileIndex, type FileIndexHost, type IndexedFile } from '../core/files/FileIndex'
@@ -83,7 +83,7 @@ interface BenchmarkState {
   fixture: BenchmarkFixturePlan
   index: FileIndex
   selection: FileSelection
-  builder: SelectionContextBuilder
+  builder: ContextWorkflow
   selectedIndexedFiles: readonly IndexedFile[]
 }
 
@@ -342,7 +342,7 @@ async function createBenchmarkState(
   for (const file of fixture.selectedFiles) {
     selection.setNodeIncluded(snapshot, `w:${file.relativePath}`, true)
   }
-  const builder = new SelectionContextBuilder(
+  const builder = new ContextWorkflow(
     index,
     selection,
     createFixtureTextFileSystem(),
@@ -402,7 +402,7 @@ function createBenchmarkCases(
         const snapshot = state.index.getSnapshot()
         selection.setNodeIncluded(snapshot, 'w:src', true)
         selection.setNodeIncluded(snapshot, state.selectedIndexedFiles[0].id, false)
-        selection.setFileKindExcluded(snapshot, 'pattern:test', true)
+        selection.setFileTypeFilterExcluded(snapshot, 'pattern:test', true)
       },
     },
     {

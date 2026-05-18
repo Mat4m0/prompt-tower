@@ -1,10 +1,10 @@
-export interface SelectionRefinementDefinition {
+export interface FileTypeFilterDefinition {
   id: string
   label: string
   sortLabel: string
 }
 
-export function getSelectionRefinementDefinition(fileName: string): SelectionRefinementDefinition {
+export function getFileTypeFilterDefinition(fileName: string): FileTypeFilterDefinition {
   const normalizedName = fileName.toLowerCase()
 
   if (/\.d\.ts$/i.test(normalizedName)) {

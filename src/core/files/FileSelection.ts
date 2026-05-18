@@ -1,4 +1,4 @@
-import { getSelectionRefinementDefinition } from './FileKind'
+import { getFileTypeFilterDefinition } from './FileTypeFilter'
 import type { FileIndexSnapshot, IndexedFile, IndexedNode } from './FileIndex'
 
 export type CheckboxState = 'checked' | 'unchecked' | 'partial'
@@ -6,13 +6,13 @@ export type CheckboxState = 'checked' | 'unchecked' | 'partial'
 export interface SelectionIntent {
   includedNodeIds: ReadonlySet<string>
   excludedNodeIds: ReadonlySet<string>
-  excludedFileKindIds: ReadonlySet<string>
+  excludedFileTypeFilterIds: ReadonlySet<string>
 }
 
 export interface PersistedSelectionIntent {
   includedNodeIds: readonly string[]
   excludedNodeIds: readonly string[]
-  excludedFileKindIds: readonly string[]
+  excludedFileTypeFilterIds: readonly string[]
 }
 
 export interface EffectiveSelectionSnapshot {
@@ -39,7 +39,7 @@ type Listener = (snapshot: EffectiveSelectionSnapshot) => void
 export class FileSelection {
   private includedNodeIds = new Set<string>()
   private excludedNodeIds = new Set<string>()
-  private excludedFileKindIds = new Set<string>()
+  private excludedFileTypeFilterIds = new Set<string>()
   private listeners = new Set<Listener>()
   private snapshot: EffectiveSelectionSnapshot = createEmptySnapshot()
 
@@ -52,7 +52,7 @@ export class FileSelection {
     return {
       includedNodeIds: new Set(this.includedNodeIds),
       excludedNodeIds: new Set(this.excludedNodeIds),
-      excludedFileKindIds: new Set(this.excludedFileKindIds),
+      excludedFileTypeFilterIds: new Set(this.excludedFileTypeFilterIds),
     }
   }
 
@@ -63,7 +63,7 @@ export class FileSelection {
   restoreIntent(index: FileIndexSnapshot, intent: PersistedSelectionIntent | undefined): void {
     this.includedNodeIds = new Set(intent?.includedNodeIds ?? [])
     this.excludedNodeIds = new Set(intent?.excludedNodeIds ?? [])
-    this.excludedFileKindIds = new Set(intent?.excludedFileKindIds ?? [])
+    this.excludedFileTypeFilterIds = new Set(intent?.excludedFileTypeFilterIds ?? [])
     this.reconcile(index)
   }
 
@@ -78,22 +78,26 @@ export class FileSelection {
   }
 
   resetFilters(index: FileIndexSnapshot): void {
-    this.excludedFileKindIds.clear()
+    this.excludedFileTypeFilterIds.clear()
     this.rebuild(index)
   }
 
   excludeAllFilters(index: FileIndexSnapshot): void {
     for (const group of this.snapshot.filterGroups) {
-      this.excludedFileKindIds.add(group.id)
+      this.excludedFileTypeFilterIds.add(group.id)
     }
     this.rebuild(index)
   }
 
-  setFileKindExcluded(index: FileIndexSnapshot, fileKindId: string, excluded: boolean): void {
+  setFileTypeFilterExcluded(
+    index: FileIndexSnapshot,
+    fileTypeFilterId: string,
+    excluded: boolean,
+  ): void {
     if (excluded) {
-      this.excludedFileKindIds.add(fileKindId)
+      this.excludedFileTypeFilterIds.add(fileTypeFilterId)
     } else {
-      this.excludedFileKindIds.delete(fileKindId)
+      this.excludedFileTypeFilterIds.delete(fileTypeFilterId)
     }
     this.rebuild(index)
   }
@@ -150,7 +154,7 @@ export function serializeSelectionIntent(intent: SelectionIntent): PersistedSele
   return {
     includedNodeIds: [...intent.includedNodeIds],
     excludedNodeIds: [...intent.excludedNodeIds],
-    excludedFileKindIds: [...intent.excludedFileKindIds],
+    excludedFileTypeFilterIds: [...intent.excludedFileTypeFilterIds],
   }
 }
 
@@ -164,9 +168,9 @@ export function deriveSelectionSnapshot(
   const filterGroups = new Map<string, MutableSelectionFilterGroup>()
 
   for (const file of index.files) {
-    const kind = getSelectionRefinementDefinition(file.name)
+    const kind = getFileTypeFilterDefinition(file.name)
     const selectedByNode = isSelectedByIntent(file, index, intent)
-    const excludedByFilter = intent.excludedFileKindIds.has(kind.id)
+    const excludedByFilter = intent.excludedFileTypeFilterIds.has(kind.id)
     const group = getOrCreateFilterGroup(filterGroups, kind, excludedByFilter)
 
     if (selectedByNode) {
@@ -285,7 +289,7 @@ interface MutableSelectionFilterGroup extends SelectionFilterGroup {
 
 function getOrCreateFilterGroup(
   groups: Map<string, MutableSelectionFilterGroup>,
-  kind: ReturnType<typeof getSelectionRefinementDefinition>,
+  kind: ReturnType<typeof getFileTypeFilterDefinition>,
   excluded: boolean,
 ): MutableSelectionFilterGroup {
   let group = groups.get(kind.id)

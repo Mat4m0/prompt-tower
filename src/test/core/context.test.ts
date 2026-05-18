@@ -6,7 +6,7 @@ import type { ContextWarning } from '../../core/context/ContextFormat'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
-import { SelectionContextBuilder } from '../../app/SelectionContextBuilder'
+import { ContextWorkflow } from '../../app/ContextWorkflow'
 import { createSelectedGitDiffReader } from '../../app/SelectedGitDiffs'
 import { GitSelection } from '../../core/git/GitSelection'
 import type { GitCommit } from '../../core/git/GitTypes'
@@ -229,7 +229,7 @@ test('ContextAssembler includes selected git commit diffs', () => {
   assert.equal(result.commitCount, 1)
 })
 
-test('SelectionContextBuilder prefixes multi-root tree paths', async () => {
+test('ContextWorkflow prefixes multi-root tree paths', async () => {
   const workspaces: IndexedWorkspace[] = [
     { id: 'front', name: 'frontend', rootPath: '/repo/frontend' },
     { id: 'back', name: 'backend', rootPath: '/repo/backend' },
@@ -251,7 +251,7 @@ test('SelectionContextBuilder prefixes multi-root tree paths', async () => {
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'front:', true)
   selection.setNodeIncluded(index.getSnapshot(), 'back:', true)
-  const builder = new SelectionContextBuilder(
+  const builder = new ContextWorkflow(
     index,
     selection,
     {
@@ -277,7 +277,7 @@ test('SelectionContextBuilder prefixes multi-root tree paths', async () => {
   assert.match(output.text, /backend\/\n.*src\/\n.*index\.ts/s)
 })
 
-test('SelectionContextBuilder returns warnings for files that disappear before read', async () => {
+test('ContextWorkflow returns warnings for files that disappear before read', async () => {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const index = new FileIndex(
     {
@@ -294,7 +294,7 @@ test('SelectionContextBuilder returns warnings for files that disappear before r
   await index.ensureFresh()
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'w:src/deleted.ts', true)
-  const builder = new SelectionContextBuilder(
+  const builder = new ContextWorkflow(
     index,
     selection,
     {
@@ -328,7 +328,7 @@ test('SelectionContextBuilder returns warnings for files that disappear before r
   ])
 })
 
-test('SelectionContextBuilder surfaces selected git diff warnings', async () => {
+test('ContextWorkflow surfaces selected git diff warnings', async () => {
   const service = await createSingleFileContextService(
     'src/app.ts',
     'export const ok = true\n',
@@ -346,7 +346,7 @@ test('SelectionContextBuilder surfaces selected git diff warnings', async () => 
           subject: 'Large diff',
         },
         patch: '',
-        warnings: ['Diff was truncated at 1000000 characters.'],
+        warnings: ['Diff output was truncated after 1000000 bytes.'],
       },
     ],
   )
@@ -363,14 +363,14 @@ test('SelectionContextBuilder surfaces selected git diff warnings', async () => 
       commitId: 'w:abc123',
       shortHash: 'abc123',
       subject: 'Large diff',
-      message: 'Diff was truncated at 1000000 characters.',
+      message: 'Diff output was truncated after 1000000 bytes.',
     },
   ])
   assert.match(output.text, /<context_warnings>/)
   assert.match(output.text, /<warning type="git_diff" commit="abc123"/)
 })
 
-test('SelectionContextBuilder emits large context warnings with other warning types', async () => {
+test('ContextWorkflow emits large context warnings with other warning types', async () => {
   const content = 'x'.repeat(1_000_100)
   const service = await createSingleFileContextService('src/large.ts', content, async () => [
     {
@@ -418,7 +418,7 @@ test('large context action warnings reuse generated output warnings', async () =
   assert.match(warning.message, /^Estimated context is large:/)
 })
 
-test('SelectionContextBuilder preflight warns before reading selected file contents', async () => {
+test('ContextWorkflow preflight warns before reading selected file contents', async () => {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const absolutePath = '/repo/src/large.ts'
   const index = new FileIndex(
@@ -437,7 +437,7 @@ test('SelectionContextBuilder preflight warns before reading selected file conte
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'w:src/large.ts', true)
   let readBytesCalls = 0
-  const builder = new SelectionContextBuilder(
+  const builder = new ContextWorkflow(
     index,
     selection,
     {
@@ -467,7 +467,7 @@ test('SelectionContextBuilder preflight warns before reading selected file conte
   assert.ok(preflight.warnings.some((warning) => warning.type === 'largeContext'))
 })
 
-test('SelectionContextBuilder preflight predicts oversized and binary omissions', async () => {
+test('ContextWorkflow preflight predicts oversized and binary omissions', async () => {
   const oversized = await createSingleFileContextService('src/huge.ts', 'x'.repeat(2_000_001))
   const oversizedPreflight = await oversized.preflightContext({
     prefix: '',
@@ -512,7 +512,21 @@ test('SelectionContextBuilder preflight predicts oversized and binary omissions'
   )
 })
 
-test('SelectionContextBuilder omits oversized files before reading content', async () => {
+test('ContextWorkflow preflight and generation use the same predictable omission paths', async () => {
+  const oversized = await createSingleFileContextService('src/huge.ts', 'x'.repeat(2_000_001))
+  const options = {
+    prefix: '',
+    treeMode: 'none' as const,
+    outputMode: 'readable' as const,
+  }
+
+  const preflight = await oversized.preflightContext(options)
+  const output = await oversized.createContextFromSelection(options)
+
+  assert.deepEqual(warningPaths(preflight.warnings), warningPaths(output.warnings))
+})
+
+test('ContextWorkflow omits oversized files before reading content', async () => {
   let readTextCalls = 0
   const content = 'x'.repeat(2_000_001)
   const service = await createSingleFileContextService('src/huge.ts', content, undefined, {
@@ -543,7 +557,7 @@ test('SelectionContextBuilder omits oversized files before reading content', asy
   assert.match(output.text, /reason="tooLarge"/)
 })
 
-test('SelectionContextBuilder omits binary files from context output', async () => {
+test('ContextWorkflow omits binary files from context output', async () => {
   const service = await createSingleFileContextService('src/blob.dat', 'ignored text', undefined, {
     readBytes() {
       return new Uint8Array([0, 1, 2, 3])
@@ -569,7 +583,7 @@ test('SelectionContextBuilder omits binary files from context output', async () 
   assert.match(output.text, /<context_warnings><warning type="omitted_file"/)
 })
 
-test('SelectionContextBuilder preview estimates stay close to final normal text estimates', async () => {
+test('ContextWorkflow preview estimates stay close to final normal text estimates', async () => {
   const content = 'export const value = "hello";\n'.repeat(200)
   const service = await createSingleFileContextService('src/app.ts', content)
   const options = {
@@ -586,7 +600,7 @@ test('SelectionContextBuilder preview estimates stay close to final normal text 
   assertWithinPercent(preview.tokens, output.estimatedTokens, 10)
 })
 
-test('SelectionContextBuilder preview estimates account for numeric-heavy files', async () => {
+test('ContextWorkflow preview estimates reuse preflight estimate inputs', async () => {
   const content = '1234.5678 -9012.3456\n'.repeat(500)
   const service = await createSingleFileContextService('data/sample.csv', content, undefined, {
     profile: getTokenEstimateProfile('gemini'),
@@ -600,12 +614,12 @@ test('SelectionContextBuilder preview estimates account for numeric-heavy files'
   const [preview] = await service.estimatePreviewForProfiles(options, [
     getTokenEstimateProfile('gemini'),
   ])
-  const output = await service.createContextFromSelection(options)
+  const preflight = await service.preflightContext(options, [getTokenEstimateProfile('gemini')])
 
-  assertWithinPercent(preview.tokens, output.estimatedTokens, 15)
+  assert.equal(preview.tokens, preflight.estimateSummaries[0].tokens)
 })
 
-test('SelectionContextBuilder preview and final output reuse selected git diff cache', async () => {
+test('ContextWorkflow preview and final output reuse selected git diff cache', async () => {
   const selection = new GitSelection()
   const first = gitCommit('a1')
   const second = gitCommit('b2')
@@ -662,13 +676,13 @@ test('SelectionContextBuilder preview and final output reuse selected git diff c
 async function createSingleFileContextService(
   relativePath: string,
   content: string,
-  readSelectedGitDiffs?: ConstructorParameters<typeof SelectionContextBuilder>[5],
+  readSelectedGitDiffs?: ConstructorParameters<typeof ContextWorkflow>[5],
   overrides: Partial<{
     readBytes: () => Uint8Array
     readText: () => string
     profile: ReturnType<typeof getTokenEstimateProfile>
   }> = {},
-): Promise<SelectionContextBuilder> {
+): Promise<ContextWorkflow> {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const absolutePath = `/repo/${relativePath}`
   const profile = overrides.profile ?? getTokenEstimateProfile('claude')
@@ -687,7 +701,7 @@ async function createSingleFileContextService(
   await index.ensureFresh()
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), `w:${relativePath}`, true)
-  return new SelectionContextBuilder(
+  return new ContextWorkflow(
     index,
     selection,
     {
@@ -711,6 +725,15 @@ function assertWithinPercent(actual: number, expected: number, tolerancePercent:
     delta <= allowed,
     `${actual} differs from ${expected} by more than ${tolerancePercent}%`,
   )
+}
+
+function warningPaths(warnings: readonly ContextWarning[]): string[] {
+  return warnings
+    .filter(
+      (warning): warning is Extract<ContextWarning, { type: 'missingFile' | 'omittedFile' }> =>
+        warning.type === 'missingFile' || warning.type === 'omittedFile',
+    )
+    .map((warning) => `${warning.type}:${warning.path}`)
 }
 
 function gitCommit(hash: string): GitCommit {

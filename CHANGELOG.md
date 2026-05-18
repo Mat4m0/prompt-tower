@@ -18,9 +18,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Expand architecture boundary validation beyond the core-only VS Code import check.
 - Rename the architecture gate to `test:boundaries`.
 - Route command and webview context creation through one shared VS Code shell workflow.
+- Route preflight, preview estimates, and generation through one selected-context inspection path.
 - Cache selected Git commit diff reads during context estimation and creation.
 - Sort recent Git commits globally across workspaces and time out local Git commands.
+- Use one byte-based Git diff truncation warning path.
 - Keep lockfiles available for selection instead of excluding dependency-resolution context by default.
+- Rename remaining builder/service/debug/filter vocabulary to workflow, wiring, output logger, and file type filters.
+- Block context generation in remote or virtual workspaces instead of partially running unsupported file reads.
 - Clarify local-only behavior, rough estimate language, and the supported `vp` verification path in docs.
 
 ## [1.0.0] - 2026-05-16

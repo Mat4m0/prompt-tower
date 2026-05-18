@@ -1,21 +1,21 @@
 import * as vscode from 'vscode'
-import type { ContextBuildOutput } from '../../app/SelectionContextBuilder'
+import type { ContextBuildOutput } from '../../app/ContextWorkflow'
 import type { ContextOutputMode, ProjectTreeMode } from '../../core/context/ContextFormat'
 import type { PromptExportOptions } from '../../core/export/ExportOptions'
 import { buildPromptExportTarget } from '../../core/export/PromptFileWriter'
 import { confirmLargeContextAction } from './contextActionConfirmation'
-import type { ExtensionServices } from './extensionServices'
+import type { ExtensionWiring } from './extensionWiring'
 
 type ContextActionRequest =
   | {
       action: 'copy'
-      services: ExtensionServices
+      services: ExtensionWiring
       treeMode: ProjectTreeMode
       outputMode: ContextOutputMode
     }
   | {
       action: 'create'
-      services: ExtensionServices
+      services: ExtensionWiring
       treeMode: ProjectTreeMode
       outputMode: ContextOutputMode
       copy: boolean
@@ -24,7 +24,7 @@ type ContextActionRequest =
     }
   | {
       action: 'save'
-      services: ExtensionServices
+      services: ExtensionWiring
       treeMode: ProjectTreeMode
       outputMode: ContextOutputMode
       workspaceRoot: string
@@ -40,6 +40,13 @@ export type ContextActionResult =
 export async function runContextAction(
   request: ContextActionRequest,
 ): Promise<ContextActionResult> {
+  if (!request.services.supportsLocalFilesystemWorkspace()) {
+    vscode.window.showErrorMessage(
+      'Lupinum Context only supports local filesystem workspaces for context generation.',
+    )
+    return { completed: false }
+  }
+
   const preflight = await request.services.preflightContext({
     treeMode: request.treeMode,
     outputMode: request.outputMode,

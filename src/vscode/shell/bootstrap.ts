@@ -3,19 +3,20 @@ import { randomBytes } from 'crypto'
 import { getWebviewHtml } from '../webview/webviewHost'
 import { FileTreeProvider } from '../views/FileTreeProvider'
 import { GitCommitsProvider } from '../views/GitCommitsProvider'
-import { SelectionFiltersProvider } from '../views/SelectionFiltersProvider'
+import { FileTypeFiltersProvider } from '../views/FileTypeFiltersProvider'
 import { registerCommands } from './commandRegistry'
-import { createExtensionServices, type ExtensionServices } from './extensionServices'
+import { createExtensionWiring, type ExtensionWiring } from './extensionWiring'
 import { WebviewMessageHandler } from './webviewMessageHandler'
 import { isWebviewToExtensionMessage } from '../../shared/messages'
 import { WorkspaceSession } from './workspaceSession'
+import { isSupportedLocalWorkspace } from './workspaceSupport'
 
 const VIEW_TYPE = 'lupinumContext.context'
 
 export async function bootstrapLupinumContext(
   context: vscode.ExtensionContext,
 ): Promise<vscode.Disposable> {
-  const services = createExtensionServices(context)
+  const services = createExtensionWiring(context)
   context.subscriptions.push(services.logger)
   services.logger.info('[bootstrap] activating Lupinum Context')
   void warnForNonLocalWorkspaceOnce(context)
@@ -30,7 +31,7 @@ export async function bootstrapLupinumContext(
   let handler: WebviewMessageHandler | undefined
 
   const fileTreeProvider = new FileTreeProvider(services.fileIndex, services.fileSelection)
-  const selectionFiltersProvider = new SelectionFiltersProvider(services.fileSelection)
+  const fileTypeFiltersProvider = new FileTypeFiltersProvider(services.fileSelection)
   const gitCommitsProvider = new GitCommitsProvider(services.gitSelection)
 
   const fileTree = vscode.window.createTreeView('lupinumContext.files', {
@@ -39,8 +40,8 @@ export async function bootstrapLupinumContext(
     showCollapseAll: true,
     manageCheckboxStateManually: true,
   })
-  const filtersTree = vscode.window.createTreeView('lupinumContext.selectionFilters', {
-    treeDataProvider: selectionFiltersProvider,
+  const filtersTree = vscode.window.createTreeView('lupinumContext.fileTypeFilters', {
+    treeDataProvider: fileTypeFiltersProvider,
     manageCheckboxStateManually: true,
   })
   const gitTree = vscode.window.createTreeView('lupinumContext.gitCommits', {
@@ -125,7 +126,7 @@ export async function bootstrapLupinumContext(
     }),
     filtersTree.onDidChangeCheckboxState((event) => {
       for (const [node, state] of event.items) {
-        services.fileSelection.setFileKindExcluded(
+        services.fileSelection.setFileTypeFilterExcluded(
           services.fileIndex.getSnapshot(),
           node.group.id,
           state === vscode.TreeItemCheckboxState.Unchecked,
@@ -164,9 +165,7 @@ export async function bootstrapLupinumContext(
 
 async function warnForNonLocalWorkspaceOnce(context: vscode.ExtensionContext): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders ?? []
-  const hasVirtualWorkspace = workspaceFolders.some((folder) => folder.uri.scheme !== 'file')
-  const hasRemoteWorkspace = Boolean(vscode.env.remoteName)
-  if (!hasVirtualWorkspace && !hasRemoteWorkspace) {
+  if (isSupportedLocalWorkspace(workspaceFolders, vscode.env.remoteName)) {
     return
   }
 
@@ -181,7 +180,7 @@ async function warnForNonLocalWorkspaceOnce(context: vscode.ExtensionContext): P
   )
 }
 
-async function refreshCommits(services: ExtensionServices, reason: string): Promise<void> {
+async function refreshCommits(services: ExtensionWiring, reason: string): Promise<void> {
   try {
     services.logger.info(`[git] refresh requested: ${reason}`)
     const commits = await services.gitHost.listRecentCommits(services.getWorkspaces(), 50)
@@ -193,7 +192,7 @@ async function refreshCommits(services: ExtensionServices, reason: string): Prom
   }
 }
 
-async function refreshIndex(services: ExtensionServices, reason: string): Promise<void> {
+async function refreshIndex(services: ExtensionWiring, reason: string): Promise<void> {
   try {
     services.logger.info(`[refresh] requested: ${reason}`)
     services.fileIndex.markDirty()

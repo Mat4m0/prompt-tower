@@ -1,9 +1,9 @@
 import * as vscode from 'vscode'
 import {
-  SelectionContextBuilder,
+  ContextWorkflow,
   type ContextBuildOptions,
   type ContextBuildOutput,
-} from '../../app/SelectionContextBuilder'
+} from '../../app/ContextWorkflow'
 import { PromptPrefixes } from '../../app/PromptPrefixes'
 import { createSelectedGitDiffReader } from '../../app/SelectedGitDiffs'
 import { WorkspaceSettings } from '../../app/WorkspaceSettings'
@@ -13,31 +13,33 @@ import { GitSelection } from '../../core/git/GitSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { VsCodeFileSystem } from '../VsCodeFileSystem'
 import { VsCodeGit } from '../VsCodeGit'
-import { DebugLogger } from './DebugLogger'
+import { OutputLogger } from './OutputLogger'
+import { isSupportedLocalWorkspace } from './workspaceSupport'
 
-export interface ExtensionServices {
+export interface ExtensionWiring {
   getWorkspaces(): IndexedWorkspace[]
   getPrimaryWorkspaceRoot(): string | undefined
+  supportsLocalFilesystemWorkspace(): boolean
   fileSystem: VsCodeFileSystem
   gitHost: VsCodeGit
   fileIndex: FileIndex
   fileSelection: FileSelection
   gitSelection: GitSelection
-  contextBuilder: SelectionContextBuilder
+  contextBuilder: ContextWorkflow
   promptPrefixes: PromptPrefixes
   workspaceState: WorkspaceSettings
-  logger: DebugLogger
+  logger: OutputLogger
   createContextFromSelection(
     options: Omit<ContextBuildOptions, 'prefix'>,
   ): Promise<ContextBuildOutput>
   preflightContext(
     options: Omit<ContextBuildOptions, 'prefix'>,
-  ): ReturnType<SelectionContextBuilder['preflightContext']>
+  ): ReturnType<ContextWorkflow['preflightContext']>
   clearSelectedGitDiffCache(): void
 }
 
-export function createExtensionServices(context: vscode.ExtensionContext): ExtensionServices {
-  const logger = new DebugLogger()
+export function createExtensionWiring(context: vscode.ExtensionContext): ExtensionWiring {
+  const logger = new OutputLogger()
   const fileSystem = new VsCodeFileSystem(logger)
   const gitHost = new VsCodeGit(logger)
   const getWorkspaces = () => readWorkspaceFolders()
@@ -49,7 +51,7 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
   const selectedGitDiffs = createSelectedGitDiffReader(gitSelection, (commit) =>
     gitHost.readCommitDiff(commit),
   )
-  const contextBuilder = new SelectionContextBuilder(
+  const contextBuilder = new ContextWorkflow(
     fileIndex,
     fileSelection,
     fileSystem,
@@ -63,6 +65,9 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
   return {
     getWorkspaces,
     getPrimaryWorkspaceRoot,
+    supportsLocalFilesystemWorkspace(): boolean {
+      return isSupportedLocalWorkspace(vscode.workspace.workspaceFolders, vscode.env.remoteName)
+    },
     fileSystem,
     gitHost,
     fileIndex,

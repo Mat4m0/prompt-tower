@@ -131,9 +131,11 @@ test('VsCodeGit truncates oversized diffs with a warning', async () => {
     )
 
     const diff = await new VsCodeGit().readCommitDiff(commitInfo)
+    const warnings = diff.warnings ?? []
 
     assert.ok(diff.patch.length < 1_010_000)
-    assert.match(diff.warnings?.join('\n') ?? '', /truncated after 1000000 bytes/)
+    assert.equal(warnings.length, 1)
+    assert.match(warnings.join('\n'), /truncated after 1000000 bytes/)
   } finally {
     await fs.rm(repo, { recursive: true, force: true })
   }

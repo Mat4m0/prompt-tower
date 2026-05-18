@@ -6,7 +6,7 @@ export interface SelectionFilterNode {
   group: SelectionFilterGroup
 }
 
-export class SelectionFiltersProvider implements vscode.TreeDataProvider<SelectionFilterNode> {
+export class FileTypeFiltersProvider implements vscode.TreeDataProvider<SelectionFilterNode> {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
     SelectionFilterNode | undefined | void
   >()

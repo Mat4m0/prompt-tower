@@ -36,17 +36,17 @@ export class VsCodeGit implements GitCommitHost {
         commit.hash,
       ])
       const stripped = stripBinaryPatchNoise(rawPatch.output)
-      const limited = limitPatch(stripped.patch)
 
       return {
         commit,
-        patch: limited.patch,
+        patch: rawPatch.truncated
+          ? `${stripped.patch}\n[diff output truncated after ${MAX_CONTEXT_DIFF_CHARS} bytes]`
+          : stripped.patch,
         warnings: [
           ...(rawPatch.truncated
             ? [`Diff output was truncated after ${MAX_CONTEXT_DIFF_CHARS} bytes.`]
             : []),
           ...stripped.warnings,
-          ...limited.warnings,
         ],
       }
     } catch (error) {
@@ -205,16 +205,6 @@ function stripBinaryPatchNoise(patch: string): { patch: string; warnings: string
   return {
     patch: lines.join('\n'),
     warnings: strippedBinaryPatch ? ['Binary patch content was omitted from the context.'] : [],
-  }
-}
-
-function limitPatch(patch: string): { patch: string; warnings: string[] } {
-  if (patch.length <= MAX_CONTEXT_DIFF_CHARS) {
-    return { patch, warnings: [] }
-  }
-  return {
-    patch: `${patch.slice(0, MAX_CONTEXT_DIFF_CHARS)}\n[diff truncated at ${MAX_CONTEXT_DIFF_CHARS} characters]`,
-    warnings: [`Diff was truncated at ${MAX_CONTEXT_DIFF_CHARS} characters.`],
   }
 }
 

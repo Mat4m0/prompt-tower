@@ -8,8 +8,8 @@ import {
   TOKEN_ESTIMATE_PROFILES,
   getTokenEstimateProfile,
 } from '../../core/tokens/TokenEstimateProfiles'
-import type { ExtensionServices } from './extensionServices'
-import { runContextAction } from './contextActionWorkflow'
+import type { ExtensionWiring } from './extensionWiring'
+import { runContextAction } from './contextActions'
 import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
@@ -22,7 +22,7 @@ export class WebviewMessageHandler {
   private exportOptions: PromptExportOptions
 
   constructor(
-    private services: ExtensionServices,
+    private services: ExtensionWiring,
     private panel: vscode.WebviewPanel,
     private workspaceRoot: string,
   ) {

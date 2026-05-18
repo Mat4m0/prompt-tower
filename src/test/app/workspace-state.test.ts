@@ -9,7 +9,7 @@ test('WorkspaceState persists selection, context options, and export options', a
   await state.setSelectionIntent({
     includedNodeIds: ['w:src'],
     excludedNodeIds: [],
-    excludedFileKindIds: ['pattern:test'],
+    excludedFileTypeFilterIds: ['pattern:test'],
   })
   await state.setTreeMode('fullDirectoriesOnly')
   await state.setOutputMode('compact')

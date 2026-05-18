@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-export class DebugLogger {
+export class OutputLogger {
   private readonly output = vscode.window.createOutputChannel('Lupinum Context')
 
   info(message: string): void {

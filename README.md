@@ -85,7 +85,7 @@ Honors nested `.gitignore` files, root `.contextignore` / `.towerignore`, plus b
 src/
 ├─ core/
 │  └─ context/ContextAssembler.ts
-└─ app/SelectionContextBuilder.ts
+└─ app/ContextWorkflow.ts
 </project_tree>
 <project_files>
 <file name="ContextAssembler.ts" path="/src/core/context/ContextAssembler.ts">
@@ -173,9 +173,9 @@ vp run build
 vp run deploy:local     # installs the .vsix into your local VS Code
 ```
 
-Lupinum Context is local-only by design: it targets local filesystem workspaces, reads selected workspace files, builds context text, and writes to your clipboard or local files. Remote or virtual VS Code workspaces are not guaranteed. It does not make network requests or send telemetry by default. Token labels are rough character-based estimates, not exact tokenizer counts.
+Lupinum Context is local-only by design: it targets local filesystem workspaces, reads selected workspace files, builds context text, and writes to your clipboard or local files. Remote or virtual VS Code workspaces show a warning and block context generation. It does not make network requests or send telemetry by default. Token labels are rough character-based estimates, not exact tokenizer counts.
 
-The repo includes benchmark coverage for indexing and context-generation hot paths. `vp run bench:smoke` is the release sanity check; `vp run bench:large` is the manual large-fixture report path.
+The repo includes benchmark coverage for indexing and context-generation hot paths. `vp run bench:smoke` is the release sanity check; `vp run bench:large` is the manual large-fixture report path. A local 10k-file fixture run measured indexed refresh at about 380ms mean and readable context generation at about 60ms mean; treat those as fixture numbers, not a universal large-repo guarantee.
 
 ---
 

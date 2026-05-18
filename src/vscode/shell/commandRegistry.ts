@@ -1,10 +1,10 @@
 import * as vscode from 'vscode'
-import type { ExtensionServices } from './extensionServices'
-import { runContextAction } from './contextActionWorkflow'
+import type { ExtensionWiring } from './extensionWiring'
+import { runContextAction } from './contextActions'
 
 export function registerCommands(options: {
   context: vscode.ExtensionContext
-  services: ExtensionServices
+  services: ExtensionWiring
   showPanel: () => void | Promise<void>
 }): void {
   const { context, services, showPanel } = options
@@ -23,10 +23,10 @@ export function registerCommands(options: {
     vscode.commands.registerCommand('lupinumContext.clearSelection', () => {
       services.fileSelection.clear(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('lupinumContext.includeAllSelectionFilters', () => {
+    vscode.commands.registerCommand('lupinumContext.includeAllFileTypeFilters', () => {
       services.fileSelection.resetFilters(services.fileIndex.getSnapshot())
     }),
-    vscode.commands.registerCommand('lupinumContext.excludeAllSelectionFilters', () => {
+    vscode.commands.registerCommand('lupinumContext.excludeAllFileTypeFilters', () => {
       services.fileSelection.excludeAllFilters(services.fileIndex.getSnapshot())
     }),
     vscode.commands.registerCommand('lupinumContext.refreshGitCommits', async () => {

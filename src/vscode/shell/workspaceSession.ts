@@ -1,5 +1,5 @@
 import * as vscode from 'vscode'
-import type { ExtensionServices } from './extensionServices'
+import type { ExtensionWiring } from './extensionWiring'
 import {
   createDebouncedRefreshScheduler,
   shouldRefreshForFileEvent,
@@ -12,7 +12,7 @@ export class WorkspaceSession {
 
   constructor(
     private context: vscode.ExtensionContext,
-    private services: ExtensionServices,
+    private services: ExtensionWiring,
   ) {}
 
   start(): void {
