@@ -144,6 +144,14 @@ export async function bootstrapLupinumContext(
     showPanel,
   })
 
+  disposables.push(
+    fileTree.onDidChangeVisibility((event) => {
+      if (event.visible) {
+        void showPanel()
+      }
+    }),
+  )
+
   const session = new WorkspaceSession(context, services)
   session.start()
   disposables.push(session)
