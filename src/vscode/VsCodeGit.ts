@@ -1,4 +1,4 @@
-import { execFile } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import type { GitCommit, GitCommitDiff, GitCommitHost, GitWorkspace } from '../core/git/GitTypes'
 import type { FileIndexLogger } from '../core/files/FileIndex'
 
@@ -21,7 +21,7 @@ export class VsCodeGit implements GitCommitHost {
 
   async readCommitDiff(commit: GitCommit): Promise<GitCommitDiff> {
     try {
-      const rawPatch = await runGit(commit.rootPath, [
+      const rawPatch = await runGitLimited(commit.rootPath, [
         'show',
         '--no-ext-diff',
         '--no-color',
@@ -30,13 +30,19 @@ export class VsCodeGit implements GitCommitHost {
         '--patch',
         commit.hash,
       ])
-      const stripped = stripBinaryPatchNoise(rawPatch)
+      const stripped = stripBinaryPatchNoise(rawPatch.output)
       const limited = limitPatch(stripped.patch)
 
       return {
         commit,
         patch: limited.patch,
-        warnings: [...stripped.warnings, ...limited.warnings],
+        warnings: [
+          ...(rawPatch.truncated
+            ? [`Diff was truncated at ${MAX_CONTEXT_DIFF_CHARS} characters.`]
+            : []),
+          ...stripped.warnings,
+          ...limited.warnings,
+        ],
       }
     } catch (error) {
       return {
@@ -64,6 +70,55 @@ export class VsCodeGit implements GitCommitHost {
       return []
     }
   }
+}
+
+function runGitLimited(
+  cwd: string,
+  args: readonly string[],
+): Promise<{ output: string; truncated: boolean }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('git', ['-C', cwd, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    let outputBytes = 0
+    let truncated = false
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      if (truncated) {
+        return
+      }
+      const remaining = MAX_CONTEXT_DIFF_CHARS - outputBytes
+      if (chunk.length > remaining) {
+        stdoutChunks.push(chunk.subarray(0, Math.max(remaining, 0)))
+        outputBytes = MAX_CONTEXT_DIFF_CHARS
+        truncated = true
+        child.kill()
+        return
+      }
+      stdoutChunks.push(chunk)
+      outputBytes += chunk.length
+    })
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrChunks.push(chunk)
+    })
+
+    child.on('error', reject)
+    child.on('close', (code, signal) => {
+      if (code && !truncated) {
+        reject(new Error(Buffer.concat(stderrChunks).toString('utf8') || `git exited ${code}`))
+        return
+      }
+      if (signal && !truncated) {
+        reject(new Error(`git exited with signal ${signal}`))
+        return
+      }
+      resolve({
+        output: Buffer.concat(stdoutChunks).toString('utf8'),
+        truncated,
+      })
+    })
+  })
 }
 
 function parseCommitLine(line: string, workspace: GitWorkspace): GitCommit | null {

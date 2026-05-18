@@ -122,9 +122,13 @@ test('FileIndex snapshots do not expose mutable index internals', async () => {
   const root = snapshot.nodes.get('w:')
   assert.ok(root && root.kind !== 'file')
 
-  ;(snapshot.files as unknown[]).pop()
-  ;(root.childIds as string[]).length = 0
-  ;(snapshot.nodes as Map<string, unknown>).clear()
+  assert.throws(() => {
+    ;(snapshot.files as unknown[]).pop()
+  })
+  assert.throws(() => {
+    ;(root.childIds as string[]).length = 0
+  })
+  assert.equal(typeof (snapshot.nodes as unknown as { clear?: unknown }).clear, 'undefined')
 
   const nextSnapshot = index.getSnapshot()
   assert.equal(nextSnapshot.files.length, 1)
@@ -132,6 +136,36 @@ test('FileIndex snapshots do not expose mutable index internals', async () => {
   const nextRoot = nextSnapshot.nodes.get('w:')
   assert.ok(nextRoot && nextRoot.kind !== 'file')
   assert.deepEqual(nextRoot.childIds, ['w:src'])
+})
+
+test('FileIndex stats files concurrently during refresh', async () => {
+  const workspace: IndexedWorkspace = {
+    id: 'w',
+    name: 'demo',
+    rootPath: '/repo',
+  }
+  let activeStats = 0
+  let maxActiveStats = 0
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return Array.from({ length: 10 }, (_, index) => `/repo/src/${index}.ts`)
+      },
+      async statFile(): Promise<FileStat> {
+        activeStats += 1
+        maxActiveStats = Math.max(maxActiveStats, activeStats)
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        activeStats -= 1
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+
+  assert.ok(maxActiveStats > 1)
 })
 
 test('FileSelection restores tests after excluded test filter is re-enabled', async () => {
@@ -356,6 +390,37 @@ test('layered ignore rules support nested gitignore and later negation', () => {
   assert.equal(isIgnored('test/token.secret'), false)
   assert.equal(isIgnored('secrets/client.env'), true)
   assert.equal(isIgnored('secrets/keep.env'), false)
+})
+
+test('context and tower ignore rules are root-scoped project filters', () => {
+  const isIgnored = createLayeredIgnoreMatcher(
+    [
+      { basePath: '', patterns: ['fixtures/', 'generated/'] },
+      { basePath: 'src', patterns: ['*.secret'] },
+    ],
+    (patterns) => ignore().add(patterns),
+  )
+
+  assert.equal(isIgnored('fixtures/output.xml'), true)
+  assert.equal(isIgnored('packages/app/fixtures/output.xml'), true)
+  assert.equal(isIgnored('generated/report.json'), true)
+  assert.equal(isIgnored('src/token.secret'), true)
+  assert.equal(isIgnored('packages/app/token.secret'), false)
+})
+
+test('ignore path normalization treats Windows separators like POSIX separators', () => {
+  const isIgnored = createLayeredIgnoreMatcher(
+    [
+      { basePath: '', patterns: ['secrets/', '*.pem'] },
+      { basePath: 'src/private', patterns: ['*.env'] },
+    ],
+    (patterns) => ignore().add(patterns),
+  )
+
+  assert.equal(isIgnored('secrets\\client.env'), true)
+  assert.equal(isIgnored('certs\\client.pem'), true)
+  assert.equal(isIgnored('src\\private\\local.env'), true)
+  assert.equal(isIgnored('src\\public\\local.env'), false)
 })
 
 test('ignored secret-like files cannot be indexed or selected into context', async () => {

@@ -73,6 +73,7 @@ export class FileIndex {
   private dirtyVersion = 1
   private refreshedVersion = 0
   private snapshotVersion = 0
+  private snapshot: FileIndexSnapshot = createSnapshot(new Map(), [], [], 0)
   private refreshInFlight: Promise<void> | undefined
 
   constructor(
@@ -113,23 +114,7 @@ export class FileIndex {
   }
 
   getSnapshot(): FileIndexSnapshot {
-    const nodes = new Map<string, IndexedNode>()
-    const files: IndexedFile[] = []
-
-    for (const [id, node] of this.nodes) {
-      const cloned = cloneIndexedNode(node)
-      nodes.set(id, cloned)
-      if (cloned.kind === 'file') {
-        files.push(cloned)
-      }
-    }
-
-    return {
-      nodes,
-      rootIds: [...this.rootIds],
-      files,
-      version: this.snapshotVersion,
-    }
+    return this.snapshot
   }
 
   findNode(nodeId: string): IndexedNode | undefined {
@@ -198,8 +183,11 @@ export class FileIndex {
       this.logger?.info(
         `[index] listed ${workspace.name}: ${paths.length} path(s) in ${Date.now() - workspaceStartedAt}ms`,
       )
-      for (const absolutePath of paths) {
-        const stat = await this.host.statFile(absolutePath)
+      const stats = await mapWithConcurrency(paths, 64, async (absolutePath) => ({
+        absolutePath,
+        stat: await this.host.statFile(absolutePath),
+      }))
+      for (const { absolutePath, stat } of stats) {
         if (!stat) {
           continue
         }
@@ -230,6 +218,7 @@ export class FileIndex {
     this.rootIds = rootIds
     this.files = files
     this.snapshotVersion += 1
+    this.snapshot = createSnapshot(this.nodes, this.rootIds, this.files, this.snapshotVersion)
     this.refreshedVersion = version
     this.state = this.isDirty() ? 'dirty' : 'idle'
     this.logger?.info(
@@ -260,6 +249,7 @@ export class FileIndex {
     this.rootIds = rootIds
     this.files = []
     this.snapshotVersion += 1
+    this.snapshot = createSnapshot(this.nodes, this.rootIds, this.files, this.snapshotVersion)
     this.emit()
   }
 
@@ -317,6 +307,7 @@ export class FileIndex {
     this.nodes = nodes
     this.files = [...nodes.values()].filter((node): node is IndexedFile => node.kind === 'file')
     this.snapshotVersion += 1
+    this.snapshot = createSnapshot(this.nodes, this.rootIds, this.files, this.snapshotVersion)
   }
 
   private emit(): void {
@@ -325,10 +316,6 @@ export class FileIndex {
       listener(snapshot)
     }
   }
-}
-
-function cloneIndexedNode(node: IndexedNode): IndexedNode {
-  return node.kind === 'file' ? { ...node } : { ...node, childIds: [...node.childIds] }
 }
 
 function createIndexedFile(
@@ -353,6 +340,101 @@ function createIndexedFile(
     parentId,
     estimatedTokenCount: estimateTokenCountFromBytes(stat.sizeBytes, profile, name),
   }
+}
+
+function createSnapshot(
+  nodes: ReadonlyMap<string, IndexedNode>,
+  rootIds: readonly string[],
+  files: readonly IndexedFile[],
+  version: number,
+): FileIndexSnapshot {
+  const clonedNodes = new Map<string, IndexedNode>()
+  const clonedFiles: IndexedFile[] = []
+
+  for (const [id, node] of nodes) {
+    const cloned = cloneIndexedNode(node)
+    clonedNodes.set(id, cloned)
+    if (cloned.kind === 'file') {
+      clonedFiles.push(cloned)
+    }
+  }
+
+  return {
+    nodes: new ReadonlyNodeMap(clonedNodes),
+    rootIds: Object.freeze([...rootIds]),
+    files: Object.freeze(clonedFiles),
+    version,
+  }
+}
+
+function cloneIndexedNode(node: IndexedNode): IndexedNode {
+  return Object.freeze(
+    node.kind === 'file' ? { ...node } : { ...node, childIds: Object.freeze([...node.childIds]) },
+  ) as IndexedNode
+}
+
+class ReadonlyNodeMap implements ReadonlyMap<string, IndexedNode> {
+  readonly [Symbol.toStringTag] = 'ReadonlyNodeMap'
+
+  constructor(private readonly map: ReadonlyMap<string, IndexedNode>) {}
+
+  get size(): number {
+    return this.map.size
+  }
+
+  get(key: string): IndexedNode | undefined {
+    return this.map.get(key)
+  }
+
+  has(key: string): boolean {
+    return this.map.has(key)
+  }
+
+  forEach(
+    callbackfn: (value: IndexedNode, key: string, map: ReadonlyMap<string, IndexedNode>) => void,
+    thisArg?: unknown,
+  ): void {
+    this.map.forEach((value, key) => callbackfn.call(thisArg, value, key, this))
+  }
+
+  entries(): IterableIterator<[string, IndexedNode]> {
+    return this.map.entries()
+  }
+
+  keys(): IterableIterator<string> {
+    return this.map.keys()
+  }
+
+  values(): IterableIterator<IndexedNode> {
+    return this.map.values()
+  }
+
+  [Symbol.iterator](): IterableIterator<[string, IndexedNode]> {
+    return this.entries()
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = []
+  results.length = items.length
+  let nextIndex = 0
+  const workerCount = Math.min(concurrency, items.length)
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        results[currentIndex] = await worker(items[currentIndex])
+      }
+    }),
+  )
+
+  return results
 }
 
 export function createNodeId(workspaceId: string, relativePath: string): string {

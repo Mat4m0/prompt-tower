@@ -1,8 +1,14 @@
 import * as vscode from 'vscode'
 import type { ExtensionServices } from './extensionServices'
+import {
+  createDebouncedRefreshScheduler,
+  shouldRefreshForFileEvent,
+} from './workspaceRefreshEvents'
 
 export class WorkspaceSession {
-  private refreshTimer: NodeJS.Timeout | undefined
+  private refreshScheduler = createDebouncedRefreshScheduler(() => {
+    void this.refresh()
+  }, 250)
 
   constructor(
     private context: vscode.ExtensionContext,
@@ -14,22 +20,24 @@ export class WorkspaceSession {
       const watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(workspace.rootPath, '**/*'),
       )
-      watcher.onDidCreate(() => this.scheduleRefresh())
-      watcher.onDidChange(() => this.scheduleRefresh())
-      watcher.onDidDelete(() => this.scheduleRefresh())
+      watcher.onDidCreate((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
+      watcher.onDidChange((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
+      watcher.onDidDelete((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
       this.context.subscriptions.push(watcher)
     }
   }
 
-  private scheduleRefresh(): void {
-    this.services.fileIndex.markDirty()
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer)
+  dispose(): void {
+    this.refreshScheduler.dispose()
+  }
+
+  private scheduleRefresh(workspaceRoot: string, eventPath: string): void {
+    if (!shouldRefreshForFileEvent(workspaceRoot, eventPath)) {
+      this.services.logger.info(`[watcher] ignored file event: ${eventPath}`)
+      return
     }
-    this.refreshTimer = setTimeout(() => {
-      this.refreshTimer = undefined
-      void this.refresh()
-    }, 250)
+    this.services.fileIndex.markDirty()
+    this.refreshScheduler.requestRefresh()
   }
 
   private async refresh(): Promise<void> {

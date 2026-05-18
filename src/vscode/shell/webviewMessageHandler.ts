@@ -10,6 +10,7 @@ import {
   getTokenEstimateProfile,
 } from '../../core/tokens/TokenEstimateProfiles'
 import type { ExtensionServices } from './extensionServices'
+import { confirmLargeContextAction } from './contextActionConfirmation'
 import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
@@ -82,6 +83,15 @@ export class WebviewMessageHandler {
         return
       case 'context.create': {
         await this.setContextOptions(message.treeMode, message.outputMode)
+        const preflight = await this.services.preflightContext({
+          treeMode: this.treeMode,
+          outputMode: this.outputMode,
+        })
+        if (
+          !(await confirmLargeContextAction(message.copy ? 'copy' : 'create', preflight.warnings))
+        ) {
+          return
+        }
         const output = await this.services.createContextFromSelection({
           treeMode: this.treeMode,
           outputMode: this.outputMode,
@@ -105,6 +115,13 @@ export class WebviewMessageHandler {
         await this.setContextOptions(message.treeMode, message.outputMode)
         this.exportOptions = normalizePromptExportOptions(message.options)
         await this.services.workspaceState.setExportOptions(this.exportOptions)
+        const preflight = await this.services.preflightContext({
+          treeMode: this.treeMode,
+          outputMode: this.outputMode,
+        })
+        if (!(await confirmLargeContextAction('save', preflight.warnings))) {
+          return
+        }
         const output = await this.services.createContextFromSelection({
           treeMode: this.treeMode,
           outputMode: this.outputMode,

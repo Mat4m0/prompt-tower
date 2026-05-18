@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 import type { ExtensionServices } from './extensionServices'
+import { confirmLargeContextAction } from './contextActionConfirmation'
 
 export function registerCommands(options: {
   context: vscode.ExtensionContext
@@ -57,9 +58,17 @@ export function registerCommands(options: {
       services.fileSelection.setNodeIncluded(services.fileIndex.getSnapshot(), file.id, true)
     }),
     vscode.commands.registerCommand('lupinumContext.copyContext', async () => {
-      const output = await services.createContextFromSelection({
+      const options = {
         treeMode: services.workspaceState.getTreeMode(),
         outputMode: services.workspaceState.getOutputMode(),
+      }
+      const preflight = await services.preflightContext(options)
+      if (!(await confirmLargeContextAction('copy', preflight.warnings))) {
+        return
+      }
+      const output = await services.createContextFromSelection({
+        treeMode: options.treeMode,
+        outputMode: options.outputMode,
       })
       await vscode.env.clipboard.writeText(output.text)
       const message = formatCopyMessage(

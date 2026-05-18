@@ -8,17 +8,19 @@ import type {
 import { formatCompactGitDiffs, formatReadableGitDiffs } from '../git/GitDiffFormatter'
 
 export function assembleContext(request: ContextBuildRequest): ContextBuildResult {
-  const warnings: ContextWarning[] = []
+  const warnings: ContextWarning[] = [...(request.warnings ?? [])]
   const fileBlocks: string[] = []
 
   for (const file of request.files) {
     const snapshot = request.snapshots.get(file.id)
     if (!snapshot) {
-      warnings.push({
-        type: 'missingFile',
-        fileId: file.id,
-        path: file.relativePath,
-      })
+      if (!hasOmittedFileWarning(warnings, file.id)) {
+        warnings.push({
+          type: 'missingFile',
+          fileId: file.id,
+          path: file.relativePath,
+        })
+      }
       continue
     }
 
@@ -52,11 +54,13 @@ function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly
     fileBlocks.length > 0 ? `<project_files>\n${fileBlocks.join('\n')}\n</project_files>\n` : ''
   const gitBlock = formatReadableGitDiffs(request.gitDiffs ?? [])
 
-  if (!treeBlock && !filesBlock && !gitBlock) {
+  const warningsBlock = formatReadableWarnings(request.warnings ?? [])
+
+  if (!treeBlock && !filesBlock && !gitBlock && !warningsBlock) {
     return ''
   }
 
-  return `<context>\n${treeBlock}${filesBlock}${gitBlock}</context>`
+  return `<context>\n${treeBlock}${filesBlock}${gitBlock}${warningsBlock}</context>`
 }
 
 function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
@@ -66,9 +70,10 @@ function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly 
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>${fileBlocks.join('')}</project_files>` : ''
   const gitBlock = formatCompactGitDiffs(request.gitDiffs ?? [])
+  const warningsBlock = formatCompactWarnings(request.warnings ?? [])
 
-  return treeBlock || filesBlock || gitBlock
-    ? `<context>${treeBlock}${filesBlock}${gitBlock}</context>`
+  return treeBlock || filesBlock || gitBlock || warningsBlock
+    ? `<context>${treeBlock}${filesBlock}${gitBlock}${warningsBlock}</context>`
     : ''
 }
 
@@ -110,6 +115,46 @@ function toSourcePath(relativePath: string): string {
 
 function trimGeneratedSection(content: string): string {
   return content.trim().replace(/\n{3,}/g, '\n\n')
+}
+
+function formatReadableWarnings(warnings: readonly ContextWarning[]): string {
+  const outputWarnings = warnings.filter(shouldRenderWarning)
+  if (outputWarnings.length === 0) {
+    return ''
+  }
+
+  return `<context_warnings>\n${outputWarnings.map(formatReadableWarning).join('\n')}\n</context_warnings>\n`
+}
+
+function formatCompactWarnings(warnings: readonly ContextWarning[]): string {
+  const outputWarnings = warnings.filter(shouldRenderWarning)
+  if (outputWarnings.length === 0) {
+    return ''
+  }
+
+  return `<context_warnings>${outputWarnings.map(formatCompactWarning).join('')}</context_warnings>`
+}
+
+function shouldRenderWarning(warning: ContextWarning): boolean {
+  return warning.type === 'omittedFile' || warning.type === 'gitDiff'
+}
+
+function hasOmittedFileWarning(warnings: readonly ContextWarning[], fileId: string): boolean {
+  return warnings.some((warning) => warning.type === 'omittedFile' && warning.fileId === fileId)
+}
+
+function formatReadableWarning(warning: ContextWarning): string {
+  if (warning.type === 'omittedFile') {
+    return `<warning type="omitted_file" path="${escapeAttribute(warning.path)}" reason="${escapeAttribute(warning.reason)}">${escapeText(warning.message)}</warning>`
+  }
+  if (warning.type === 'gitDiff') {
+    return `<warning type="git_diff" commit="${escapeAttribute(warning.shortHash)}">${escapeText(warning.message)}</warning>`
+  }
+  return ''
+}
+
+function formatCompactWarning(warning: ContextWarning): string {
+  return formatReadableWarning(warning)
 }
 
 function escapeAttribute(value: string): string {

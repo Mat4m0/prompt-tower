@@ -1,11 +1,6 @@
 import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
-import {
-  PromptPrefixes,
-  createPromptPrefix,
-  duplicatePromptPrefix,
-  parsePromptPrefixes,
-} from '../../app/PromptPrefixes'
+import { PromptPrefixes, createPromptPrefix, parsePromptPrefixes } from '../../app/PromptPrefixes'
 import { createMemoryStorage } from '../helpers'
 
 test('PromptPrefixes creates, selects, edits, duplicates, and hard deletes prefixes', async () => {
@@ -79,17 +74,4 @@ test('PromptPrefixes ignores missing active prefix ids', () => {
 
   assert.equal(service.getActivePrefix(), null)
   assert.equal(service.getEffectivePrefix(), '')
-})
-
-test('duplicatePromptPrefix copies only the current name and text', () => {
-  const prefix = createPromptPrefix('Audit', 'v1', '2026-01-01T00:00:00.000Z', 'p1')
-  const duplicate = duplicatePromptPrefix(prefix, '2026-01-02T00:00:00.000Z', 'p2')
-
-  assert.deepEqual(duplicate, {
-    id: 'p2',
-    name: 'Audit Copy',
-    text: 'v1',
-    createdAt: '2026-01-02T00:00:00.000Z',
-    updatedAt: '2026-01-02T00:00:00.000Z',
-  })
 })

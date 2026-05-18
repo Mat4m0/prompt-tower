@@ -6,6 +6,10 @@ import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { SelectionContextBuilder } from '../../app/SelectionContextBuilder'
+import { findLargeContextWarning, formatLargeContextActionWarning } from '../../app/ContextWarnings'
+import { createSelectedGitDiffReader } from '../../app/SelectedGitDiffs'
+import { GitSelection } from '../../core/git/GitSelection'
+import type { GitCommit } from '../../core/git/GitTypes'
 import { readFixture } from '../helpers'
 
 const CONTEXT_FIXTURE_TREE = 'demo\n└─ src/\n   └─ example.ts'
@@ -237,11 +241,15 @@ test('SelectionContextBuilder prefixes multi-root tree paths', async () => {
     index,
     selection,
     {
+      async readBytes() {
+        return new Uint8Array()
+      },
       async readText(absolutePath) {
         return absolutePath
       },
     },
     getTokenEstimateProfile('claude'),
+    () => workspaces,
   )
 
   const output = await builder.createContextFromSelection({
@@ -276,11 +284,15 @@ test('SelectionContextBuilder returns warnings for files that disappear before r
     index,
     selection,
     {
+      async readBytes() {
+        return new Uint8Array()
+      },
       async readText() {
         throw new Error('ENOENT')
       },
     },
     getTokenEstimateProfile('claude'),
+    () => [workspace],
   )
 
   const output = await builder.createContextFromSelection({
@@ -374,6 +386,126 @@ test('SelectionContextBuilder emits large context warnings with other warning ty
   assert.ok(largeWarning.characterCount >= 1_000_000)
 })
 
+test('large context action warnings reuse generated output warnings', async () => {
+  const content = 'x'.repeat(1_000_100)
+  const service = await createSingleFileContextService('src/large.ts', content)
+  const output = await service.preflightContext({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+  const warning = findLargeContextWarning(output.warnings)
+
+  assert.ok(warning)
+  assert.equal(
+    formatLargeContextActionWarning('copy', warning),
+    `${warning.message} Continue and copy it?`,
+  )
+  assert.match(formatLargeContextActionWarning('save', warning), /Continue and save it\?$/)
+})
+
+test('SelectionContextBuilder preflight warns before reading selected file contents', async () => {
+  const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
+  const absolutePath = '/repo/src/large.ts'
+  const index = new FileIndex(
+    {
+      async listFiles() {
+        return [absolutePath]
+      },
+      async statFile() {
+        return { sizeBytes: 1_000_100, mtimeMs: 1 }
+      },
+    },
+    [workspace],
+    getTokenEstimateProfile('claude'),
+  )
+  await index.ensureFresh()
+  const selection = new FileSelection()
+  selection.setNodeIncluded(index.getSnapshot(), 'w:src/large.ts', true)
+  const builder = new SelectionContextBuilder(
+    index,
+    selection,
+    {
+      async readBytes() {
+        throw new Error('preflight must not read bytes')
+      },
+      async readText() {
+        throw new Error('preflight must not read text')
+      },
+    },
+    getTokenEstimateProfile('claude'),
+    () => [workspace],
+  )
+
+  const preflight = await builder.preflightContext({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(preflight.selectedFileCount, 1)
+  assert.equal(preflight.selectedBytes, 1_000_100)
+  assert.equal(preflight.requiresConfirmation, true)
+  assert.ok(preflight.warnings.some((warning) => warning.type === 'largeContext'))
+})
+
+test('SelectionContextBuilder omits oversized files before reading content', async () => {
+  let readTextCalls = 0
+  const content = 'x'.repeat(2_000_001)
+  const service = await createSingleFileContextService('src/huge.ts', content, undefined, {
+    readText() {
+      readTextCalls += 1
+      return content
+    },
+  })
+
+  const output = await service.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(readTextCalls, 0)
+  assert.equal(output.fileCount, 0)
+  assert.deepEqual(output.warnings, [
+    {
+      type: 'omittedFile',
+      fileId: 'w:src/huge.ts',
+      path: 'src/huge.ts',
+      reason: 'tooLarge',
+      message: 'File is larger than 2000000 bytes.',
+    },
+  ])
+  assert.match(output.text, /<context_warnings>/)
+  assert.match(output.text, /reason="tooLarge"/)
+})
+
+test('SelectionContextBuilder omits binary files from context output', async () => {
+  const service = await createSingleFileContextService('src/blob.dat', 'ignored text', undefined, {
+    readBytes() {
+      return new Uint8Array([0, 1, 2, 3])
+    },
+  })
+
+  const output = await service.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'compact',
+  })
+
+  assert.equal(output.fileCount, 0)
+  assert.deepEqual(output.warnings, [
+    {
+      type: 'omittedFile',
+      fileId: 'w:src/blob.dat',
+      path: 'src/blob.dat',
+      reason: 'binary',
+      message: 'File appears to be binary.',
+    },
+  ])
+  assert.match(output.text, /<context_warnings><warning type="omitted_file"/)
+})
+
 test('SelectionContextBuilder preview estimates stay close to final normal text estimates', async () => {
   const content = 'export const value = "hello";\n'.repeat(200)
   const service = await createSingleFileContextService('src/app.ts', content)
@@ -409,10 +541,69 @@ test('SelectionContextBuilder preview estimates account for numeric-heavy files'
   assertWithinPercent(preview.tokens, output.estimatedTokens, 15)
 })
 
+test('SelectionContextBuilder preview and final output reuse selected git diff cache', async () => {
+  const selection = new GitSelection()
+  const first = gitCommit('a1')
+  const second = gitCommit('b2')
+  let reads = 0
+  selection.setCommits([first, second])
+  selection.setCommitSelected(first.id, true)
+  const reader = createSelectedGitDiffReader(selection, async (commit) => {
+    reads += 1
+    return {
+      commit,
+      patch: `diff --git a/${commit.shortHash}.ts b/${commit.shortHash}.ts\n+ok\n`,
+    }
+  })
+  const service = await createSingleFileContextService(
+    'src/app.ts',
+    'export const ok = true\n',
+    () => reader.readSelectedGitDiffs(),
+  )
+
+  await service.estimatePreviewForProfiles(
+    { prefix: 'First prefix', treeMode: 'none', outputMode: 'readable' },
+    [getTokenEstimateProfile('claude')],
+  )
+  service.setTokenEstimateProfile(getTokenEstimateProfile('gemini'))
+  await service.estimatePreviewForProfiles(
+    { prefix: 'Second prefix', treeMode: 'none', outputMode: 'compact' },
+    [getTokenEstimateProfile('gemini')],
+  )
+  await service.createContextFromSelection({
+    prefix: 'Final prefix',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(reads, 1)
+
+  selection.setCommitSelected(second.id, true)
+  await service.estimatePreviewForProfiles(
+    { prefix: 'Another prefix', treeMode: 'none', outputMode: 'readable' },
+    [getTokenEstimateProfile('claude')],
+  )
+
+  assert.equal(reads, 2)
+
+  reader.clear()
+  await service.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(reads, 4)
+})
+
 async function createSingleFileContextService(
   relativePath: string,
   content: string,
-  readSelectedGitDiffs?: ConstructorParameters<typeof SelectionContextBuilder>[4],
+  readSelectedGitDiffs?: ConstructorParameters<typeof SelectionContextBuilder>[5],
+  overrides: Partial<{
+    readBytes: () => Uint8Array
+    readText: () => string
+  }> = {},
 ): Promise<SelectionContextBuilder> {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const absolutePath = `/repo/${relativePath}`
@@ -435,11 +626,15 @@ async function createSingleFileContextService(
     index,
     selection,
     {
+      async readBytes() {
+        return overrides.readBytes?.() ?? Buffer.from(content, 'utf8').subarray(0, 8_000)
+      },
       async readText() {
-        return content
+        return overrides.readText?.() ?? content
       },
     },
     getTokenEstimateProfile('claude'),
+    () => [workspace],
     readSelectedGitDiffs,
   )
 }
@@ -451,4 +646,18 @@ function assertWithinPercent(actual: number, expected: number, tolerancePercent:
     delta <= allowed,
     `${actual} differs from ${expected} by more than ${tolerancePercent}%`,
   )
+}
+
+function gitCommit(hash: string): GitCommit {
+  return {
+    id: `w:${hash}`,
+    workspaceId: 'w',
+    workspaceName: 'demo',
+    rootPath: '/repo',
+    hash,
+    shortHash: hash,
+    authorName: 'Ada',
+    authorDate: '2026-05-17T10:00:00.000Z',
+    subject: `Commit ${hash}`,
+  }
 }

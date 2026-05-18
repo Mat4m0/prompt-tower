@@ -8,7 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 
 - Honor nested `.gitignore` files while keeping `.contextignore` and `.towerignore` root-only.
-- Show warnings for very large generated context before copy/save workflows complete.
+- Preflight very large context before reading selected file contents in copy/save workflows.
+- Omit oversized, binary-looking, or outside-workspace files with explicit context warnings.
+- Make file index snapshots cheap to read and stat files concurrently during refresh.
+- Expand architecture boundary validation beyond the core-only VS Code import check.
 - Cache selected Git commit diff reads during context estimation and creation.
 - Clarify local-only behavior, rough estimate language, and the supported `vp` verification path in docs.
 
@@ -23,12 +26,12 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 - **Git commit selection** — pick recent commits and include their diffs as a structured block in the generated context.
 - **Reusable prompt prefixes** — save named prompt prefixes and switch between them.
 - **Compact output mode** — strips whitespace to save tokens when the chat window is tight.
-- **Smart ignores** — honors `.gitignore`, `.contextignore`, `.towerignore`, plus sensible built-in rules.
-- **Clean XML output format** (`<context>` / `<project_tree>` / `<project_files>` / `<git_diffs>`) — structured, parseable, model-friendly.
+- **Layered ignore rules** — honors `.gitignore`, `.contextignore`, `.towerignore`, plus built-in rules.
+- **XML-like tagged output** (`<context>` / `<project_tree>` / `<project_files>` / `<git_diffs>`) — structured and model-friendly.
 
 ### Project
 
-- Clean `core / app / vscode` architecture; the core boundary is enforced by `scripts/check-no-core-vscode-imports.mjs`.
+- `core / app / vscode / webview` architecture with import boundaries enforced by `scripts/check-no-core-vscode-imports.mjs`.
 - Webview rebuilt on Vue 3.
 - `vp` (vite-plus) handles build, lint, format, and test in one toolchain.
 - Project ships pinned to pnpm 10 via the `packageManager` field.

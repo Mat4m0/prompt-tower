@@ -20,7 +20,7 @@ Or you let the agent do it. The agent reads files it thinks are useful. That's f
 
 ## The Solution
 
-Click checkboxes. Get clean, token-efficient context. Paste into any chat. Talk to your code.
+Click checkboxes. Get explicit, token-conscious context. Paste into any chat. Talk to your code.
 
 ```
 1. Pick files in the native VS Code tree
@@ -73,11 +73,11 @@ Save named prefixes like "You are reviewing a TypeScript codebase. Be specific�
 
 Two output formats. _Readable_ for humans peeking at the preview. _Compact_ strips whitespace and saves a meaningful chunk of tokens when the chat window is tight.
 
-### Smart ignores
+### Layered ignore rules
 
 Honors nested `.gitignore` files, root `.contextignore` / `.towerignore`, plus built-in rules. Keeps `node_modules`, `dist`, lockfiles, and generated junk out by default.
 
-### Clean output format
+### XML-like tagged output
 
 ```xml
 <context>
@@ -100,7 +100,7 @@ diff --git a/src/foo.ts ...
 </context>
 ```
 
-Structured, XML-like, model-friendly. Same shape every time.
+Structured, XML-like, model-friendly. Same shape every time, without pretending arbitrary prompt prefixes make the whole paste a valid XML document.
 
 ---
 
@@ -154,11 +154,11 @@ Lupinum Context is a hard fork of **[prompt-tower](https://github.com/backnotpro
 
 ### Why a fork, not a contribution?
 
-We needed a sharper tool. Prompt Tower aims wide; we aim narrow. The upstream roadmap leans into more breadth (GitHub PR integration, more provider hooks, more "smart" features). Ours leans the other way — no agent, no embeddings, no remote calls, no chat-in-editor.
+We needed a sharper tool. Prompt Tower aims wide; we aim narrow. The upstream roadmap leans into more breadth (GitHub PR integration, more provider hooks, more automation). Ours leans the other way — no agent, no embeddings, no remote calls, no chat-in-editor.
 
 Keeping a divergent fork is cheaper than fighting that direction in PR reviews. Both projects are better for it. If you want breadth and an active upstream community, [prompt-tower](https://github.com/backnotprop/prompt-tower) is the right home.
 
-We rebuilt the internals for speed on large codebases, added Git commit selection as a first-class feature, replaced the webview UI with a real Vue app, and tightened the filters. Same idea, sharper tool.
+We tightened the selection model, added local Git commit selection as a first-class feature, replaced the webview UI with a Vue app, and made the filters more explicit. Same idea, sharper tool.
 
 ---
 

@@ -36,7 +36,7 @@ export class FileTreeProvider implements vscode.TreeDataProvider<IndexedNode> {
       this.fileSelection.getSnapshot().checkboxStates.get(element.id) ?? 'unchecked'
     item.description =
       selectionState === 'partial'
-        ? `partial · ${formatEstimatedTokenCount(element.estimatedTokenCount)}`
+        ? `[partial] ${formatEstimatedTokenCount(element.estimatedTokenCount)}`
         : formatEstimatedTokenCount(element.estimatedTokenCount)
     item.tooltip =
       selectionState === 'partial'

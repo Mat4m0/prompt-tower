@@ -51,6 +51,13 @@ export type ContextWarning =
       characterCount: number
       message: string
     }
+  | {
+      type: 'omittedFile'
+      fileId: string
+      path: string
+      reason: 'binary' | 'tooLarge' | 'outsideWorkspace'
+      message: string
+    }
 
 export interface ContextBuildRequest {
   files: readonly ContextFile[]
@@ -61,6 +68,7 @@ export interface ContextBuildRequest {
   treeMode: ProjectTreeMode
   outputMode: ContextOutputMode
   gitDiffs?: readonly ContextGitDiff[]
+  warnings?: readonly ContextWarning[]
 }
 
 export interface ContextBuildResult {

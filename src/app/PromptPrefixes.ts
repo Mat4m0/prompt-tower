@@ -146,14 +146,6 @@ export function createPromptPrefix(
   }
 }
 
-export function duplicatePromptPrefix(
-  prefix: PromptPrefix,
-  now: string = new Date().toISOString(),
-  id: string = createId(),
-): PromptPrefix {
-  return createPromptPrefix(`${prefix.name} Copy`, prefix.text, now, id)
-}
-
 export function parsePromptPrefixes(value: unknown): PromptPrefix[] {
   if (!Array.isArray(value)) {
     return []

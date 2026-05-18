@@ -33,6 +33,9 @@ export interface ExtensionServices {
   createContextFromSelection(
     options: Omit<ContextBuildOptions, 'prefix'>,
   ): Promise<ContextBuildOutput>
+  preflightContext(
+    options: Omit<ContextBuildOptions, 'prefix'>,
+  ): ReturnType<SelectionContextBuilder['preflightContext']>
   clearSelectedGitDiffCache(): void
   getTokenEstimateProfile(): TokenEstimateProfile
   setTokenEstimateProfile(profileId: string): Promise<TokenEstimateProfile>
@@ -58,6 +61,7 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
     fileSelection,
     fileSystem,
     tokenProfile,
+    getWorkspaces,
     () => selectedGitDiffs.readSelectedGitDiffs(),
   )
   const promptPrefixes = new PromptPrefixes(context.globalState, context.workspaceState)
@@ -77,6 +81,12 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
     logger,
     createContextFromSelection(options): Promise<ContextBuildOutput> {
       return contextBuilder.createContextFromSelection({
+        ...options,
+        prefix: promptPrefixes.getEffectivePrefix(),
+      })
+    },
+    preflightContext(options) {
+      return contextBuilder.preflightContext({
         ...options,
         prefix: promptPrefixes.getEffectivePrefix(),
       })

@@ -1,4 +1,5 @@
 import * as path from 'path'
+import * as fs from 'fs/promises'
 import * as vscode from 'vscode'
 import ignore from 'ignore'
 import type { FileIndexHost, FileStat, IndexedWorkspace } from '../core/files/FileIndex'
@@ -52,6 +53,17 @@ export class VsCodeFileSystem implements FileIndexHost {
   async readText(absolutePath: string): Promise<string> {
     const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(absolutePath))
     return Buffer.from(bytes).toString('utf8')
+  }
+
+  async readBytes(absolutePath: string, maxBytes: number): Promise<Uint8Array> {
+    const handle = await fs.open(absolutePath, 'r')
+    try {
+      const buffer = Buffer.alloc(maxBytes)
+      const result = await handle.read(buffer, 0, maxBytes, 0)
+      return buffer.subarray(0, result.bytesRead)
+    } finally {
+      await handle.close()
+    }
   }
 
   async writeText(absolutePath: string, content: string): Promise<void> {

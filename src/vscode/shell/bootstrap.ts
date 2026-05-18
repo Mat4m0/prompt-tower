@@ -1,4 +1,5 @@
 import * as vscode from 'vscode'
+import { randomBytes } from 'crypto'
 import { getWebviewHtml } from '../webview/webviewHost'
 import { FileTreeProvider } from '../views/FileTreeProvider'
 import { GitCommitsProvider } from '../views/GitCommitsProvider'
@@ -148,6 +149,7 @@ export async function bootstrapLupinumContext(
 
   const session = new WorkspaceSession(context, services)
   session.start()
+  disposables.push(session)
   void refreshIndex(services, 'startup')
   void refreshCommits(services, 'startup')
 
@@ -185,10 +187,5 @@ async function refreshIndex(services: ExtensionServices, reason: string): Promis
 }
 
 function createNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-  let result = ''
-  for (let index = 0; index < 32; index++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-  return result
+  return randomBytes(16).toString('base64url')
 }

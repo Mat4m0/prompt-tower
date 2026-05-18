@@ -11,8 +11,13 @@ import type {
 import { generateFileStructureTree } from '../core/context/ProjectTreeBuilder'
 import { estimateGitDiffChars } from '../core/git/GitDiffFormatter'
 import type { GitCommitDiff } from '../core/git/GitTypes'
-import type { FileIndex, IndexedNode } from '../core/files/FileIndex'
+import type { FileIndex, IndexedFile, IndexedNode, IndexedWorkspace } from '../core/files/FileIndex'
 import type { FileSelection } from '../core/files/FileSelection'
+import {
+  BINARY_SNIFF_BYTES,
+  decideFileSafetyBeforeRead,
+  decideFileSafetyFromSample,
+} from '../core/files/FileSafety'
 import {
   estimateTokenCountFromBytes,
   estimateTokenCountFromTextLength,
@@ -22,6 +27,7 @@ import {
 
 export interface TextFileSystem {
   readText(absolutePath: string): Promise<string>
+  readBytes(absolutePath: string, maxBytes: number): Promise<Uint8Array>
 }
 
 export type ReadSelectedGitDiffs = () => Promise<readonly GitCommitDiff[]>
@@ -37,8 +43,19 @@ export interface ContextBuildOutput {
   fileCount: number
   commitCount: number
   estimatedTokens: number
-  estimatedCostLabel: string
   warnings: readonly ContextWarning[]
+}
+
+export interface ContextPreflightResult {
+  selectedFileCount: number
+  selectedBytes: number
+  selectedGitDiffCount: number
+  selectedGitDiffCharacters: number
+  estimatedCharacters: number
+  estimateSummaries: Array<{ profile: TokenEstimateProfile; tokens: number; cost: string }>
+  warnings: readonly ContextWarning[]
+  requiresConfirmation: boolean
+  canGenerate: boolean
 }
 
 const LARGE_CONTEXT_TOKEN_THRESHOLD = 250_000
@@ -50,12 +67,76 @@ export class SelectionContextBuilder {
     private fileSelection: FileSelection,
     private fileSystem: TextFileSystem,
     private tokenProfile: TokenEstimateProfile,
+    private getWorkspaces: () => readonly IndexedWorkspace[] = () => [],
     private readSelectedGitDiffs?: ReadSelectedGitDiffs,
   ) {}
 
   setTokenEstimateProfile(profile: TokenEstimateProfile): void {
     this.tokenProfile = profile
     this.fileIndex.setTokenEstimateProfile(profile)
+  }
+
+  async preflightContext(
+    options: ContextBuildOptions,
+    profiles: readonly TokenEstimateProfile[] = [this.tokenProfile],
+  ): Promise<ContextPreflightResult> {
+    await this.fileIndex.ensureFresh()
+    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
+    const selection = this.fileSelection.getSnapshot()
+    const projectTree = this.buildProjectTree(options.treeMode)
+    const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
+      (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
+      0,
+    )
+    const selectedGitDiffs = await this.loadGitDiffs()
+    const selectedGitDiffCharacters = estimateGitDiffChars(
+      selectedGitDiffs.gitDiffs,
+      options.outputMode === 'compact',
+    )
+    const selectedBytes = selection.selectedFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
+    const estimatedCharacters = estimateContextCharacters({
+      prefix: options.prefix,
+      suffix: '',
+      selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
+      selectedFileCount: selection.selectedFiles.length,
+      selectedGitDiffChars: selectedGitDiffCharacters,
+      projectTree,
+      treeType: options.treeMode,
+      minify: options.outputMode === 'compact',
+    })
+    const estimateSummaries = profiles.map((profile) => {
+      const tokens = Math.ceil(estimatedCharacters / profile.charsPerToken)
+      return { profile, tokens, cost: formatTokenCost(tokens, profile) }
+    })
+    const warnings = [...selectedGitDiffs.warnings]
+    const primaryEstimate =
+      estimateSummaries.find(({ profile }) => profile.id === this.tokenProfile.id) ??
+      estimateSummaries[0]
+
+    if (
+      primaryEstimate &&
+      (primaryEstimate.tokens >= LARGE_CONTEXT_TOKEN_THRESHOLD ||
+        estimatedCharacters >= LARGE_CONTEXT_CHARACTER_THRESHOLD)
+    ) {
+      warnings.push({
+        type: 'largeContext',
+        estimatedTokens: primaryEstimate.tokens,
+        characterCount: estimatedCharacters,
+        message: `Estimated context is large: ${primaryEstimate.tokens} rough tokens, ${estimatedCharacters} characters.`,
+      })
+    }
+
+    return {
+      selectedFileCount: selection.selectedFiles.length,
+      selectedBytes,
+      selectedGitDiffCount: selectedGitDiffs.gitDiffs.length,
+      selectedGitDiffCharacters,
+      estimatedCharacters,
+      estimateSummaries,
+      warnings,
+      requiresConfirmation: warnings.some((warning) => warning.type === 'largeContext'),
+      canGenerate: true,
+    }
   }
 
   async createContextFromSelection(options: ContextBuildOptions): Promise<ContextBuildOutput> {
@@ -70,7 +151,7 @@ export class SelectionContextBuilder {
         name: file.name,
       }),
     )
-    const snapshots = await this.loadSnapshots(files)
+    const { snapshots, warnings: fileWarnings } = await this.loadSnapshots(selection.selectedFiles)
     const projectTree = this.buildProjectTree(options.treeMode)
     const { gitDiffs, warnings: gitWarnings } = await this.loadGitDiffs()
     const result = assembleContext({
@@ -81,9 +162,10 @@ export class SelectionContextBuilder {
       treeMode: options.treeMode,
       outputMode: options.outputMode,
       gitDiffs,
+      warnings: [...fileWarnings, ...gitWarnings],
     })
     const estimatedTokens = estimateTokenCountFromTextLength(result.text, this.tokenProfile)
-    const warnings = [...result.warnings, ...gitWarnings]
+    const warnings = [...result.warnings]
     if (
       estimatedTokens >= LARGE_CONTEXT_TOKEN_THRESHOLD ||
       result.characterCount >= LARGE_CONTEXT_CHARACTER_THRESHOLD
@@ -100,7 +182,6 @@ export class SelectionContextBuilder {
       fileCount: result.fileCount,
       commitCount: result.commitCount,
       estimatedTokens,
-      estimatedCostLabel: formatTokenCost(estimatedTokens, this.tokenProfile),
       warnings,
     }
   }
@@ -166,13 +247,26 @@ export class SelectionContextBuilder {
     return estimateGitDiffChars(gitDiffs, outputMode === 'compact')
   }
 
-  private async loadSnapshots(
-    files: readonly ContextFile[],
-  ): Promise<Map<string, ContextFileSnapshot>> {
+  private async loadSnapshots(files: readonly IndexedFile[]): Promise<{
+    snapshots: Map<string, ContextFileSnapshot>
+    warnings: ContextWarning[]
+  }> {
     const snapshots = new Map<string, ContextFileSnapshot>()
+    const warnings: ContextWarning[] = []
     await Promise.all(
       files.map(async (file) => {
         try {
+          const beforeRead = decideFileSafetyBeforeRead(file, this.getWorkspaces())
+          if (beforeRead.action === 'omit') {
+            warnings.push(toOmittedFileWarning(file, beforeRead.reason, beforeRead.message))
+            return
+          }
+          const sample = await this.fileSystem.readBytes(file.absolutePath, BINARY_SNIFF_BYTES)
+          const sampled = decideFileSafetyFromSample(sample)
+          if (sampled.action === 'omit') {
+            warnings.push(toOmittedFileWarning(file, sampled.reason, sampled.message))
+            return
+          }
           snapshots.set(file.id, {
             content: await this.fileSystem.readText(file.absolutePath),
           })
@@ -181,7 +275,7 @@ export class SelectionContextBuilder {
         }
       }),
     )
-    return snapshots
+    return { snapshots, warnings: sortWarnings(warnings) }
   }
 
   private buildProjectTree(treeMode: ProjectTreeMode): string {
@@ -257,4 +351,26 @@ function estimateFileBlockOverheadChars(file: ContextFile, outputMode: ContextOu
 
 function fileSizeChars(file: ContextFile): number {
   return 'sizeBytes' in file && typeof file.sizeBytes === 'number' ? file.sizeBytes : 0
+}
+
+function toOmittedFileWarning(
+  file: IndexedFile,
+  reason: Extract<ContextWarning, { type: 'omittedFile' }>['reason'],
+  message: string,
+): ContextWarning {
+  return {
+    type: 'omittedFile',
+    fileId: file.id,
+    path: file.relativePath,
+    reason,
+    message,
+  }
+}
+
+function sortWarnings(warnings: readonly ContextWarning[]): ContextWarning[] {
+  return [...warnings].sort((left, right) => {
+    const leftPath = 'path' in left ? left.path : ''
+    const rightPath = 'path' in right ? right.path : ''
+    return leftPath.localeCompare(rightPath)
+  })
 }
