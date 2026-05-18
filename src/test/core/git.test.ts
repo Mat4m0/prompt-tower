@@ -94,6 +94,31 @@ test('VsCodeGit warns when binary patch lines are omitted', async () => {
   }
 })
 
+test('VsCodeGit sorts recent commits globally across workspaces', async () => {
+  const olderRepo = await createTempGitRepo()
+  const newerRepo = await createTempGitRepo()
+  try {
+    await commitFile(olderRepo, 'older.txt', 'older', 'Older', '2026-05-16T10:00:00Z')
+    await commitFile(newerRepo, 'newer.txt', 'newer', 'Newer', '2026-05-17T10:00:00Z')
+
+    const commits = await new VsCodeGit().listRecentCommits(
+      [
+        { id: 'older', name: 'older', rootPath: olderRepo },
+        { id: 'newer', name: 'newer', rootPath: newerRepo },
+      ],
+      2,
+    )
+
+    assert.deepEqual(
+      commits.map((item) => item.subject),
+      ['Newer', 'Older'],
+    )
+  } finally {
+    await fs.rm(olderRepo, { recursive: true, force: true })
+    await fs.rm(newerRepo, { recursive: true, force: true })
+  }
+})
+
 test('VsCodeGit truncates oversized diffs with a warning', async () => {
   const repo = await createTempGitRepo()
   try {
@@ -108,7 +133,7 @@ test('VsCodeGit truncates oversized diffs with a warning', async () => {
     const diff = await new VsCodeGit().readCommitDiff(commitInfo)
 
     assert.ok(diff.patch.length < 1_010_000)
-    assert.match(diff.warnings?.join('\n') ?? '', /truncated at 1000000 characters/)
+    assert.match(diff.warnings?.join('\n') ?? '', /truncated after 1000000 bytes/)
   } finally {
     await fs.rm(repo, { recursive: true, force: true })
   }
@@ -136,9 +161,24 @@ async function createTempGitRepo(): Promise<string> {
   return repo
 }
 
-function git(cwd: string, args: readonly string[]): Promise<string> {
+async function commitFile(
+  repo: string,
+  fileName: string,
+  content: string,
+  message: string,
+  date: string,
+): Promise<void> {
+  await fs.writeFile(path.join(repo, fileName), content)
+  await git(repo, ['add', fileName])
+  await git(repo, ['commit', '-m', message], {
+    GIT_AUTHOR_DATE: date,
+    GIT_COMMITTER_DATE: date,
+  })
+}
+
+function git(cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd }, (error, stdout, stderr) => {
+    execFile('git', args, { cwd, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(stderr || error.message))
         return

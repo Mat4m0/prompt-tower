@@ -16,7 +16,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Make file index snapshots cheap to read and stat files concurrently during refresh.
 - Add smoke and large benchmark scripts for indexing and context-generation hot paths.
 - Expand architecture boundary validation beyond the core-only VS Code import check.
+- Rename the architecture gate to `test:boundaries`.
+- Route command and webview context creation through one shared VS Code shell workflow.
 - Cache selected Git commit diff reads during context estimation and creation.
+- Sort recent Git commits globally across workspaces and time out local Git commands.
+- Keep lockfiles available for selection instead of excluding dependency-resolution context by default.
 - Clarify local-only behavior, rough estimate language, and the supported `vp` verification path in docs.
 
 ## [1.0.0] - 2026-05-16
@@ -35,7 +39,7 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 
 ### Project
 
-- `core / app / vscode / webview` architecture with import boundaries enforced by `scripts/check-no-core-vscode-imports.mjs`.
+- `core / app / vscode / webview` architecture with import boundaries enforced by `scripts/check-boundaries.mjs`.
 - Webview rebuilt on Vue 3.
 - `vp` (vite-plus) handles build, lint, format, and test in one toolchain.
 - Project ships pinned to pnpm 10 via the `packageManager` field.

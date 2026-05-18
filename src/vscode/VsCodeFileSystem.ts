@@ -124,8 +124,7 @@ export class VsCodeFileSystem implements FileIndexHost {
       const content = Buffer.from(bytes).toString('utf8')
       return content
         .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((line) => line && !line.startsWith('#'))
+        .filter((line) => line.trim() && !line.trimStart().startsWith('#'))
     } catch {
       return []
     }

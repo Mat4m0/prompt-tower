@@ -5,6 +5,7 @@ import type { FileIndexLogger } from '../core/files/FileIndex'
 const FIELD_SEPARATOR = '\x1f'
 const MAX_BUFFER = 20 * 1024 * 1024
 const MAX_CONTEXT_DIFF_CHARS = 1_000_000
+const GIT_TIMEOUT_MS = 15_000
 
 export class VsCodeGit implements GitCommitHost {
   constructor(private logger?: FileIndexLogger) {}
@@ -16,7 +17,11 @@ export class VsCodeGit implements GitCommitHost {
     const results = await Promise.all(
       workspaces.map(async (workspace) => this.listWorkspaceCommits(workspace, limit)),
     )
-    return results.flat()
+    const workspaceOrder = new Map(workspaces.map((workspace, index) => [workspace.id, index]))
+    return results
+      .flat()
+      .sort((left, right) => compareCommitsByRecency(left, right, workspaceOrder))
+      .slice(0, limit)
   }
 
   async readCommitDiff(commit: GitCommit): Promise<GitCommitDiff> {
@@ -38,7 +43,7 @@ export class VsCodeGit implements GitCommitHost {
         patch: limited.patch,
         warnings: [
           ...(rawPatch.truncated
-            ? [`Diff was truncated at ${MAX_CONTEXT_DIFF_CHARS} characters.`]
+            ? [`Diff output was truncated after ${MAX_CONTEXT_DIFF_CHARS} bytes.`]
             : []),
           ...stripped.warnings,
           ...limited.warnings,
@@ -82,6 +87,11 @@ function runGitLimited(
     const stderrChunks: Buffer[] = []
     let outputBytes = 0
     let truncated = false
+    let timedOut = false
+    const timeout = setTimeout(() => {
+      timedOut = true
+      child.kill()
+    }, GIT_TIMEOUT_MS)
 
     child.stdout.on('data', (chunk: Buffer) => {
       if (truncated) {
@@ -103,8 +113,16 @@ function runGitLimited(
       stderrChunks.push(chunk)
     })
 
-    child.on('error', reject)
+    child.on('error', (error) => {
+      clearTimeout(timeout)
+      reject(error)
+    })
     child.on('close', (code, signal) => {
+      clearTimeout(timeout)
+      if (timedOut) {
+        reject(new Error(`git timed out after ${GIT_TIMEOUT_MS}ms`))
+        return
+      }
       if (code && !truncated) {
         reject(new Error(Buffer.concat(stderrChunks).toString('utf8') || `git exited ${code}`))
         return
@@ -142,14 +160,38 @@ function parseCommitLine(line: string, workspace: GitWorkspace): GitCommit | nul
 
 function runGit(cwd: string, args: readonly string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', ['-C', cwd, ...args], { maxBuffer: MAX_BUFFER }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(stderr || error.message))
-        return
-      }
-      resolve(stdout)
-    })
+    execFile(
+      'git',
+      ['-C', cwd, ...args],
+      { maxBuffer: MAX_BUFFER, timeout: GIT_TIMEOUT_MS },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message))
+          return
+        }
+        resolve(stdout)
+      },
+    )
   })
+}
+
+function compareCommitsByRecency(
+  left: GitCommit,
+  right: GitCommit,
+  workspaceOrder: ReadonlyMap<string, number>,
+): number {
+  const dateDifference = Date.parse(right.authorDate || '') - Date.parse(left.authorDate || '')
+  if (Number.isFinite(dateDifference) && dateDifference !== 0) {
+    return dateDifference
+  }
+
+  const leftWorkspaceOrder = workspaceOrder.get(left.workspaceId) ?? Number.MAX_SAFE_INTEGER
+  const rightWorkspaceOrder = workspaceOrder.get(right.workspaceId) ?? Number.MAX_SAFE_INTEGER
+  if (leftWorkspaceOrder !== rightWorkspaceOrder) {
+    return leftWorkspaceOrder - rightWorkspaceOrder
+  }
+
+  return left.shortHash.localeCompare(right.shortHash)
 }
 
 function stripBinaryPatchNoise(patch: string): { patch: string; warnings: string[] } {

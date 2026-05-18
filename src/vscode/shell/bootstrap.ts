@@ -18,6 +18,7 @@ export async function bootstrapLupinumContext(
   const services = createExtensionServices(context)
   context.subscriptions.push(services.logger)
   services.logger.info('[bootstrap] activating Lupinum Context')
+  void warnForNonLocalWorkspaceOnce(context)
   await services.promptPrefixes.importOldPrefixesOnce()
   services.fileSelection.restoreIntent(
     services.fileIndex.getSnapshot(),
@@ -159,6 +160,25 @@ export async function bootstrapLupinumContext(
     }
     panel?.dispose()
   })
+}
+
+async function warnForNonLocalWorkspaceOnce(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceFolders = vscode.workspace.workspaceFolders ?? []
+  const hasVirtualWorkspace = workspaceFolders.some((folder) => folder.uri.scheme !== 'file')
+  const hasRemoteWorkspace = Boolean(vscode.env.remoteName)
+  if (!hasVirtualWorkspace && !hasRemoteWorkspace) {
+    return
+  }
+
+  const storageKey = 'lupinumContext.localWorkspaceWarningShown'
+  if (context.globalState.get<boolean>(storageKey, false)) {
+    return
+  }
+
+  await context.globalState.update(storageKey, true)
+  vscode.window.showWarningMessage(
+    'Lupinum Context targets local filesystem workspaces. Remote or virtual workspaces are not guaranteed.',
+  )
 }
 
 async function refreshCommits(services: ExtensionServices, reason: string): Promise<void> {

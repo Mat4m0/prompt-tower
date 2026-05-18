@@ -1,6 +1,5 @@
 import * as vscode from 'vscode'
 import type { ContextOutputMode, ProjectTreeMode } from '../../core/context/ContextFormat'
-import { buildPromptExportTarget } from '../../core/export/PromptFileWriter'
 import {
   normalizePromptExportOptions,
   type PromptExportOptions,
@@ -10,7 +9,7 @@ import {
   getTokenEstimateProfile,
 } from '../../core/tokens/TokenEstimateProfiles'
 import type { ExtensionServices } from './extensionServices'
-import { confirmLargeContextAction } from './contextActionConfirmation'
+import { runContextAction } from './contextActionWorkflow'
 import type {
   ContextPanelState,
   ExtensionToWebviewMessage,
@@ -83,28 +82,15 @@ export class WebviewMessageHandler {
         return
       case 'context.create': {
         await this.setContextOptions(message.treeMode, message.outputMode)
-        const preflight = await this.services.preflightContext({
+        await runContextAction({
+          action: 'create',
+          services: this.services,
           treeMode: this.treeMode,
           outputMode: this.outputMode,
+          copy: message.copy,
+          updatePreview: (text) => this.post({ type: 'context.previewUpdated', text }),
+          postState: () => this.postState(),
         })
-        if (
-          !(await confirmLargeContextAction(message.copy ? 'copy' : 'create', preflight.warnings))
-        ) {
-          return
-        }
-        const output = await this.services.createContextFromSelection({
-          treeMode: this.treeMode,
-          outputMode: this.outputMode,
-        })
-        if (message.copy) {
-          await vscode.env.clipboard.writeText(output.text)
-        }
-        this.post({ type: 'context.previewUpdated', text: output.text })
-        await this.postState()
-        showContextResultMessage(
-          message.copy ? 'Context copied to clipboard.' : 'Context created.',
-          output.warnings.length,
-        )
         return
       }
       case 'context.copyPreview':
@@ -115,22 +101,16 @@ export class WebviewMessageHandler {
         await this.setContextOptions(message.treeMode, message.outputMode)
         this.exportOptions = normalizePromptExportOptions(message.options)
         await this.services.workspaceState.setExportOptions(this.exportOptions)
-        const preflight = await this.services.preflightContext({
+        await runContextAction({
+          action: 'save',
+          services: this.services,
           treeMode: this.treeMode,
           outputMode: this.outputMode,
+          workspaceRoot: this.workspaceRoot,
+          exportOptions: this.exportOptions,
+          updatePreview: (text) => this.post({ type: 'context.previewUpdated', text }),
+          postState: () => this.postState(),
         })
-        if (!(await confirmLargeContextAction('save', preflight.warnings))) {
-          return
-        }
-        const output = await this.services.createContextFromSelection({
-          treeMode: this.treeMode,
-          outputMode: this.outputMode,
-        })
-        const target = buildPromptExportTarget(this.workspaceRoot, this.exportOptions, new Date())
-        await this.services.fileSystem.writeText(target.absolutePath, output.text)
-        this.post({ type: 'context.previewUpdated', text: output.text })
-        await this.postState()
-        showContextResultMessage(`Saved ${target.fileName}.`, output.warnings.length)
         return
       }
       case 'selection.clear':
@@ -196,17 +176,4 @@ export class WebviewMessageHandler {
   private post(message: ExtensionToWebviewMessage): void {
     void this.panel.webview.postMessage(message)
   }
-}
-
-function showContextResultMessage(successMessage: string, warningCount: number): void {
-  if (warningCount === 0) {
-    vscode.window.showInformationMessage(successMessage)
-    return
-  }
-
-  vscode.window.showWarningMessage(`${successMessage} ${formatWarnings(warningCount)}.`)
-}
-
-function formatWarnings(count: number): string {
-  return count === 1 ? '1 warning was reported' : `${count} warnings were reported`
 }

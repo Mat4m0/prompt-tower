@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 import type { ExtensionServices } from './extensionServices'
-import { confirmLargeContextAction } from './contextActionConfirmation'
+import { runContextAction } from './contextActionWorkflow'
 
 export function registerCommands(options: {
   context: vscode.ExtensionContext
@@ -58,43 +58,12 @@ export function registerCommands(options: {
       services.fileSelection.setNodeIncluded(services.fileIndex.getSnapshot(), file.id, true)
     }),
     vscode.commands.registerCommand('lupinumContext.copyContext', async () => {
-      const options = {
+      await runContextAction({
+        action: 'copy',
+        services,
         treeMode: services.workspaceState.getTreeMode(),
         outputMode: services.workspaceState.getOutputMode(),
-      }
-      const preflight = await services.preflightContext(options)
-      if (!(await confirmLargeContextAction('copy', preflight.warnings))) {
-        return
-      }
-      const output = await services.createContextFromSelection({
-        treeMode: options.treeMode,
-        outputMode: options.outputMode,
       })
-      await vscode.env.clipboard.writeText(output.text)
-      const message = formatCopyMessage(
-        output.fileCount,
-        output.commitCount,
-        output.warnings.length,
-      )
-      if (output.warnings.length > 0) {
-        vscode.window.showWarningMessage(message)
-      } else {
-        vscode.window.showInformationMessage(message)
-      }
     }),
   )
-}
-
-function formatCopyMessage(fileCount: number, commitCount: number, warningCount: number): string {
-  const files = `${fileCount} ${fileCount === 1 ? 'file' : 'files'}`
-  const warningSuffix =
-    warningCount === 0
-      ? ''
-      : ` ${warningCount === 1 ? '1 warning was reported.' : `${warningCount} warnings were reported.`}`
-  if (commitCount === 0) {
-    return `Copied ${files} to clipboard.${warningSuffix}`
-  }
-
-  const commits = `${commitCount} ${commitCount === 1 ? 'commit diff' : 'commit diffs'}`
-  return `Copied ${files} and ${commits} to clipboard.${warningSuffix}`
 }

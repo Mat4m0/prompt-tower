@@ -588,8 +588,9 @@ test('SelectionContextBuilder preview estimates stay close to final normal text 
 
 test('SelectionContextBuilder preview estimates account for numeric-heavy files', async () => {
   const content = '1234.5678 -9012.3456\n'.repeat(500)
-  const service = await createSingleFileContextService('data/sample.csv', content)
-  service.setTokenEstimateProfile(getTokenEstimateProfile('gemini'))
+  const service = await createSingleFileContextService('data/sample.csv', content, undefined, {
+    profile: getTokenEstimateProfile('gemini'),
+  })
   const options = {
     prefix: '',
     treeMode: 'selectedFilesOnly' as const,
@@ -628,7 +629,6 @@ test('SelectionContextBuilder preview and final output reuse selected git diff c
     { prefix: 'First prefix', treeMode: 'none', outputMode: 'readable' },
     [getTokenEstimateProfile('claude')],
   )
-  service.setTokenEstimateProfile(getTokenEstimateProfile('gemini'))
   await service.estimatePreviewForProfiles(
     { prefix: 'Second prefix', treeMode: 'none', outputMode: 'compact' },
     [getTokenEstimateProfile('gemini')],
@@ -666,10 +666,12 @@ async function createSingleFileContextService(
   overrides: Partial<{
     readBytes: () => Uint8Array
     readText: () => string
+    profile: ReturnType<typeof getTokenEstimateProfile>
   }> = {},
 ): Promise<SelectionContextBuilder> {
   const workspace: IndexedWorkspace = { id: 'w', name: 'demo', rootPath: '/repo' }
   const absolutePath = `/repo/${relativePath}`
+  const profile = overrides.profile ?? getTokenEstimateProfile('claude')
   const index = new FileIndex(
     {
       async listFiles() {
@@ -680,7 +682,7 @@ async function createSingleFileContextService(
       },
     },
     [workspace],
-    getTokenEstimateProfile('claude'),
+    profile,
   )
   await index.ensureFresh()
   const selection = new FileSelection()
@@ -696,7 +698,7 @@ async function createSingleFileContextService(
         return overrides.readText?.() ?? content
       },
     },
-    getTokenEstimateProfile('claude'),
+    profile,
     () => [workspace],
     readSelectedGitDiffs,
   )

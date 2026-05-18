@@ -75,7 +75,7 @@ Two output formats. _Readable_ is easier to inspect in the preview. _Compact_ re
 
 ### Layered ignore rules
 
-Honors nested `.gitignore` files, root `.contextignore` / `.towerignore`, plus built-in rules. Keeps `node_modules`, `dist`, lockfiles, and generated junk out by default.
+Honors nested `.gitignore` files, root `.contextignore` / `.towerignore`, plus built-in rules. Keeps `node_modules`, `dist`, caches, secrets, and generated junk out by default.
 
 ### XML-like tagged output
 

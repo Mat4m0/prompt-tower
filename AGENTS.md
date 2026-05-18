@@ -52,7 +52,7 @@ Before finishing meaningful changes, run:
 vp install
 vp check
 vp test
-vp run test:no-core-vscode-imports
+vp run test:boundaries
 vp build
 vp run validate
 ```

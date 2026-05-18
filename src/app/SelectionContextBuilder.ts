@@ -70,11 +70,6 @@ export class SelectionContextBuilder {
     private readSelectedGitDiffs?: ReadSelectedGitDiffs,
   ) {}
 
-  setTokenEstimateProfile(profile: TokenEstimateProfile): void {
-    this.tokenProfile = profile
-    this.fileIndex.setTokenEstimateProfile(profile)
-  }
-
   async preflightContext(
     options: ContextBuildOptions,
     profiles: readonly TokenEstimateProfile[] = [this.tokenProfile],

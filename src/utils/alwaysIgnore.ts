@@ -1,5 +1,5 @@
 export const ALWAYS_IGNORE = [
-  // Version control (HUGE and irrelevant for LLM context)
+  // Version control
   '.git/',
   '.svn/',
   '.hg/',
@@ -7,7 +7,7 @@ export const ALWAYS_IGNORE = [
   '.darcs/',
   '.husky/',
 
-  // IDE/Editor directories (contain settings, might have sensitive paths)
+  // IDE/editor files
   '.vscode/',
   '.idea/',
   '.vs/',
@@ -19,20 +19,7 @@ export const ALWAYS_IGNORE = [
   '*.swo',
   '*.tmp',
 
-  // Lock files (consolidates package-lock.json, yarn.lock, etc.)
-  '*.lock',
-  '*.lockb',
-  '*.lockfile*',
-  'package-lock.json',
-  'yarn.lock',
-  'poetry.lock',
-  'Gemfile.lock',
-  'pnpm-lock.yaml',
-  'bun.lockb',
-  'Cargo.lock',
-  'Pipfile.lock',
-
-  // Dependencies & build outputs
+  // Dependencies and build outputs
   'node_modules/',
   '**/node_modules/**',
   'vendor/',
@@ -69,7 +56,7 @@ export const ALWAYS_IGNORE = [
   '.webpack/',
   '.rollup.cache/',
 
-  // Environment files & secrets (often contain API keys, tokens)
+  // Environment files and secrets
   '.env',
   '.env.*',
   '.env.local',

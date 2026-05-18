@@ -6,7 +6,7 @@ Thanks for taking the time. This is a focused VS Code extension — one job, don
 
 - **Bug or small fix:** just open a PR.
 - **New feature or anything that changes the UX:** open an issue first so we can talk shape. We've turned down good ideas because they widened the product surface area. See [README › Why a fork, not a contribution?](README.md#why-a-fork-not-a-contribution) for what we deliberately don't do.
-- **Architecture:** read [AGENTS.md](AGENTS.md) before touching `src/`. Import boundaries are enforced by `scripts/check-no-core-vscode-imports.mjs`.
+- **Architecture:** read [AGENTS.md](AGENTS.md) before touching `src/`. Import boundaries are enforced by `scripts/check-boundaries.mjs`.
 
 ## Local setup
 
@@ -47,7 +47,7 @@ Before opening a PR, run the full local gate:
 ```bash
 vp check
 vp test
-vp run test:no-core-vscode-imports
+vp run test:boundaries
 vp build
 vp run validate
 ```

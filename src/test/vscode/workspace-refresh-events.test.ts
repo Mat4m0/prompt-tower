@@ -12,7 +12,7 @@ test('workspace file events ignore built-in excluded paths', () => {
   assert.equal(shouldRefreshForFileEvent(root, '/repo/node_modules/pkg/index.js'), false)
   assert.equal(shouldRefreshForFileEvent(root, '/repo/packages/app/dist/index.js'), false)
   assert.equal(shouldRefreshForFileEvent(root, '/repo/.git/index'), false)
-  assert.equal(shouldRefreshForFileEvent(root, '/repo/pnpm-lock.yaml'), false)
+  assert.equal(shouldRefreshForFileEvent(root, '/repo/pnpm-lock.yaml'), true)
   assert.equal(shouldRefreshForFileEvent(root, '/repo/.env.local'), false)
   assert.equal(shouldRefreshForFileEvent(root, '/repo/../outside.ts'), false)
 })

@@ -96,12 +96,6 @@ export class FileIndex {
     this.markDirty()
   }
 
-  setTokenEstimateProfile(profile: TokenEstimateProfile): void {
-    this.tokenProfile = profile
-    this.recomputeEstimates()
-    this.emit()
-  }
-
   markDirty(): void {
     this.dirtyVersion += 1
     if (this.state !== 'refreshing') {

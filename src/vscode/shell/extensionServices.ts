@@ -10,10 +10,7 @@ import { WorkspaceSettings } from '../../app/WorkspaceSettings'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { GitSelection } from '../../core/git/GitSelection'
-import {
-  getTokenEstimateProfile,
-  type TokenEstimateProfile,
-} from '../../core/tokens/TokenEstimateProfiles'
+import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { VsCodeFileSystem } from '../VsCodeFileSystem'
 import { VsCodeGit } from '../VsCodeGit'
 import { DebugLogger } from './DebugLogger'
@@ -37,8 +34,6 @@ export interface ExtensionServices {
     options: Omit<ContextBuildOptions, 'prefix'>,
   ): ReturnType<SelectionContextBuilder['preflightContext']>
   clearSelectedGitDiffCache(): void
-  getTokenEstimateProfile(): TokenEstimateProfile
-  setTokenEstimateProfile(profileId: string): Promise<TokenEstimateProfile>
 }
 
 export function createExtensionServices(context: vscode.ExtensionContext): ExtensionServices {
@@ -47,9 +42,7 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
   const gitHost = new VsCodeGit(logger)
   const getWorkspaces = () => readWorkspaceFolders()
   const getPrimaryWorkspaceRoot = () => getWorkspaces()[0]?.rootPath
-  let tokenProfile = getTokenEstimateProfile(
-    context.globalState.get<string>('lupinumContext.selectedTokenEstimateProfile', 'claude'),
-  )
+  const tokenProfile = getTokenEstimateProfile('claude')
   const fileIndex = new FileIndex(fileSystem, getWorkspaces(), tokenProfile, logger)
   const fileSelection = new FileSelection()
   const gitSelection = new GitSelection()
@@ -93,16 +86,6 @@ export function createExtensionServices(context: vscode.ExtensionContext): Exten
     },
     clearSelectedGitDiffCache(): void {
       selectedGitDiffs.clear()
-    },
-    getTokenEstimateProfile(): TokenEstimateProfile {
-      return tokenProfile
-    },
-    async setTokenEstimateProfile(profileId: string): Promise<TokenEstimateProfile> {
-      const profile = getTokenEstimateProfile(profileId)
-      await context.globalState.update('lupinumContext.selectedTokenEstimateProfile', profile.id)
-      tokenProfile = profile
-      contextBuilder.setTokenEstimateProfile(profile)
-      return profile
     },
   }
 }

@@ -193,7 +193,7 @@ export function createBenchmarkFixturePlan(options: BenchmarkCliOptions): Benchm
 
 export async function runBenchmarkCli(args: readonly string[], rootDir: string): Promise<void> {
   const options = parseBenchmarkArgs(args)
-  const report = await runBenchmarkSuite(options, rootDir)
+  const report = await runBenchmarkSuite(options)
   const reportBase = path.join(rootDir, 'benchmarks', 'reports', `latest-${options.scale}`)
   await mkdir(path.dirname(reportBase), { recursive: true })
   await writeFile(`${reportBase}.json`, `${JSON.stringify(report, null, 2)}\n`)
@@ -206,10 +206,7 @@ export async function runBenchmarkCli(args: readonly string[], rootDir: string):
   }
 }
 
-export async function runBenchmarkSuite(
-  options: BenchmarkCliOptions,
-  repoRoot: string,
-): Promise<BenchmarkReport> {
+export async function runBenchmarkSuite(options: BenchmarkCliOptions): Promise<BenchmarkReport> {
   const fixture = createBenchmarkFixturePlan(options)
   const rootDir = await mkdtemp(path.join(os.tmpdir(), 'lupinum-context-bench-'))
   const memoryBefore = process.memoryUsage().heapUsed
@@ -232,9 +229,6 @@ export async function runBenchmarkSuite(
       memoryAfter,
     })
 
-    if (!repoRoot) {
-      return report
-    }
     return report
   } finally {
     await rm(rootDir, { recursive: true, force: true })

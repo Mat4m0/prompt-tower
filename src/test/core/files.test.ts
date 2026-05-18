@@ -435,6 +435,8 @@ test('ignore rules combine built-ins, gitignore, contextignore, and towerignore 
   assert.equal(matcher.ignores(normalizeIgnorePath('fixtures/context.xml')), true)
   assert.equal(matcher.ignores(normalizeIgnorePath('legacy-output/a.txt')), true)
   assert.equal(matcher.ignores(normalizeIgnorePath('src/app.ts')), false)
+  assert.equal(matcher.ignores(normalizeIgnorePath('pnpm-lock.yaml')), false)
+  assert.equal(matcher.ignores(normalizeIgnorePath('Cargo.lock')), false)
 })
 
 test('layered ignore rules support nested gitignore and later negation', () => {
@@ -454,6 +456,16 @@ test('layered ignore rules support nested gitignore and later negation', () => {
   assert.equal(isIgnored('test/token.secret'), false)
   assert.equal(isIgnored('secrets/client.env'), true)
   assert.equal(isIgnored('secrets/keep.env'), false)
+})
+
+test('layered ignore rules preserve whitespace-sensitive ignore patterns', () => {
+  const isIgnored = createLayeredIgnoreMatcher(
+    [{ basePath: '', patterns: ['space\\ file.txt'] }],
+    (patterns) => ignore().add(patterns),
+  )
+
+  assert.equal(isIgnored('space file.txt'), true)
+  assert.equal(isIgnored('space-file.txt'), false)
 })
 
 test('context and tower ignore rules are root-scoped project filters', () => {
