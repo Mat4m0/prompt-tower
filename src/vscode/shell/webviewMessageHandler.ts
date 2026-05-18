@@ -130,7 +130,7 @@ export class WebviewMessageHandler {
     const activePrefixId = this.services.promptPrefixes.getActivePrefixId()
     const prefix = this.services.promptPrefixes.getEffectivePrefix()
     const visibleEstimateProfileIds = this.services.workspaceState.getEstimateSummaryProfileIds()
-    const estimateSummaries = await this.services.contextBuilder.estimatePreviewForProfiles(
+    const estimateSummaries = await this.services.contextWorkflow.estimatePreviewForProfiles(
       {
         prefix,
         treeMode: this.treeMode,

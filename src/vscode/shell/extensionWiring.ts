@@ -25,7 +25,7 @@ export interface ExtensionWiring {
   fileIndex: FileIndex
   fileSelection: FileSelection
   gitSelection: GitSelection
-  contextBuilder: ContextWorkflow
+  contextWorkflow: ContextWorkflow
   promptPrefixes: PromptPrefixes
   workspaceState: WorkspaceSettings
   logger: OutputLogger
@@ -51,7 +51,7 @@ export function createExtensionWiring(context: vscode.ExtensionContext): Extensi
   const selectedGitDiffs = createSelectedGitDiffReader(gitSelection, (commit) =>
     gitHost.readCommitDiff(commit),
   )
-  const contextBuilder = new ContextWorkflow(
+  const contextWorkflow = new ContextWorkflow(
     fileIndex,
     fileSelection,
     fileSystem,
@@ -73,18 +73,18 @@ export function createExtensionWiring(context: vscode.ExtensionContext): Extensi
     fileIndex,
     fileSelection,
     gitSelection,
-    contextBuilder,
+    contextWorkflow,
     promptPrefixes,
     workspaceState,
     logger,
     createContextFromSelection(options): Promise<ContextBuildOutput> {
-      return contextBuilder.createContextFromSelection({
+      return contextWorkflow.createContextFromSelection({
         ...options,
         prefix: promptPrefixes.getEffectivePrefix(),
       })
     },
     preflightContext(options) {
-      return contextBuilder.preflightContext({
+      return contextWorkflow.preflightContext({
         ...options,
         prefix: promptPrefixes.getEffectivePrefix(),
       })
