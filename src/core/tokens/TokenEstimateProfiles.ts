@@ -6,7 +6,6 @@ export interface TokenEstimateProfile {
   estimateNote: string
   charsPerToken: number
   numericCharsPerToken?: number
-  inputPricePerMTok: number
 }
 
 export const DEFAULT_TOKEN_ESTIMATE_PROFILE_ID: TokenEstimateProfileId = 'claude'
@@ -18,7 +17,6 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
     estimateNote: 'Rough character-based estimate for Claude-style context windows.',
     charsPerToken: 3.9,
     numericCharsPerToken: 1.67,
-    inputPricePerMTok: 15,
   },
   {
     id: 'openai',
@@ -26,7 +24,6 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
     estimateNote: 'Rough character-based estimate for OpenAI-style context windows.',
     charsPerToken: 4.17,
     numericCharsPerToken: 1.79,
-    inputPricePerMTok: 2.5,
   },
   {
     id: 'gemini',
@@ -34,7 +31,6 @@ export const TOKEN_ESTIMATE_PROFILES: readonly TokenEstimateProfile[] = [
     estimateNote: 'Rough character-based estimate for Gemini-style context windows.',
     charsPerToken: 3.44,
     numericCharsPerToken: 1.12,
-    inputPricePerMTok: 0.3,
   },
 ]
 
@@ -62,24 +58,6 @@ export function estimateTokenCountFromBytes(
   fileName?: string,
 ): number {
   return estimateTokenCountFromLength(bytes, getFileCharsPerToken(fileName, profile))
-}
-
-export function estimateTokenCost(tokens: number, profile: TokenEstimateProfile): number {
-  return (tokens / 1_000_000) * profile.inputPricePerMTok
-}
-
-export function formatTokenCost(tokens: number, profile: TokenEstimateProfile): string {
-  const cost = estimateTokenCost(tokens, profile)
-  if (cost === 0) {
-    return '$0'
-  }
-  if (cost < 0.01) {
-    return '<$0.01'
-  }
-  if (cost < 1) {
-    return '$0.01+'
-  }
-  return `$${cost.toFixed(2)}`
 }
 
 export function formatEstimatedTokenCount(tokenCount: number): string {

@@ -146,7 +146,7 @@ function onClear() {
         </label>
         <label class="check">
           <input type="checkbox" :checked="outputMode === 'compact'" @change="onOutputModeChange" />
-          Compact
+          Compact tags
         </label>
         <label class="check">
           <input v-model="copyAfterCreate" type="checkbox" />

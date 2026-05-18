@@ -33,8 +33,8 @@ export function assembleContext(request: ContextBuildRequest): ContextBuildResul
 
   const contextBody =
     request.outputMode === 'compact'
-      ? assembleCompactBody(request, fileBlocks)
-      : assembleReadableBody(request, fileBlocks)
+      ? assembleCompactBody(request, fileBlocks, warnings)
+      : assembleReadableBody(request, fileBlocks, warnings)
   const text = addPrefixAndSuffix(contextBody, request.prefix, request.suffix ?? '')
 
   return {
@@ -46,7 +46,11 @@ export function assembleContext(request: ContextBuildRequest): ContextBuildResul
   }
 }
 
-function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
+function assembleReadableBody(
+  request: ContextBuildRequest,
+  fileBlocks: readonly string[],
+  warnings: readonly ContextWarning[],
+): string {
   const treeBlock = shouldIncludeTree(request)
     ? `<project_tree>\n${escapeText(request.projectTree)}\n</project_tree>\n`
     : ''
@@ -54,7 +58,7 @@ function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly
     fileBlocks.length > 0 ? `<project_files>\n${fileBlocks.join('\n')}\n</project_files>\n` : ''
   const gitBlock = formatReadableGitDiffs(request.gitDiffs ?? [])
 
-  const warningsBlock = formatReadableWarnings(request.warnings ?? [])
+  const warningsBlock = formatReadableWarnings(warnings)
 
   if (!treeBlock && !filesBlock && !gitBlock && !warningsBlock) {
     return ''
@@ -63,14 +67,18 @@ function assembleReadableBody(request: ContextBuildRequest, fileBlocks: readonly
   return `<context>\n${treeBlock}${filesBlock}${gitBlock}${warningsBlock}</context>`
 }
 
-function assembleCompactBody(request: ContextBuildRequest, fileBlocks: readonly string[]): string {
+function assembleCompactBody(
+  request: ContextBuildRequest,
+  fileBlocks: readonly string[],
+  warnings: readonly ContextWarning[],
+): string {
   const treeBlock = shouldIncludeTree(request)
     ? `<project_tree>${escapeText(trimGeneratedSection(request.projectTree))}</project_tree>`
     : ''
   const filesBlock =
     fileBlocks.length > 0 ? `<project_files>${fileBlocks.join('')}</project_files>` : ''
   const gitBlock = formatCompactGitDiffs(request.gitDiffs ?? [])
-  const warningsBlock = formatCompactWarnings(request.warnings ?? [])
+  const warningsBlock = formatCompactWarnings(warnings)
 
   return treeBlock || filesBlock || gitBlock || warningsBlock
     ? `<context>${treeBlock}${filesBlock}${gitBlock}${warningsBlock}</context>`
@@ -136,7 +144,9 @@ function formatCompactWarnings(warnings: readonly ContextWarning[]): string {
 }
 
 function shouldRenderWarning(warning: ContextWarning): boolean {
-  return warning.type === 'omittedFile' || warning.type === 'gitDiff'
+  return (
+    warning.type === 'missingFile' || warning.type === 'omittedFile' || warning.type === 'gitDiff'
+  )
 }
 
 function hasOmittedFileWarning(warnings: readonly ContextWarning[], fileId: string): boolean {
@@ -144,6 +154,9 @@ function hasOmittedFileWarning(warnings: readonly ContextWarning[], fileId: stri
 }
 
 function formatReadableWarning(warning: ContextWarning): string {
+  if (warning.type === 'missingFile') {
+    return `<warning type="missing_file" path="${escapeAttribute(warning.path)}">Selected file could not be read.</warning>`
+  }
   if (warning.type === 'omittedFile') {
     return `<warning type="omitted_file" path="${escapeAttribute(warning.path)}" reason="${escapeAttribute(warning.reason)}">${escapeText(warning.message)}</warning>`
   }

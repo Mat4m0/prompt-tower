@@ -5,6 +5,7 @@ import { getSelectionRefinementDefinition } from '../../core/files/FileKind'
 import { createLayeredIgnoreMatcher, normalizeIgnorePath } from '../../core/files/IgnoreRules'
 import { FileIndex, type FileStat, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
+import { decideFileSafetyBeforeRead } from '../../core/files/FileSafety'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { createSelectionFixtureIndex } from '../helpers'
 import { ALWAYS_IGNORE } from '../../utils/alwaysIgnore'
@@ -96,6 +97,69 @@ test('FileIndex skips paths that normalize outside the workspace', async () => {
     index.getSnapshot().files.map((file) => file.relativePath),
     ['src/a.ts'],
   )
+})
+
+test('file safety rejects indexed files outside their workspace root', () => {
+  assert.deepEqual(
+    decideFileSafetyBeforeRead(
+      {
+        id: 'w:secret.ts',
+        kind: 'file',
+        workspaceId: 'w',
+        absolutePath: '/repo-other/secret.ts',
+        relativePath: 'secret.ts',
+        name: 'secret.ts',
+        extension: '.ts',
+        sizeBytes: 40,
+        mtimeMs: 1,
+        parentId: 'w:',
+        estimatedTokenCount: 10,
+      },
+      [{ id: 'w', name: 'demo', rootPath: '/repo' }],
+    ),
+    {
+      action: 'omit',
+      reason: 'outsideWorkspace',
+      message: 'File is outside the indexed workspace.',
+    },
+  )
+})
+
+test('FileIndex snapshot files are sorted by workspace order and relative path', async () => {
+  const workspaces: IndexedWorkspace[] = [
+    { id: 'a', name: 'app', rootPath: '/repo/app' },
+    { id: 'b', name: 'lib', rootPath: '/repo/lib' },
+  ]
+  const firstOrder = [
+    '/repo/lib/src/z.ts',
+    '/repo/app/src/b.ts',
+    '/repo/app/src/a.ts',
+    '/repo/lib/src/a.ts',
+  ]
+  const secondOrder = [...firstOrder].reverse()
+  let order = firstOrder
+  const index = new FileIndex(
+    {
+      async listFiles(workspace) {
+        return order.filter((filePath) => filePath.startsWith(workspace.rootPath))
+      },
+      async statFile(): Promise<FileStat> {
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    workspaces,
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+  const first = index.getSnapshot().files.map((file) => `${file.workspaceId}:${file.relativePath}`)
+  order = secondOrder
+  index.markDirty()
+  await index.ensureFresh()
+  const second = index.getSnapshot().files.map((file) => `${file.workspaceId}:${file.relativePath}`)
+
+  assert.deepEqual(first, ['a:src/a.ts', 'a:src/b.ts', 'b:src/a.ts', 'b:src/z.ts'])
+  assert.deepEqual(second, first)
 })
 
 test('FileIndex snapshots do not expose mutable index internals', async () => {

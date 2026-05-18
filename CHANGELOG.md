@@ -10,6 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Honor nested `.gitignore` files while keeping `.contextignore` and `.towerignore` root-only.
 - Preflight very large context before reading selected file contents in copy/save workflows.
 - Omit oversized, binary-looking, or outside-workspace files with explicit context warnings.
+- Remove billing labels and keep estimates token-only.
+- Render missing selected files in generated context warnings.
+- Keep generated context output order stable across file listing order changes.
 - Make file index snapshots cheap to read and stat files concurrently during refresh.
 - Add smoke and large benchmark scripts for indexing and context-generation hot paths.
 - Expand architecture boundary validation beyond the core-only VS Code import check.
@@ -26,7 +29,7 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 - **Rough multi-provider estimates** for Claude, OpenAI, and Gemini side by side.
 - **Git commit selection** — pick recent commits and include their diffs as a structured block in the generated context.
 - **Reusable prompt prefixes** — save named prompt prefixes and switch between them.
-- **Compact output mode** — strips whitespace to save tokens when the chat window is tight.
+- **Compact tags output mode** — removes generated wrapper whitespace without changing selected file contents.
 - **Layered ignore rules** — honors `.gitignore`, `.contextignore`, `.towerignore`, plus built-in rules.
 - **XML-like tagged output** (`<context>` / `<project_tree>` / `<project_files>` / `<git_diffs>`) — structured and model-friendly.
 
@@ -36,3 +39,4 @@ First release of **Lupinum Context** — a hard fork of [`prompt-tower`](https:/
 - Webview rebuilt on Vue 3.
 - `vp` (vite-plus) handles build, lint, format, and test in one toolchain.
 - Project ships pinned to pnpm 10 via the `packageManager` field.
+- Prompt Tower prefix import is a one-time compatibility path for the 1.0.x line and should be removed after that line.

@@ -65,7 +65,7 @@ test('webview outbound message guard validates full panel state shape', () => {
       },
     ],
     visibleEstimateProfileIds: ['claude'],
-    estimateSummaries: [{ id: 'claude', label: 'Claude', tokens: 1200, cost: '$0.01+' }],
+    estimateSummaries: [{ id: 'claude', label: 'Claude', tokens: 1200 }],
     promptPrefixes: [{ id: 'p1', name: 'Audit', text: 'Review this.' }],
     activePrefixId: 'p1',
     inlinePrefix: 'Review this.',
@@ -94,6 +94,16 @@ test('webview outbound message guard validates full panel state shape', () => {
     isExtensionToWebviewMessage({
       type: 'state.changed',
       state: { ...state, promptPrefixes: [{ id: 'p1', name: 'Audit' }] },
+    }),
+    false,
+  )
+  assert.equal(
+    isExtensionToWebviewMessage({
+      type: 'state.changed',
+      state: {
+        ...state,
+        estimateSummaries: [{ id: 'claude', label: 'Claude', tokens: 1200, extra: true }],
+      },
     }),
     false,
   )

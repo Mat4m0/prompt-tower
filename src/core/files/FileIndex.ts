@@ -211,6 +211,7 @@ export class FileIndex {
       }
     }
 
+    sortIndexedFiles(files, this.workspaces)
     sortDirectoryChildren(nodes)
     recomputeDirectoryEstimates(nodes, rootIds)
 
@@ -306,6 +307,7 @@ export class FileIndex {
     recomputeDirectoryEstimates(nodes, this.rootIds)
     this.nodes = nodes
     this.files = [...nodes.values()].filter((node): node is IndexedFile => node.kind === 'file')
+    sortIndexedFiles(this.files, this.workspaces)
     this.snapshotVersion += 1
     this.snapshot = createSnapshot(this.nodes, this.rootIds, this.files, this.snapshotVersion)
   }
@@ -349,15 +351,14 @@ function createSnapshot(
   version: number,
 ): FileIndexSnapshot {
   const clonedNodes = new Map<string, IndexedNode>()
-  const clonedFiles: IndexedFile[] = []
 
   for (const [id, node] of nodes) {
     const cloned = cloneIndexedNode(node)
     clonedNodes.set(id, cloned)
-    if (cloned.kind === 'file') {
-      clonedFiles.push(cloned)
-    }
   }
+  const clonedFiles = files
+    .map((file) => clonedNodes.get(file.id))
+    .filter((node): node is IndexedFile => node?.kind === 'file')
 
   return {
     nodes: new ReadonlyNodeMap(clonedNodes),
@@ -371,6 +372,19 @@ function cloneIndexedNode(node: IndexedNode): IndexedNode {
   return Object.freeze(
     node.kind === 'file' ? { ...node } : { ...node, childIds: Object.freeze([...node.childIds]) },
   ) as IndexedNode
+}
+
+function sortIndexedFiles(files: IndexedFile[], workspaces: readonly IndexedWorkspace[]): void {
+  const workspaceOrder = new Map(workspaces.map((workspace, index) => [workspace.id, index]))
+  files.sort((left, right) => {
+    const workspaceDelta =
+      (workspaceOrder.get(left.workspaceId) ?? Number.MAX_SAFE_INTEGER) -
+      (workspaceOrder.get(right.workspaceId) ?? Number.MAX_SAFE_INTEGER)
+    if (workspaceDelta !== 0) {
+      return workspaceDelta
+    }
+    return left.relativePath.localeCompare(right.relativePath)
+  })
 }
 
 class ReadonlyNodeMap implements ReadonlyMap<string, IndexedNode> {

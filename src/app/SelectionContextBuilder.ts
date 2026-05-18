@@ -21,7 +21,6 @@ import {
 import {
   estimateTokenCountFromBytes,
   estimateTokenCountFromTextLength,
-  formatTokenCost,
   type TokenEstimateProfile,
 } from '../core/tokens/TokenEstimateProfiles'
 
@@ -52,10 +51,10 @@ export interface ContextPreflightResult {
   selectedGitDiffCount: number
   selectedGitDiffCharacters: number
   estimatedCharacters: number
-  estimateSummaries: Array<{ profile: TokenEstimateProfile; tokens: number; cost: string }>
+  estimateSummaries: Array<{ profile: TokenEstimateProfile; tokens: number }>
+  omittedFileCount: number
   warnings: readonly ContextWarning[]
   requiresConfirmation: boolean
-  canGenerate: boolean
 }
 
 const LARGE_CONTEXT_TOKEN_THRESHOLD = 250_000
@@ -104,11 +103,12 @@ export class SelectionContextBuilder {
       treeType: options.treeMode,
       minify: options.outputMode === 'compact',
     })
-    const estimateSummaries = profiles.map((profile) => {
-      const tokens = Math.ceil(estimatedCharacters / profile.charsPerToken)
-      return { profile, tokens, cost: formatTokenCost(tokens, profile) }
-    })
-    const warnings = [...selectedGitDiffs.warnings]
+    const estimateSummaries = profiles.map((profile) => ({
+      profile,
+      tokens: Math.ceil(estimatedCharacters / profile.charsPerToken),
+    }))
+    const safetyWarnings = await this.inspectFilesForSafety(selection.selectedFiles)
+    const warnings = [...safetyWarnings, ...selectedGitDiffs.warnings]
     const primaryEstimate =
       estimateSummaries.find(({ profile }) => profile.id === this.tokenProfile.id) ??
       estimateSummaries[0]
@@ -133,9 +133,9 @@ export class SelectionContextBuilder {
       selectedGitDiffCharacters,
       estimatedCharacters,
       estimateSummaries,
+      omittedFileCount: safetyWarnings.filter((warning) => warning.type === 'omittedFile').length,
       warnings,
       requiresConfirmation: warnings.some((warning) => warning.type === 'largeContext'),
-      canGenerate: true,
     }
   }
 
@@ -189,7 +189,7 @@ export class SelectionContextBuilder {
   async estimatePreviewForProfiles(
     options: ContextBuildOptions,
     profiles: readonly TokenEstimateProfile[],
-  ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number; cost: string }>> {
+  ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number }>> {
     const selection = this.fileSelection.getSnapshot()
     const fixedChars = await this.estimatePreviewFixedCharacters(options)
     return profiles.map((profile) => {
@@ -203,11 +203,7 @@ export class SelectionContextBuilder {
         0,
       )
       const tokens = Math.ceil(fixedChars / profile.charsPerToken) + fileTokens
-      return {
-        profile,
-        tokens,
-        cost: formatTokenCost(tokens, profile),
-      }
+      return { profile, tokens }
     })
   }
 
@@ -252,21 +248,18 @@ export class SelectionContextBuilder {
     warnings: ContextWarning[]
   }> {
     const snapshots = new Map<string, ContextFileSnapshot>()
-    const warnings: ContextWarning[] = []
+    const warnings = await this.inspectFilesForSafety(files)
+    const unsafeFileIds = new Set(
+      warnings
+        .filter((warning) => warning.type === 'omittedFile' || warning.type === 'missingFile')
+        .map((warning) => warning.fileId),
+    )
     await Promise.all(
       files.map(async (file) => {
+        if (unsafeFileIds.has(file.id)) {
+          return
+        }
         try {
-          const beforeRead = decideFileSafetyBeforeRead(file, this.getWorkspaces())
-          if (beforeRead.action === 'omit') {
-            warnings.push(toOmittedFileWarning(file, beforeRead.reason, beforeRead.message))
-            return
-          }
-          const sample = await this.fileSystem.readBytes(file.absolutePath, BINARY_SNIFF_BYTES)
-          const sampled = decideFileSafetyFromSample(sample)
-          if (sampled.action === 'omit') {
-            warnings.push(toOmittedFileWarning(file, sampled.reason, sampled.message))
-            return
-          }
           snapshots.set(file.id, {
             content: await this.fileSystem.readText(file.absolutePath),
           })
@@ -276,6 +269,34 @@ export class SelectionContextBuilder {
       }),
     )
     return { snapshots, warnings: sortWarnings(warnings) }
+  }
+
+  private async inspectFilesForSafety(files: readonly IndexedFile[]): Promise<ContextWarning[]> {
+    const warnings: ContextWarning[] = []
+    await Promise.all(
+      files.map(async (file) => {
+        const beforeRead = decideFileSafetyBeforeRead(file, this.getWorkspaces())
+        if (beforeRead.action === 'omit') {
+          warnings.push(toOmittedFileWarning(file, beforeRead.reason, beforeRead.message))
+          return
+        }
+
+        try {
+          const sample = await this.fileSystem.readBytes(file.absolutePath, BINARY_SNIFF_BYTES)
+          const sampled = decideFileSafetyFromSample(sample)
+          if (sampled.action === 'omit') {
+            warnings.push(toOmittedFileWarning(file, sampled.reason, sampled.message))
+          }
+        } catch {
+          warnings.push({
+            type: 'missingFile',
+            fileId: file.id,
+            path: file.relativePath,
+          })
+        }
+      }),
+    )
+    return sortWarnings(warnings)
   }
 
   private buildProjectTree(treeMode: ProjectTreeMode): string {

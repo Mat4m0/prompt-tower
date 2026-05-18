@@ -4,7 +4,6 @@ import {
   estimateTokenCountFromBytes,
   estimateTokenCountFromTextLength,
   formatEstimatedTokenCount,
-  formatTokenCost,
   getTokenEstimateProfile,
 } from '../../core/tokens/TokenEstimateProfiles'
 
@@ -41,11 +40,6 @@ test('token profiles make rough estimates and numeric-heavy text uses the numeri
     326_000,
     5,
   )
-  assert.equal(formatTokenCost(0, getTokenEstimateProfile('claude')), '$0')
-  assert.equal(formatTokenCost(100, getTokenEstimateProfile('gemini')), '<$0.01')
-  assert.equal(formatTokenCost(40_406, getTokenEstimateProfile('claude')), '$0.01+')
-  assert.equal(formatTokenCost(370_041, getTokenEstimateProfile('gemini')), '$0.01+')
-  assert.equal(formatTokenCost(1_000_000, getTokenEstimateProfile('claude')), '$15.00')
 })
 
 function assertWithinPercent(actual: number, expected: number, tolerancePercent: number): void {

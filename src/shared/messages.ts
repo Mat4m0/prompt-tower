@@ -43,7 +43,6 @@ export interface ContextPanelState {
     id: string
     label: string
     tokens: number
-    cost: string
   }[]
   promptPrefixes: readonly {
     id: string
@@ -199,13 +198,12 @@ function isEstimateSummary(value: unknown): boolean {
 
   const summary = value as Record<string, unknown>
   return (
-    hasOnlyKeys(summary, ['id', 'label', 'tokens', 'cost']) &&
+    hasOnlyKeys(summary, ['id', 'label', 'tokens']) &&
     typeof summary.id === 'string' &&
     isTokenEstimateProfileId(summary.id) &&
     typeof summary.label === 'string' &&
     typeof summary.tokens === 'number' &&
-    Number.isFinite(summary.tokens) &&
-    typeof summary.cost === 'string'
+    Number.isFinite(summary.tokens)
   )
 }
 

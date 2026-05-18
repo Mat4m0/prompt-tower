@@ -59,7 +59,7 @@ Native VS Code tree with checkboxes. Live estimated size per file and total. Fol
 
 ### Rough multi-provider estimates
 
-See rough token and input-cost estimates for Claude, OpenAI, and Gemini side by side. These are character-based estimates, not exact tokenizer counts. Pick which profiles you care about; the chip bar updates live.
+See rough token estimates for Claude, OpenAI, and Gemini side by side. These are character-based estimates, not exact tokenizer counts. Pick which profiles you care about; the chip bar updates live.
 
 ### Git commit selection
 
@@ -69,9 +69,9 @@ Select recent commits in a dedicated tree view. Their diffs land in the context 
 
 Save named prefixes like "You are reviewing a TypeScript codebase. Be specific…" and switch between them without rewriting the same intro every time.
 
-### Compact mode for token savings
+### Compact tags
 
-Two output formats. _Readable_ for humans peeking at the preview. _Compact_ strips whitespace and saves a meaningful chunk of tokens when the chat window is tight.
+Two output formats. _Readable_ is easier to inspect in the preview. _Compact_ removes generated wrapper whitespace around the tags without changing your selected file contents.
 
 ### Layered ignore rules
 
@@ -173,7 +173,7 @@ vp run build
 vp run deploy:local     # installs the .vsix into your local VS Code
 ```
 
-Lupinum Context is local-only by design: it reads workspace files, builds context text, and writes to your clipboard or local files. It does not make network requests or send telemetry by default. Token and cost labels are rough character-based estimates, not exact tokenizer or billing numbers.
+Lupinum Context is local-only by design: it targets local filesystem workspaces, reads selected workspace files, builds context text, and writes to your clipboard or local files. Remote or virtual VS Code workspaces are not guaranteed. It does not make network requests or send telemetry by default. Token labels are rough character-based estimates, not exact tokenizer counts.
 
 The repo includes benchmark coverage for indexing and context-generation hot paths. `vp run bench:smoke` is the release sanity check; `vp run bench:large` is the manual large-fixture report path.
 

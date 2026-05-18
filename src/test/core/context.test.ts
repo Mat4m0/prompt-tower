@@ -2,11 +2,11 @@ import { test } from 'vite-plus/test'
 import assert from 'node:assert/strict'
 import { assembleContext } from '../../core/context/ContextAssembler'
 import { estimateContextCharacters } from '../../core/context/ContextEstimate'
+import type { ContextWarning } from '../../core/context/ContextFormat'
 import { FileIndex, type IndexedWorkspace } from '../../core/files/FileIndex'
 import { FileSelection } from '../../core/files/FileSelection'
 import { getTokenEstimateProfile } from '../../core/tokens/TokenEstimateProfiles'
 import { SelectionContextBuilder } from '../../app/SelectionContextBuilder'
-import { findLargeContextWarning, formatLargeContextActionWarning } from '../../app/ContextWarnings'
 import { createSelectedGitDiffReader } from '../../app/SelectedGitDiffs'
 import { GitSelection } from '../../core/git/GitSelection'
 import type { GitCommit } from '../../core/git/GitTypes'
@@ -184,6 +184,20 @@ test('ContextAssembler reports missing file snapshots', async () => {
   ])
 })
 
+test('ContextAssembler renders missing file warnings in compact output', () => {
+  const result = assembleContext({
+    files: [CONTEXT_FIXTURE_FILE],
+    snapshots: new Map(),
+    prefix: '',
+    projectTree: '',
+    treeMode: 'none',
+    outputMode: 'compact',
+  })
+
+  assert.match(result.text, /<context_warnings><warning type="missing_file"/)
+  assert.match(result.text, /path="src\/example\.ts"/)
+})
+
 test('ContextAssembler includes selected git commit diffs', () => {
   const result = assembleContext({
     files: [],
@@ -301,7 +315,9 @@ test('SelectionContextBuilder returns warnings for files that disappear before r
     outputMode: 'readable',
   })
 
-  assert.equal(output.text, '')
+  assert.match(output.text, /<context_warnings>/)
+  assert.match(output.text, /type="missing_file"/)
+  assert.match(output.text, /path="src\/deleted\.ts"/)
   assert.equal(output.fileCount, 0)
   assert.deepEqual(output.warnings, [
     {
@@ -350,6 +366,8 @@ test('SelectionContextBuilder surfaces selected git diff warnings', async () => 
       message: 'Diff was truncated at 1000000 characters.',
     },
   ])
+  assert.match(output.text, /<context_warnings>/)
+  assert.match(output.text, /<warning type="git_diff" commit="abc123"/)
 })
 
 test('SelectionContextBuilder emits large context warnings with other warning types', async () => {
@@ -397,11 +415,7 @@ test('large context action warnings reuse generated output warnings', async () =
   const warning = findLargeContextWarning(output.warnings)
 
   assert.ok(warning)
-  assert.equal(
-    formatLargeContextActionWarning('copy', warning),
-    `${warning.message} Continue and copy it?`,
-  )
-  assert.match(formatLargeContextActionWarning('save', warning), /Continue and save it\?$/)
+  assert.match(warning.message, /^Estimated context is large:/)
 })
 
 test('SelectionContextBuilder preflight warns before reading selected file contents', async () => {
@@ -422,12 +436,14 @@ test('SelectionContextBuilder preflight warns before reading selected file conte
   await index.ensureFresh()
   const selection = new FileSelection()
   selection.setNodeIncluded(index.getSnapshot(), 'w:src/large.ts', true)
+  let readBytesCalls = 0
   const builder = new SelectionContextBuilder(
     index,
     selection,
     {
       async readBytes() {
-        throw new Error('preflight must not read bytes')
+        readBytesCalls += 1
+        return Buffer.from('safe text', 'utf8')
       },
       async readText() {
         throw new Error('preflight must not read text')
@@ -445,8 +461,55 @@ test('SelectionContextBuilder preflight warns before reading selected file conte
 
   assert.equal(preflight.selectedFileCount, 1)
   assert.equal(preflight.selectedBytes, 1_000_100)
+  assert.equal(preflight.omittedFileCount, 0)
+  assert.equal(readBytesCalls, 1)
   assert.equal(preflight.requiresConfirmation, true)
   assert.ok(preflight.warnings.some((warning) => warning.type === 'largeContext'))
+})
+
+test('SelectionContextBuilder preflight predicts oversized and binary omissions', async () => {
+  const oversized = await createSingleFileContextService('src/huge.ts', 'x'.repeat(2_000_001))
+  const oversizedPreflight = await oversized.preflightContext({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'readable',
+  })
+
+  assert.equal(oversizedPreflight.omittedFileCount, 1)
+  assert.deepEqual(
+    oversizedPreflight.warnings.filter((warning) => warning.type === 'omittedFile'),
+    [
+      {
+        type: 'omittedFile',
+        fileId: 'w:src/huge.ts',
+        path: 'src/huge.ts',
+        reason: 'tooLarge',
+        message: 'File is larger than 2000000 bytes.',
+      },
+    ],
+  )
+
+  const binary = await createSingleFileContextService('src/blob.dat', 'ignored text', undefined, {
+    readBytes() {
+      return new Uint8Array([0, 1, 2, 3])
+    },
+  })
+  const binaryPreflight = await binary.preflightContext({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'compact',
+  })
+  const binaryOutput = await binary.createContextFromSelection({
+    prefix: '',
+    treeMode: 'none',
+    outputMode: 'compact',
+  })
+
+  assert.equal(binaryPreflight.omittedFileCount, 1)
+  assert.deepEqual(
+    binaryPreflight.warnings.filter((warning) => warning.type === 'omittedFile'),
+    binaryOutput.warnings.filter((warning) => warning.type === 'omittedFile'),
+  )
 })
 
 test('SelectionContextBuilder omits oversized files before reading content', async () => {
@@ -660,4 +723,8 @@ function gitCommit(hash: string): GitCommit {
     authorDate: '2026-05-17T10:00:00.000Z',
     subject: `Commit ${hash}`,
   }
+}
+
+function findLargeContextWarning(warnings: readonly ContextWarning[]) {
+  return warnings.find((warning) => warning.type === 'largeContext')
 }

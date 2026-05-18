@@ -165,11 +165,10 @@ export class WebviewMessageHandler {
         estimateNote,
       })),
       visibleEstimateProfileIds,
-      estimateSummaries: estimateSummaries.map(({ profile, tokens, cost }) => ({
+      estimateSummaries: estimateSummaries.map(({ profile, tokens }) => ({
         id: profile.id,
         label: profile.label,
         tokens,
-        cost,
       })),
       promptPrefixes: this.services.promptPrefixes.listPrefixes().map((promptPrefix) => ({
         id: promptPrefix.id,

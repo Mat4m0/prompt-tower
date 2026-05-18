@@ -23,7 +23,7 @@ You will receive an acknowledgement within 7 days. Fixes ship as patch releases 
 
 ## Scope
 
-Lupinum Context is a local VS Code extension. It reads files from your workspace, formats them, and writes the result to your clipboard or a local file. It does **not** make network requests, send telemetry, or talk to any remote service by default.
+Lupinum Context is a local VS Code extension for local filesystem workspaces. It reads selected files from your workspace, formats them, and writes the result to your clipboard or a local file. Remote or virtual VS Code workspaces are not guaranteed. It does **not** make network requests, send telemetry, or talk to any remote service by default.
 
 In scope for security reports:
 
