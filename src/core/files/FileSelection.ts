@@ -238,17 +238,16 @@ function isSelectedByIntent(
   intent: SelectionIntent,
 ): boolean {
   let node: IndexedNode | undefined = file
-  let included = false
   while (node) {
+    if (intent.includedNodeIds.has(node.id)) {
+      return true
+    }
     if (intent.excludedNodeIds.has(node.id)) {
       return false
     }
-    if (intent.includedNodeIds.has(node.id)) {
-      included = true
-    }
     node = node.parentId ? index.nodes.get(node.parentId) : undefined
   }
-  return included
+  return false
 }
 
 function deriveCheckboxState(

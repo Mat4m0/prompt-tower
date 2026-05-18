@@ -307,6 +307,26 @@ test('FileSelection keeps explicit child excludes across filter changes', async 
   )
 })
 
+test('FileSelection can include a child file under an excluded folder', async () => {
+  const index = await createSelectionFixtureIndex([
+    'scripts/prepare-effect.sh',
+    'scripts/replay.ts',
+  ])
+  const selection = new FileSelection()
+  const snapshot = index.getSnapshot()
+  selection.setNodeIncluded(snapshot, 'w:', true)
+  selection.setNodeIncluded(snapshot, 'w:scripts', false)
+  selection.setNodeIncluded(snapshot, 'w:scripts/prepare-effect.sh', true)
+
+  assert.deepEqual(
+    selection.getSnapshot().selectedFiles.map((file) => file.relativePath),
+    ['scripts/prepare-effect.sh'],
+  )
+  assert.equal(selection.getSnapshot().checkboxStates.get('w:scripts'), 'partial')
+  assert.equal(selection.getSnapshot().checkboxStates.get('w:scripts/prepare-effect.sh'), 'checked')
+  assert.equal(selection.getSnapshot().checkboxStates.get('w:scripts/replay.ts'), 'unchecked')
+})
+
 test('FileSelection derives new files under selected folders and filters tests', async () => {
   let index = await createSelectionFixtureIndex(['src/app.ts'])
   const selection = new FileSelection()
