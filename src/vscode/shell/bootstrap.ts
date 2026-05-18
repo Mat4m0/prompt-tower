@@ -40,7 +40,7 @@ export async function bootstrapLupinumContext(
     showCollapseAll: true,
     manageCheckboxStateManually: true,
   })
-  const filtersTree = vscode.window.createTreeView('lupinumContext.fileTypeFilters', {
+  const filtersTree = vscode.window.createTreeView('lupinumContext.selectionFilters', {
     treeDataProvider: fileTypeFiltersProvider,
     manageCheckboxStateManually: true,
   })
@@ -110,11 +110,6 @@ export async function bootstrapLupinumContext(
   }
 
   disposables.push(
-    fileTree.onDidChangeVisibility((event) => {
-      if (event.visible) {
-        void showPanel()
-      }
-    }),
     fileTree.onDidChangeCheckboxState((event) => {
       for (const [node, state] of event.items) {
         services.fileSelection.setNodeIncluded(

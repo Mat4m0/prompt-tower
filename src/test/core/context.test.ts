@@ -619,7 +619,7 @@ test('ContextWorkflow preview estimates reuse preflight estimate inputs', async 
   assert.equal(preview.tokens, preflight.estimateSummaries[0].tokens)
 })
 
-test('ContextWorkflow preview and final output reuse selected git diff cache', async () => {
+test('ContextWorkflow preview estimates avoid selected git diff reads', async () => {
   const selection = new GitSelection()
   const first = gitCommit('a1')
   const second = gitCommit('b2')
@@ -661,7 +661,7 @@ test('ContextWorkflow preview and final output reuse selected git diff cache', a
     [getTokenEstimateProfile('claude')],
   )
 
-  assert.equal(reads, 2)
+  assert.equal(reads, 1)
 
   reader.clear()
   await service.createContextFromSelection({
@@ -670,7 +670,7 @@ test('ContextWorkflow preview and final output reuse selected git diff cache', a
     outputMode: 'readable',
   })
 
-  assert.equal(reads, 4)
+  assert.equal(reads, 3)
 })
 
 async function createSingleFileContextService(

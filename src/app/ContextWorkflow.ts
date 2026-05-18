@@ -158,8 +158,26 @@ export class ContextWorkflow {
     options: ContextBuildOptions,
     profiles: readonly TokenEstimateProfile[],
   ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number }>> {
-    const inspection = await this.inspectSelectedContext(options)
-    return estimateProfiles(inspection.estimatedCharacters, profiles)
+    await this.fileIndex.ensureFresh()
+    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
+    const selection = this.fileSelection.getSnapshot()
+    const projectTree = this.buildProjectTree(options.treeMode)
+    const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
+      (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
+      0,
+    )
+    const selectedBytes = selection.selectedFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
+    const estimatedCharacters = estimateContextCharacters({
+      prefix: options.prefix,
+      suffix: '',
+      selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
+      selectedFileCount: selection.selectedFiles.length,
+      selectedGitDiffChars: 0,
+      projectTree,
+      treeType: options.treeMode,
+      minify: options.outputMode === 'compact',
+    })
+    return estimateProfiles(estimatedCharacters, profiles)
   }
 
   private async inspectSelectedContext(

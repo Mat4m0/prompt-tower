@@ -103,7 +103,7 @@
           "type": "tree"
         },
         {
-          "id": "lupinumContext.fileTypeFilters",
+          "id": "lupinumContext.selectionFilters",
           "name": "File Type Filters",
           "initialSize": 1,
           "type": "tree"
@@ -250,12 +250,12 @@
         },
         {
           "command": "lupinumContext.includeAllFileTypeFilters",
-          "when": "view == lupinumContext.fileTypeFilters",
+          "when": "view == lupinumContext.selectionFilters",
           "group": "navigation@1"
         },
         {
           "command": "lupinumContext.excludeAllFileTypeFilters",
-          "when": "view == lupinumContext.fileTypeFilters",
+          "when": "view == lupinumContext.selectionFilters",
           "group": "navigation@2"
         },
         {
@@ -306,9 +306,9 @@
     "onCommand:lupinumContext.selectLatestGitCommit",
     "onCommand:lupinumContext.selectLatestThreeGitCommits",
     "onCommand:lupinumContext.showLogs",
-    "onView:lupinumContext.fileTypeFilters",
     "onView:lupinumContext.files",
-    "onView:lupinumContext.gitCommits"
+    "onView:lupinumContext.gitCommits",
+    "onView:lupinumContext.selectionFilters"
   ],
   "icon": "assets/lupinum-context-icon.png",
   "engines": {
