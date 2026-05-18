@@ -175,6 +175,8 @@ vp run deploy:local     # installs the .vsix into your local VS Code
 
 Lupinum Context is local-only by design: it reads workspace files, builds context text, and writes to your clipboard or local files. It does not make network requests or send telemetry by default. Token and cost labels are rough character-based estimates, not exact tokenizer or billing numbers.
 
+The repo includes benchmark coverage for indexing and context-generation hot paths. `vp run bench:smoke` is the release sanity check; `vp run bench:large` is the manual large-fixture report path.
+
 ---
 
 **[AGPL-3.0](LICENSE)** • **[context.lupinum.com](https://context.lupinum.com)** • Built by [Lupinum](https://lupinum.com) • Originally [@backnotprop](https://github.com/backnotprop)

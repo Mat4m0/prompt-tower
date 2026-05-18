@@ -52,6 +52,8 @@
     "check-types": "vp check --no-fmt --no-lint",
     "lint": "vp lint src",
     "test": "vp test run",
+    "bench:smoke": "node scripts/bench-smoke.mjs",
+    "bench:large": "node scripts/bench-smoke.mjs --scale large",
     "test:no-core-vscode-imports": "node scripts/check-no-core-vscode-imports.mjs",
     "validate": "vp check && vp test run && vp run test:no-core-vscode-imports",
     "prepare": "vp config"

@@ -52,6 +52,14 @@ vp build
 vp run validate
 ```
 
+Before release or performance-sensitive changes, also run the benchmark smoke gate:
+
+```bash
+vp run bench:smoke
+```
+
+Use `vp run bench:large` manually when you want fresh large-fixture numbers; it reports results without enforcing thresholds.
+
 The pre-commit hook (`.vite-hooks/pre-commit`) runs `vp staged` automatically — it formats and lints only what you staged. Don't bypass it.
 
 ## Code style

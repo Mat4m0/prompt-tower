@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Preflight very large context before reading selected file contents in copy/save workflows.
 - Omit oversized, binary-looking, or outside-workspace files with explicit context warnings.
 - Make file index snapshots cheap to read and stat files concurrently during refresh.
+- Add smoke and large benchmark scripts for indexing and context-generation hot paths.
 - Expand architecture boundary validation beyond the core-only VS Code import check.
 - Cache selected Git commit diff reads during context estimation and creation.
 - Clarify local-only behavior, rough estimate language, and the supported `vp` verification path in docs.
