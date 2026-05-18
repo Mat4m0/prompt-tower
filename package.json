@@ -147,8 +147,9 @@
       },
       {
         "command": "lupinumContext.open",
-        "title": "Open Lupinum Context",
-        "category": "Lupinum Context"
+        "title": "Open Context Panel",
+        "category": "Lupinum Context",
+        "icon": "$(layout-panel)"
       },
       {
         "command": "lupinumContext.showLogs",
@@ -229,9 +230,14 @@
       ],
       "view/title": [
         {
-          "command": "lupinumContext.copyContext",
+          "command": "lupinumContext.open",
           "when": "view == lupinumContext.files",
           "group": "navigation@1"
+        },
+        {
+          "command": "lupinumContext.copyContext",
+          "when": "view == lupinumContext.files",
+          "group": "navigation@2"
         },
         {
           "command": "lupinumContext.refresh",
