@@ -600,7 +600,7 @@ test('ContextWorkflow preview estimates stay close to final normal text estimate
   assertWithinPercent(preview.tokens, output.estimatedTokens, 10)
 })
 
-test('ContextWorkflow preview estimates reuse preflight estimate inputs', async () => {
+test('ContextWorkflow preview estimates stay close to preflight estimates', async () => {
   const content = '1234.5678 -9012.3456\n'.repeat(500)
   const service = await createSingleFileContextService('data/sample.csv', content, undefined, {
     profile: getTokenEstimateProfile('gemini'),
@@ -616,7 +616,7 @@ test('ContextWorkflow preview estimates reuse preflight estimate inputs', async 
   ])
   const preflight = await service.preflightContext(options, [getTokenEstimateProfile('gemini')])
 
-  assert.equal(preview.tokens, preflight.estimateSummaries[0].tokens)
+  assertWithinPercent(preview.tokens, preflight.estimateSummaries[0].tokens, 1)
 })
 
 test('ContextWorkflow preview estimates avoid selected git diff reads', async () => {

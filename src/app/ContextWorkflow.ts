@@ -159,21 +159,28 @@ export class ContextWorkflow {
     profiles: readonly TokenEstimateProfile[],
   ): Promise<Array<{ profile: TokenEstimateProfile; tokens: number }>> {
     await this.fileIndex.ensureFresh()
-    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
+    const index = this.fileIndex.getSnapshot()
+    this.fileSelection.reconcile(index)
     const selection = this.fileSelection.getSnapshot()
-    const projectTree = this.buildProjectTree(options.treeMode)
     const selectedFileBlockOverheadChars = selection.selectedFiles.reduce(
       (sum, file) => sum + estimateFileBlockOverheadChars(file, options.outputMode),
       0,
     )
     const selectedBytes = selection.selectedFiles.reduce((sum, file) => sum + file.sizeBytes, 0)
+    const projectTreeCharacters = estimateProjectTreeCharacters(
+      options.treeMode,
+      index,
+      selection.selectedFiles,
+      this.getWorkspaces(),
+    )
     const estimatedCharacters = estimateContextCharacters({
       prefix: options.prefix,
       suffix: '',
       selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
       selectedFileCount: selection.selectedFiles.length,
       selectedGitDiffChars: 0,
-      projectTree,
+      projectTree: '',
+      projectTreeCharacters,
       treeType: options.treeMode,
       minify: options.outputMode === 'compact',
     })
@@ -362,6 +369,41 @@ function estimateFileBlockOverheadChars(file: ContextFile, outputMode: ContextOu
   }
 
   return `<file name="${file.name}" path="${sourcePath}">\n\n</file>`.length
+}
+
+function estimateProjectTreeCharacters(
+  treeMode: ProjectTreeMode,
+  index: ReturnType<FileIndex['getSnapshot']>,
+  selectedFiles: readonly IndexedFile[],
+  workspaces: readonly IndexedWorkspace[],
+): number {
+  if (treeMode === 'none') {
+    return 0
+  }
+
+  const workspaceNameChars = workspaces.reduce((sum, workspace) => sum + workspace.name.length, 0)
+  const entries =
+    treeMode === 'selectedFilesOnly'
+      ? selectedFiles.map((file) => file.relativePath)
+      : treeMode === 'fullDirectoriesOnly'
+        ? [...index.nodes.values()]
+            .filter((node) => node.kind !== 'file' && node.relativePath.length > 0)
+            .map((node) => node.relativePath)
+        : index.files.map((file) => file.relativePath)
+
+  if (entries.length === 0) {
+    return workspaceNameChars
+  }
+
+  return (
+    workspaceNameChars +
+    entries.reduce((sum, entry) => sum + entry.length + estimateTreeLineOverhead(entry), 0)
+  )
+}
+
+function estimateTreeLineOverhead(relativePath: string): number {
+  const depth = relativePath.split('/').length
+  return 4 + Math.max(0, depth - 1) * 3
 }
 
 function toOmittedFileWarning(

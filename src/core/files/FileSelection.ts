@@ -42,6 +42,8 @@ export class FileSelection {
   private excludedFileTypeFilterIds = new Set<string>()
   private listeners = new Set<Listener>()
   private snapshot: EffectiveSelectionSnapshot = createEmptySnapshot()
+  private reconciledIndexVersion: number | undefined
+  private reconciledIndex: FileIndexSnapshot | undefined
 
   onDidChange(listener: Listener): () => void {
     this.listeners.add(listener)
@@ -125,6 +127,9 @@ export class FileSelection {
   }
 
   reconcile(index: FileIndexSnapshot): void {
+    if (this.reconciledIndex === index && this.reconciledIndexVersion === index.version) {
+      return
+    }
     for (const nodeId of this.includedNodeIds) {
       if (!index.nodes.has(nodeId)) {
         this.includedNodeIds.delete(nodeId)
@@ -140,6 +145,8 @@ export class FileSelection {
 
   rebuild(index: FileIndexSnapshot): void {
     this.snapshot = deriveSelectionSnapshot(index, this.getIntent())
+    this.reconciledIndexVersion = index.version
+    this.reconciledIndex = index
     this.emit()
   }
 

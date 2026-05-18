@@ -7,16 +7,18 @@ export interface ContextCharacterEstimateInput {
   selectedFileCount: number
   selectedGitDiffChars?: number
   projectTree: string
+  projectTreeCharacters?: number
   treeType: ProjectTreeMode
   minify: boolean
 }
 
 export function estimateContextCharacters(input: ContextCharacterEstimateInput): number {
+  const projectTreeCharacters = input.projectTreeCharacters ?? input.projectTree.length
   const treeChars =
-    input.treeType !== 'none' && input.projectTree.length > 0
+    input.treeType !== 'none' && projectTreeCharacters > 0
       ? input.minify
-        ? `<project_tree>${input.projectTree}</project_tree>`.length
-        : `<project_tree>\n${input.projectTree}\n</project_tree>\n`.length
+        ? '<project_tree></project_tree>'.length + projectTreeCharacters
+        : '<project_tree>\n\n</project_tree>\n'.length + projectTreeCharacters
       : 0
   const separatorChars =
     input.selectedFileCount > 1 && !input.minify ? input.selectedFileCount - 1 : 0
