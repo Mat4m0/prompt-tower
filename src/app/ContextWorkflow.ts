@@ -68,10 +68,18 @@ interface SelectedContextInspection {
   estimatedCharacters: number
 }
 
+interface CachedLineCount {
+  sizeBytes: number
+  mtimeMs: number
+  lineCount: number
+}
+
 const LARGE_CONTEXT_TOKEN_THRESHOLD = 250_000
 const LARGE_CONTEXT_CHARACTER_THRESHOLD = 1_000_000
 
 export class ContextWorkflow {
+  private selectedLineCountCache = new Map<string, CachedLineCount>()
+
   constructor(
     private fileIndex: FileIndex,
     private fileSelection: FileSelection,
@@ -187,6 +195,22 @@ export class ContextWorkflow {
     return estimateProfiles(estimatedCharacters, profiles)
   }
 
+  async summarizeSelectedFiles(): Promise<{
+    selectedFileCount: number
+    selectedLineCount: number
+  }> {
+    await this.fileIndex.ensureFresh()
+    this.fileSelection.reconcile(this.fileIndex.getSnapshot())
+    const selection = this.fileSelection.getSnapshot()
+    const selectedLineCounts = await Promise.all(
+      selection.selectedFiles.map((file) => this.countSelectedFileLines(file)),
+    )
+    return {
+      selectedFileCount: selection.selectedFiles.length,
+      selectedLineCount: selectedLineCounts.reduce((sum, lineCount) => sum + lineCount, 0),
+    }
+  }
+
   private async inspectSelectedContext(
     options: ContextBuildOptions,
   ): Promise<SelectedContextInspection> {
@@ -231,6 +255,45 @@ export class ContextWorkflow {
       selectedBytes,
       selectedGitDiffCharacters,
       estimatedCharacters,
+    }
+  }
+
+  private async countSelectedFileLines(file: IndexedFile): Promise<number> {
+    const cached = this.selectedLineCountCache.get(file.id)
+    if (cached && cached.sizeBytes === file.sizeBytes && cached.mtimeMs === file.mtimeMs) {
+      return cached.lineCount
+    }
+
+    const beforeRead = decideFileSafetyBeforeRead(file, this.getWorkspaces())
+    if (beforeRead.action === 'omit') {
+      this.selectedLineCountCache.set(file.id, {
+        sizeBytes: file.sizeBytes,
+        mtimeMs: file.mtimeMs,
+        lineCount: 0,
+      })
+      return 0
+    }
+
+    try {
+      const sample = await this.fileSystem.readBytes(file.absolutePath, BINARY_SNIFF_BYTES)
+      if (decideFileSafetyFromSample(sample).action === 'omit') {
+        this.selectedLineCountCache.set(file.id, {
+          sizeBytes: file.sizeBytes,
+          mtimeMs: file.mtimeMs,
+          lineCount: 0,
+        })
+        return 0
+      }
+      const lineCount = countTextLines(await this.fileSystem.readText(file.absolutePath))
+      this.selectedLineCountCache.set(file.id, {
+        sizeBytes: file.sizeBytes,
+        mtimeMs: file.mtimeMs,
+        lineCount,
+      })
+      return lineCount
+    } catch {
+      this.selectedLineCountCache.delete(file.id)
+      return 0
     }
   }
 
@@ -369,6 +432,15 @@ function estimateFileBlockOverheadChars(file: ContextFile, outputMode: ContextOu
   }
 
   return `<file name="${file.name}" path="${sourcePath}">\n\n</file>`.length
+}
+
+function countTextLines(text: string): number {
+  if (text.length === 0) {
+    return 0
+  }
+
+  const lineBreaks = text.match(/\r\n|\r|\n/g)?.length ?? 0
+  return lineBreaks + (text.endsWith('\n') || text.endsWith('\r') ? 0 : 1)
 }
 
 function estimateProjectTreeCharacters(

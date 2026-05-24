@@ -138,6 +138,7 @@ export class WebviewMessageHandler {
       },
       visibleEstimateProfileIds.map(getTokenEstimateProfile),
     )
+    const selectedFileSummary = await this.services.contextWorkflow.summarizeSelectedFiles()
     return {
       tokenEstimateProfiles: TOKEN_ESTIMATE_PROFILES.map(({ id, label, estimateNote }) => ({
         id,
@@ -150,6 +151,8 @@ export class WebviewMessageHandler {
         label: profile.label,
         tokens,
       })),
+      selectedFileCount: selectedFileSummary.selectedFileCount,
+      selectedLineCount: selectedFileSummary.selectedLineCount,
       promptPrefixes: this.services.promptPrefixes.listPrefixes().map((promptPrefix) => ({
         id: promptPrefix.id,
         name: promptPrefix.name,

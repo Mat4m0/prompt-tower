@@ -600,6 +600,46 @@ test('ContextWorkflow preview estimates stay close to final normal text estimate
   assertWithinPercent(preview.tokens, output.estimatedTokens, 10)
 })
 
+test('ContextWorkflow summarizes selected file count and text lines', async () => {
+  let reads = 0
+  const service = await createSingleFileContextService(
+    'src/app.ts',
+    'one\ntwo\nthree\n',
+    undefined,
+    {
+      readText() {
+        reads += 1
+        return 'one\ntwo\nthree\n'
+      },
+    },
+  )
+
+  const summary = await service.summarizeSelectedFiles()
+  const cachedSummary = await service.summarizeSelectedFiles()
+
+  assert.deepEqual(summary, {
+    selectedFileCount: 1,
+    selectedLineCount: 3,
+  })
+  assert.deepEqual(cachedSummary, summary)
+  assert.equal(reads, 1)
+})
+
+test('ContextWorkflow summary skips binary files for line counts', async () => {
+  const service = await createSingleFileContextService('src/blob.dat', 'not counted\n', undefined, {
+    readBytes() {
+      return new Uint8Array([0, 1, 2, 3])
+    },
+  })
+
+  const summary = await service.summarizeSelectedFiles()
+
+  assert.deepEqual(summary, {
+    selectedFileCount: 1,
+    selectedLineCount: 0,
+  })
+})
+
 test('ContextWorkflow preview estimates stay close to preflight estimates', async () => {
   const content = '1234.5678 -9012.3456\n'.repeat(500)
   const service = await createSingleFileContextService('data/sample.csv', content, undefined, {

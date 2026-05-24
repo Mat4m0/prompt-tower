@@ -42,13 +42,23 @@ function formatCompactNumber(value: number): string {
   return value.toLocaleString()
 }
 
-const chips = computed(() =>
-  props.state.estimateSummaries.map((summary) => ({
+const summaryItems = computed(() => [
+  {
+    id: 'files',
+    label: '',
+    display: `${formatCompactNumber(props.state.selectedFileCount)} ${props.state.selectedFileCount === 1 ? 'file' : 'files'}`,
+  },
+  {
+    id: 'lines',
+    label: '',
+    display: `${formatCompactNumber(props.state.selectedLineCount)} ${props.state.selectedLineCount === 1 ? 'line' : 'lines'}`,
+  },
+  ...props.state.estimateSummaries.map((summary) => ({
     id: summary.id,
     label: summary.label,
     display: '~' + formatCompactNumber(summary.tokens),
   })),
-)
+])
 
 function onProfileToggle(profileId: string, checked: boolean) {
   const current = new Set(props.state.visibleEstimateProfileIds)
@@ -67,10 +77,12 @@ function onProfileToggle(profileId: string, checked: boolean) {
 <template>
   <div class="bar">
     <div class="token-summary">
-      <div class="token-chips">
-        <span v-for="chip in chips" :key="chip.id" class="token-chip">
-          <span class="token-label">{{ chip.label }}</span>
-          <span class="token-value">{{ chip.display }}</span>
+      <div class="token-chips" aria-label="Selected context summary">
+        <span v-for="item in summaryItems" :key="item.id" class="token-chip">
+          <span v-if="item.label" class="token-label">{{ item.label }}</span>
+          <span class="token-value" :class="{ 'token-value-plain': !item.label }">
+            {{ item.display }}
+          </span>
         </span>
       </div>
       <button

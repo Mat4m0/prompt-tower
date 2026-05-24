@@ -44,6 +44,8 @@ export interface ContextPanelState {
     label: string
     tokens: number
   }[]
+  selectedFileCount: number
+  selectedLineCount: number
   promptPrefixes: readonly {
     id: string
     name: string
@@ -151,6 +153,8 @@ function isContextPanelState(value: unknown): value is ContextPanelState {
       'tokenEstimateProfiles',
       'visibleEstimateProfileIds',
       'estimateSummaries',
+      'selectedFileCount',
+      'selectedLineCount',
       'promptPrefixes',
       'activePrefixId',
       'inlinePrefix',
@@ -166,6 +170,8 @@ function isContextPanelState(value: unknown): value is ContextPanelState {
     ) &&
     Array.isArray(state.estimateSummaries) &&
     state.estimateSummaries.every(isEstimateSummary) &&
+    isNonNegativeInteger(state.selectedFileCount) &&
+    isNonNegativeInteger(state.selectedLineCount) &&
     Array.isArray(state.promptPrefixes) &&
     state.promptPrefixes.every(isPromptPrefixSummary) &&
     (typeof state.activePrefixId === 'string' || state.activePrefixId === null) &&
@@ -205,6 +211,10 @@ function isEstimateSummary(value: unknown): boolean {
     typeof summary.tokens === 'number' &&
     Number.isFinite(summary.tokens)
   )
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }
 
 function isPromptPrefixSummary(value: unknown): boolean {

@@ -115,6 +115,13 @@ label {
   white-space: nowrap;
 }
 
+.token-chip:not(:last-child)::after {
+  content: '·';
+  margin-left: 10px;
+  color: var(--vscode-descriptionForeground);
+  font-weight: 700;
+}
+
 .token-label {
   color: var(--vscode-descriptionForeground);
   font-weight: 700;
@@ -123,6 +130,10 @@ label {
 .token-value {
   color: var(--vscode-textLink-foreground);
   font-weight: 800;
+}
+
+.token-value-plain {
+  color: var(--vscode-descriptionForeground);
 }
 
 .icon-button {
