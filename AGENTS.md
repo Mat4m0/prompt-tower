@@ -4,8 +4,6 @@
 
 `Lupinum Context` does one thing: select codebase files and optional recent Git diffs, combine them with an optional reusable prefix, and create AI-ready context that can be copied or saved.
 
-Do not reintroduce GitHub API clients, PR/issue context, exact tokenizer adapters, React, or parallel legacy paths. Git diff selection is in scope only as local `git` history read from the current workspace.
-
 ## Architecture
 
 The dependency direction is:
@@ -38,7 +36,6 @@ vscode shell
 
 ## Implementation Rules
 
-- Prefer delete, simplify, replace, then add.
 - Keep every important concept to one source of truth.
 - Selection intent is canonical; selected files, folder checkbox state, filter groups, and token totals are derived.
 - Context generation is pure; update golden fixtures for intentional output changes.
