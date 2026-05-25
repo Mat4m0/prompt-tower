@@ -18,6 +18,7 @@ test('WorkspaceState persists selection, context options, and export options', a
     format: 'txt',
   })
   await state.setEstimateSummaryProfileIds(['claude', 'gemini'])
+  await state.setEstimateSummaryStatIds(['lines'])
 
   assert.deepEqual(state.getSelectionIntent()?.includedNodeIds, ['w:src'])
   assert.equal(state.getTreeMode(), 'fullDirectoriesOnly')
@@ -25,4 +26,5 @@ test('WorkspaceState persists selection, context options, and export options', a
   assert.equal(state.getExportOptions().fileName, 'Audit')
   assert.equal(state.getExportOptions().format, 'txt')
   assert.deepEqual(state.getEstimateSummaryProfileIds(), ['claude', 'gemini'])
+  assert.deepEqual(state.getEstimateSummaryStatIds(), ['lines'])
 })

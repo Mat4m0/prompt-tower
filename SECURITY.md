@@ -6,7 +6,7 @@ Only the latest minor release of `lupinum-context` receives fixes. Older version
 
 | Version | Supported |
 | ------- | --------- |
-| 1.0.x   | yes       |
+| 0.1.x   | yes       |
 
 ## Reporting a vulnerability
 

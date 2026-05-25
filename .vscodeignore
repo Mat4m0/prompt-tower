@@ -1,14 +1,21 @@
 .vscode/**
 .vscode-test/**
 .vite-hooks/**
+.github/**
 out/**
 node_modules/**
 src/**
 scripts/**
 benchmarks/reports/**
+.contextignore
+.editorconfig
+.gitattributes
 .gitignore
+.npmrc
+.nvmrc
 .yarnrc
 package-lock.json
+pnpm-lock.yaml
 vite.config.*
 vsc-extension-quickstart.md
 **/tsconfig.json
@@ -17,6 +24,11 @@ vsc-extension-quickstart.md
 **/*.mts
 **/.vscode-test.*
 
+AGENTS.md
+CLAUDE.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
 README_Future.md
 .cursorrules
 .towerignore
+docs/**

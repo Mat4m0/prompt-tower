@@ -79,11 +79,14 @@ Then press `F5` in VS Code to launch the Extension Development Host.
 Before opening a PR:
 
 ```bash
-vp check
-vp test
-vp run test:boundaries
-vp build
 vp run validate
+```
+
+Before release or command-wiring changes:
+
+```bash
+pnpm run smoke:vscode
+vp run bench:smoke
 ```
 
 Build and install a local VSIX:
@@ -91,6 +94,19 @@ Build and install a local VSIX:
 ```bash
 vp run deploy:local
 ```
+
+## Release
+
+Releases use Conventional Commits and changelogen. The first public version is
+`0.1.0`.
+
+```bash
+pnpm run changelog                 # preview generated notes
+pnpm run release -- -r 0.1.0       # first release commit + tag
+pnpm run release:github -- 0.1.0   # sync GitHub release from CHANGELOG.md
+```
+
+See [docs/RELEASING.md](docs/RELEASING.md) for marketplace publishing.
 
 ## Architecture
 

@@ -282,30 +282,6 @@ export class FileIndex {
     return parentId
   }
 
-  private recomputeEstimates(): void {
-    const nodes = new Map<string, IndexedNode>()
-    for (const [id, node] of this.nodes) {
-      if (node.kind === 'file') {
-        nodes.set(id, {
-          ...node,
-          estimatedTokenCount: estimateTokenCountFromBytes(
-            node.sizeBytes,
-            this.tokenProfile,
-            node.name,
-          ),
-        })
-      } else {
-        nodes.set(id, { ...node, childIds: [...node.childIds], estimatedTokenCount: 0 })
-      }
-    }
-    recomputeDirectoryEstimates(nodes, this.rootIds)
-    this.nodes = nodes
-    this.files = [...nodes.values()].filter((node): node is IndexedFile => node.kind === 'file')
-    sortIndexedFiles(this.files, this.workspaces)
-    this.snapshotVersion += 1
-    this.snapshot = createSnapshot(this.nodes, this.rootIds, this.files, this.snapshotVersion)
-  }
-
   private emit(): void {
     const snapshot = this.getSnapshot()
     for (const listener of this.listeners) {

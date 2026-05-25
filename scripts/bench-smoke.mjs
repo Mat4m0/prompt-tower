@@ -1,8 +1,18 @@
-import { createServer } from 'vite'
+import { createLogger, createServer } from 'vite'
+
+const logger = createLogger()
+const error = logger.error.bind(logger)
+logger.error = (message, options) => {
+  if (String(message).includes('WebSocket server error:')) {
+    return
+  }
+  error(message, options)
+}
 
 const server = await createServer({
   appType: 'custom',
   configFile: false,
+  customLogger: logger,
   root: process.cwd(),
   server: {
     middlewareMode: true,

@@ -152,7 +152,7 @@ export async function bootstrapLupinumContext(
     }),
   )
 
-  const session = new WorkspaceSession(context, services)
+  const session = new WorkspaceSession(services)
   session.start()
   disposables.push(session)
   void refreshIndex(services, 'startup')

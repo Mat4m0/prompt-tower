@@ -40,6 +40,10 @@ export class WebviewMessageHandler {
         await this.services.workspaceState.setEstimateSummaryProfileIds(message.profileIds)
         await this.postState()
         return
+      case 'estimateSummary.setStats':
+        await this.services.workspaceState.setEstimateSummaryStatIds(message.statIds)
+        await this.postState()
+        return
       case 'prefix.inlineChanged': {
         const activePrefixId = this.services.promptPrefixes.getActivePrefixId()
         if (activePrefixId) {
@@ -130,6 +134,7 @@ export class WebviewMessageHandler {
     const activePrefixId = this.services.promptPrefixes.getActivePrefixId()
     const prefix = this.services.promptPrefixes.getEffectivePrefix()
     const visibleEstimateProfileIds = this.services.workspaceState.getEstimateSummaryProfileIds()
+    const visibleEstimateStatIds = this.services.workspaceState.getEstimateSummaryStatIds()
     const estimateSummaries = await this.services.contextWorkflow.estimatePreviewForProfiles(
       {
         prefix,
@@ -146,6 +151,7 @@ export class WebviewMessageHandler {
         estimateNote,
       })),
       visibleEstimateProfileIds,
+      visibleEstimateStatIds,
       estimateSummaries: estimateSummaries.map(({ profile, tokens }) => ({
         id: profile.id,
         label: profile.label,

@@ -39,16 +39,12 @@ vp run deploy:local
 For a quick type-only sanity check, run:
 
 ```bash
-npm run typecheck
+vp run typecheck
 ```
 
 Before opening a PR, run the full local gate:
 
 ```bash
-vp check
-vp test
-vp run test:boundaries
-vp build
 vp run validate
 ```
 
@@ -56,6 +52,12 @@ Before release or performance-sensitive changes, also run the benchmark smoke ga
 
 ```bash
 vp run bench:smoke
+```
+
+Run the extension-host smoke test before release or when changing VS Code command wiring:
+
+```bash
+vp run smoke:vscode
 ```
 
 Use `vp run bench:large` manually when you want fresh large-fixture numbers; it reports results without enforcing thresholds.
@@ -70,9 +72,10 @@ The pre-commit hook (`.vite-hooks/pre-commit`) runs `vp staged` automatically â€
 
 ## Commit & PR conventions
 
-- Short imperative subject: `add git commit selection`, `fix token estimate rounding`. Match the existing `git log`.
+- Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Release notes are generated from commit history with changelogen.
+- Prefer the smallest accurate type: `feat: add git commit selection`, `fix: correct token estimate rounding`, `docs: update release flow`.
 - One concern per PR. If you find yourself writing "and also", split it.
-- Update [CHANGELOG.md](CHANGELOG.md) under an `## Unreleased` section (create one if missing) for any user-visible change.
+- Do not maintain an `Unreleased` changelog section by hand. During release, changelogen updates [CHANGELOG.md](CHANGELOG.md) from the commits.
 - Link the issue in the PR body. If there isn't one, write a paragraph explaining the motivation.
 
 ## Security issues

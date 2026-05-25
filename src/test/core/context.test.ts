@@ -659,7 +659,7 @@ test('ContextWorkflow preview estimates stay close to preflight estimates', asyn
   assertWithinPercent(preview.tokens, preflight.estimateSummaries[0].tokens, 1)
 })
 
-test('ContextWorkflow preview estimates avoid selected git diff reads', async () => {
+test('ContextWorkflow preview estimates include selected git diffs through the diff cache', async () => {
   const selection = new GitSelection()
   const first = gitCommit('a1')
   const second = gitCommit('b2')
@@ -696,12 +696,13 @@ test('ContextWorkflow preview estimates avoid selected git diff reads', async ()
   assert.equal(reads, 1)
 
   selection.setCommitSelected(second.id, true)
-  await service.estimatePreviewForProfiles(
+  const [previewWithTwoDiffs] = await service.estimatePreviewForProfiles(
     { prefix: 'Another prefix', treeMode: 'none', outputMode: 'readable' },
     [getTokenEstimateProfile('claude')],
   )
 
-  assert.equal(reads, 1)
+  assert.equal(reads, 2)
+  assert.ok(previewWithTwoDiffs.tokens > 0)
 
   reader.clear()
   await service.createContextFromSelection({
@@ -710,7 +711,7 @@ test('ContextWorkflow preview estimates avoid selected git diff reads', async ()
     outputMode: 'readable',
   })
 
-  assert.equal(reads, 3)
+  assert.equal(reads, 4)
 })
 
 async function createSingleFileContextService(

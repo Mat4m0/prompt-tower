@@ -9,6 +9,7 @@ import {
   isTokenEstimateProfileId,
   type TokenEstimateProfileId,
 } from '../core/tokens/TokenEstimateProfiles'
+import { isEstimateSummaryStatId, type EstimateSummaryStatId } from '../shared/estimateSummary'
 import type { AppStorage } from './PromptPrefixes'
 
 const SELECTION_INTENT_KEY = 'lupinumContext.selectionIntent'
@@ -16,7 +17,9 @@ const TREE_MODE_KEY = 'lupinumContext.treeMode'
 const OUTPUT_MODE_KEY = 'lupinumContext.outputMode'
 const EXPORT_OPTIONS_KEY = 'lupinumContext.exportOptions'
 const ESTIMATE_SUMMARY_PROFILE_IDS_KEY = 'lupinumContext.estimateSummaryProfileIds'
+const ESTIMATE_SUMMARY_STAT_IDS_KEY = 'lupinumContext.estimateSummaryStatIds'
 const DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS: readonly TokenEstimateProfileId[] = ['openai', 'gemini']
+const DEFAULT_ESTIMATE_SUMMARY_STAT_IDS: readonly EstimateSummaryStatId[] = ['files', 'lines']
 
 export class WorkspaceSettings {
   constructor(private storage: AppStorage) {}
@@ -72,6 +75,18 @@ export class WorkspaceSettings {
       ESTIMATE_SUMMARY_PROFILE_IDS_KEY,
       normalized.length > 0 ? normalized : DEFAULT_ESTIMATE_SUMMARY_PROFILE_IDS,
     )
+  }
+
+  getEstimateSummaryStatIds(): readonly EstimateSummaryStatId[] {
+    const ids = this.storage.get<readonly string[]>(
+      ESTIMATE_SUMMARY_STAT_IDS_KEY,
+      DEFAULT_ESTIMATE_SUMMARY_STAT_IDS,
+    )
+    return ids.filter(isEstimateSummaryStatId)
+  }
+
+  async setEstimateSummaryStatIds(ids: readonly string[]): Promise<void> {
+    await this.storage.update(ESTIMATE_SUMMARY_STAT_IDS_KEY, ids.filter(isEstimateSummaryStatId))
   }
 }
 

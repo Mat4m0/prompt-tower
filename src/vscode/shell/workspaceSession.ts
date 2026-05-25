@@ -9,13 +9,34 @@ export class WorkspaceSession {
   private refreshScheduler = createDebouncedRefreshScheduler(() => {
     void this.refresh()
   }, 250)
+  private watcherDisposables: vscode.Disposable[] = []
+  private workspaceFolderSubscription: vscode.Disposable | undefined
 
-  constructor(
-    private context: vscode.ExtensionContext,
-    private services: ExtensionWiring,
-  ) {}
+  constructor(private services: ExtensionWiring) {}
 
   start(): void {
+    this.rebuildWatchers()
+    this.workspaceFolderSubscription = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      this.services.logger.info('[workspace] workspace folders changed')
+      this.services.fileIndex.setWorkspaces(this.services.getWorkspaces())
+      this.services.fileSelection.reconcile(this.services.fileIndex.getSnapshot())
+      this.services.clearSelectedGitDiffCache()
+      this.services.gitSelection.setCommits([])
+      this.rebuildWatchers()
+      this.refreshScheduler.requestRefresh()
+      void this.refreshGitCommits()
+    })
+  }
+
+  dispose(): void {
+    this.refreshScheduler.dispose()
+    this.workspaceFolderSubscription?.dispose()
+    this.workspaceFolderSubscription = undefined
+    this.disposeWatchers()
+  }
+
+  private rebuildWatchers(): void {
+    this.disposeWatchers()
     for (const workspace of this.services.getWorkspaces()) {
       const watcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(workspace.rootPath, '**/*'),
@@ -23,12 +44,15 @@ export class WorkspaceSession {
       watcher.onDidCreate((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
       watcher.onDidChange((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
       watcher.onDidDelete((uri) => this.scheduleRefresh(workspace.rootPath, uri.fsPath))
-      this.context.subscriptions.push(watcher)
+      this.watcherDisposables.push(watcher)
     }
   }
 
-  dispose(): void {
-    this.refreshScheduler.dispose()
+  private disposeWatchers(): void {
+    for (const watcher of this.watcherDisposables) {
+      watcher.dispose()
+    }
+    this.watcherDisposables = []
   }
 
   private scheduleRefresh(workspaceRoot: string, eventPath: string): void {
@@ -47,6 +71,19 @@ export class WorkspaceSession {
       this.services.fileSelection.reconcile(this.services.fileIndex.getSnapshot())
     } catch (error) {
       this.services.logger.error('[watcher] file event refresh failed', error)
+    }
+  }
+
+  private async refreshGitCommits(): Promise<void> {
+    try {
+      const commits = await this.services.gitHost.listRecentCommits(
+        this.services.getWorkspaces(),
+        50,
+      )
+      this.services.clearSelectedGitDiffCache()
+      this.services.gitSelection.setCommits(commits)
+    } catch (error) {
+      this.services.logger.error('[workspace] git refresh after workspace change failed', error)
     }
   }
 }

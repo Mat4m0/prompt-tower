@@ -1,7 +1,7 @@
 {
   "name": "lupinum-context",
   "displayName": "Lupinum Context",
-  "version": "1.0.0",
+  "version": "0.1.0-pre.0",
   "description": "Pick files, shape context, copy a clean LLM-ready bundle. A sharp VS Code tool for building AI chat context.",
   "categories": [
     "AI",
@@ -52,10 +52,15 @@
     "check-types": "vp check --no-fmt --no-lint",
     "lint": "vp lint src",
     "test": "vp test run",
+    "smoke:vscode": "node scripts/vscode-smoke.mjs",
     "bench:smoke": "node scripts/bench-smoke.mjs",
     "bench:large": "node scripts/bench-smoke.mjs --scale large",
     "test:boundaries": "node scripts/check-boundaries.mjs",
-    "validate": "vp check && vp test run && vp run test:boundaries",
+    "validate": "vp check && vp test run && vp run test:boundaries && vp run build",
+    "changelog": "changelogen --hideAuthorEmail",
+    "release:prepare": "changelogen --bump --clean --hideAuthorEmail",
+    "release": "changelogen --release --clean --no-github --hideAuthorEmail",
+    "release:github": "changelogen gh release",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -66,9 +71,11 @@
     "@types/node": "20.19.24",
     "@types/vscode": "1.96.0",
     "@vitejs/plugin-vue": "6.0.7",
+    "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "3.9.1",
     "@vue/tsconfig": "0.9.1",
-    "ovsx": "^0.10.12",
+    "changelogen": "0.6.2",
+    "ovsx": "0.10.12",
     "typescript": "5.9.3",
     "vite": "8.0.11",
     "vite-plus": "0.1.21"

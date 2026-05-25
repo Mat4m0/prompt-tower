@@ -1,10 +1,12 @@
 import type { ProjectTreeMode, ContextOutputMode } from '../core/context/ContextFormat'
 import type { PromptExportFormat, PromptExportOptions } from '../core/export/ExportOptions'
 import { isTokenEstimateProfileId } from '../core/tokens/TokenEstimateProfiles'
+import { isEstimateSummaryStatId } from './estimateSummary'
 
 export type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'estimateSummary.setProfiles'; profileIds: readonly string[] }
+  | { type: 'estimateSummary.setStats'; statIds: readonly string[] }
   | { type: 'prefix.inlineChanged'; text: string }
   | { type: 'prefix.selectPrefix'; prefixId: string | null }
   | { type: 'prefix.createPrefix'; name: string; text: string }
@@ -39,6 +41,7 @@ export interface ContextPanelState {
     estimateNote: string
   }[]
   visibleEstimateProfileIds: readonly string[]
+  visibleEstimateStatIds: readonly string[]
   estimateSummaries: readonly {
     id: string
     label: string
@@ -74,6 +77,12 @@ export function isWebviewToExtensionMessage(value: unknown): value is WebviewToE
         hasOnlyKeys(message, ['type', 'profileIds']) &&
         Array.isArray(message.profileIds) &&
         message.profileIds.every((id) => typeof id === 'string' && isTokenEstimateProfileId(id))
+      )
+    case 'estimateSummary.setStats':
+      return (
+        hasOnlyKeys(message, ['type', 'statIds']) &&
+        Array.isArray(message.statIds) &&
+        message.statIds.every(isEstimateSummaryStatId)
       )
     case 'prefix.inlineChanged':
       return hasOnlyKeys(message, ['type', 'text']) && typeof message.text === 'string'
@@ -152,6 +161,7 @@ function isContextPanelState(value: unknown): value is ContextPanelState {
     hasOnlyKeys(state, [
       'tokenEstimateProfiles',
       'visibleEstimateProfileIds',
+      'visibleEstimateStatIds',
       'estimateSummaries',
       'selectedFileCount',
       'selectedLineCount',
@@ -168,6 +178,8 @@ function isContextPanelState(value: unknown): value is ContextPanelState {
     state.visibleEstimateProfileIds.every(
       (id) => typeof id === 'string' && isTokenEstimateProfileId(id),
     ) &&
+    Array.isArray(state.visibleEstimateStatIds) &&
+    state.visibleEstimateStatIds.every(isEstimateSummaryStatId) &&
     Array.isArray(state.estimateSummaries) &&
     state.estimateSummaries.every(isEstimateSummary) &&
     isNonNegativeInteger(state.selectedFileCount) &&

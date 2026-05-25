@@ -181,12 +181,17 @@ export class ContextWorkflow {
       selection.selectedFiles,
       this.getWorkspaces(),
     )
+    const selectedGitDiffs = await this.loadGitDiffs()
+    const selectedGitDiffCharacters = estimateGitDiffChars(
+      selectedGitDiffs.gitDiffs,
+      options.outputMode === 'compact',
+    )
     const estimatedCharacters = estimateContextCharacters({
       prefix: options.prefix,
       suffix: '',
       selectedFileBlockChars: selectedFileBlockOverheadChars + selectedBytes,
       selectedFileCount: selection.selectedFiles.length,
-      selectedGitDiffChars: 0,
+      selectedGitDiffChars: selectedGitDiffCharacters,
       projectTree: '',
       projectTreeCharacters,
       treeType: options.treeMode,

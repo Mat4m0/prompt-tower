@@ -47,10 +47,6 @@ Before finishing meaningful changes, run:
 
 ```sh
 vp install
-vp check
-vp test
-vp run test:boundaries
-vp build
 vp run validate
 ```
 

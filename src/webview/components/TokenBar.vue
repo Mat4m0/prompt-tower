@@ -43,22 +43,43 @@ function formatCompactNumber(value: number): string {
 }
 
 const summaryItems = computed(() => [
-  {
-    id: 'files',
-    label: '',
-    display: `${formatCompactNumber(props.state.selectedFileCount)} ${props.state.selectedFileCount === 1 ? 'file' : 'files'}`,
-  },
-  {
-    id: 'lines',
-    label: '',
-    display: `${formatCompactNumber(props.state.selectedLineCount)} ${props.state.selectedLineCount === 1 ? 'line' : 'lines'}`,
-  },
+  ...(props.state.visibleEstimateStatIds.includes('files')
+    ? [
+        {
+          id: 'files',
+          label: '',
+          display: `${formatCompactNumber(props.state.selectedFileCount)} ${props.state.selectedFileCount === 1 ? 'file' : 'files'}`,
+        },
+      ]
+    : []),
+  ...(props.state.visibleEstimateStatIds.includes('lines')
+    ? [
+        {
+          id: 'lines',
+          label: '',
+          display: `${formatCompactNumber(props.state.selectedLineCount)} ${props.state.selectedLineCount === 1 ? 'line' : 'lines'}`,
+        },
+      ]
+    : []),
   ...props.state.estimateSummaries.map((summary) => ({
     id: summary.id,
     label: summary.label,
     display: '~' + formatCompactNumber(summary.tokens),
   })),
 ])
+
+function onStatToggle(statId: string, checked: boolean) {
+  const current = new Set(props.state.visibleEstimateStatIds)
+  if (checked) {
+    current.add(statId)
+  } else {
+    current.delete(statId)
+  }
+  props.send({
+    type: 'estimateSummary.setStats',
+    statIds: Array.from(current),
+  })
+}
 
 function onProfileToggle(profileId: string, checked: boolean) {
   const current = new Set(props.state.visibleEstimateProfileIds)
@@ -95,22 +116,47 @@ function onProfileToggle(profileId: string, checked: boolean) {
         ⚙
       </button>
       <div v-if="popoverOpen" ref="popover" class="popover">
-        <div class="popover-title">Rough estimates</div>
-        <div class="check-list">
-          <label
-            v-for="profile in state.tokenEstimateProfiles"
-            :key="profile.id"
-            class="popover-check"
-            :title="profile.estimateNote"
-          >
-            <input
-              type="checkbox"
-              :value="profile.id"
-              :checked="state.visibleEstimateProfileIds.includes(profile.id)"
-              @change="onProfileToggle(profile.id, ($event.target as HTMLInputElement).checked)"
-            />
-            {{ profile.label }}
-          </label>
+        <div class="popover-section">
+          <div class="popover-title">Codebase stats</div>
+          <div class="check-list">
+            <label class="popover-check">
+              <input
+                type="checkbox"
+                value="files"
+                :checked="state.visibleEstimateStatIds.includes('files')"
+                @change="onStatToggle('files', ($event.target as HTMLInputElement).checked)"
+              />
+              Files
+            </label>
+            <label class="popover-check">
+              <input
+                type="checkbox"
+                value="lines"
+                :checked="state.visibleEstimateStatIds.includes('lines')"
+                @change="onStatToggle('lines', ($event.target as HTMLInputElement).checked)"
+              />
+              Lines
+            </label>
+          </div>
+        </div>
+        <div class="popover-section">
+          <div class="popover-title">Rough estimates</div>
+          <div class="check-list">
+            <label
+              v-for="profile in state.tokenEstimateProfiles"
+              :key="profile.id"
+              class="popover-check"
+              :title="profile.estimateNote"
+            >
+              <input
+                type="checkbox"
+                :value="profile.id"
+                :checked="state.visibleEstimateProfileIds.includes(profile.id)"
+                @change="onProfileToggle(profile.id, ($event.target as HTMLInputElement).checked)"
+              />
+              {{ profile.label }}
+            </label>
+          </div>
         </div>
       </div>
     </div>

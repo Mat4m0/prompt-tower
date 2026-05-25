@@ -23,6 +23,13 @@ test('webview inbound message guard rejects unknown and malformed messages', () 
   )
   assert.equal(
     isWebviewToExtensionMessage({
+      type: 'estimateSummary.setStats',
+      statIds: ['files', 'lines'],
+    }),
+    true,
+  )
+  assert.equal(
+    isWebviewToExtensionMessage({
       type: 'prefix.renamePrefix',
       prefixId: 'p1',
       name: 'Audit',
@@ -53,6 +60,13 @@ test('webview inbound message guard rejects unknown and malformed messages', () 
     }),
     false,
   )
+  assert.equal(
+    isWebviewToExtensionMessage({
+      type: 'estimateSummary.setStats',
+      statIds: ['files', 'unknown'],
+    }),
+    false,
+  )
 })
 
 test('webview outbound message guard validates full panel state shape', () => {
@@ -65,6 +79,7 @@ test('webview outbound message guard validates full panel state shape', () => {
       },
     ],
     visibleEstimateProfileIds: ['claude'],
+    visibleEstimateStatIds: ['files', 'lines'],
     estimateSummaries: [{ id: 'claude', label: 'Claude', tokens: 1200 }],
     selectedFileCount: 2,
     selectedLineCount: 42,
@@ -131,6 +146,7 @@ test('webview host html includes CSP, nonce, initial state, and Vue bundle scrip
       },
     ],
     visibleEstimateProfileIds: ['claude', 'openai', 'gemini'],
+    visibleEstimateStatIds: ['files', 'lines'],
     estimateSummaries: [],
     selectedFileCount: 0,
     selectedLineCount: 0,

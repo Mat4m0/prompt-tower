@@ -72,6 +72,39 @@ test('FileIndex updates metadata and token estimates after file changes', async 
   assert.ok(index.getSnapshot().files[0].estimatedTokenCount > before)
 })
 
+test('FileIndex replaces roots when workspace folders change', async () => {
+  const first: IndexedWorkspace = { id: 'a', name: 'app', rootPath: '/repo/app' }
+  const second: IndexedWorkspace = { id: 'b', name: 'lib', rootPath: '/repo/lib' }
+  const index = new FileIndex(
+    {
+      async listFiles(workspace) {
+        return workspace.id === 'a' ? ['/repo/app/src/a.ts'] : ['/repo/lib/src/b.ts']
+      },
+      async statFile(): Promise<FileStat> {
+        return { sizeBytes: 40, mtimeMs: 1 }
+      },
+    },
+    [first],
+    getTokenEstimateProfile('claude'),
+  )
+
+  await index.ensureFresh()
+  assert.deepEqual(
+    index.getSnapshot().files.map((file) => `${file.workspaceId}:${file.relativePath}`),
+    ['a:src/a.ts'],
+  )
+
+  index.setWorkspaces([second])
+  await index.ensureFresh()
+
+  assert.deepEqual(index.getSnapshot().rootIds, ['b:'])
+  assert.deepEqual(
+    index.getSnapshot().files.map((file) => `${file.workspaceId}:${file.relativePath}`),
+    ['b:src/b.ts'],
+  )
+  assert.equal(index.findNode('a:src/a.ts'), undefined)
+})
+
 test('FileIndex skips paths that normalize outside the workspace', async () => {
   const workspace: IndexedWorkspace = {
     id: 'w',
